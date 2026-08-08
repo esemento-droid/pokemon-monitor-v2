@@ -211,6 +211,8 @@ async def clear_cart(page):
 async def add_to_cart(page, product_url):
     """
     Navigate to product page and click .addtobasket via JS.
+    After ATC, a popup appears with "Dostawa i płatność" button — we dismiss it
+    and continue adding more products. The popup is handled later at checkout time.
     Returns True on success, False if button not found/disabled.
     """
     try:
@@ -246,164 +248,226 @@ async def add_to_cart(page, product_url):
         except Exception as e:
             log.warning(f"ATC fallback click failed for {product_url}: {e}")
 
-    if clicked:
-        await asyncio.sleep(2)
-        return True
-
-    log.warning(f"ATC button not found or disabled for {product_url}")
-    return False
-
-
-async def checkout(page, test_mode=False):
-    """
-    Complete 3-step checkout:
-      1. Basket → click ZAMAWIAM → verify step2 URL
-      2. Step2 → select paczkomat radio, check all checkboxes → PODSUMOWANIE → verify step3 URL
-      3. Step3 → click POTWIERDZAM ZAKUP → verify przelewy24 redirect
-    Returns True if Przelewy24 payment page reached.
-    """
-    # === STEP 1: BASKET PAGE ===
-    await page.goto(f"{BASE_URL}/pl/basket", wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(2)
-    await dismiss_overlay(page)
-
-    # Check if basket has items
-    has_items = await page.evaluate("() => document.body.innerText.includes('ZAMAWIAM')")
-    if not has_items:
-        log.error("Basket is empty!")
+    if not clicked:
+        log.warning(f"ATC button not found or disabled for {product_url}")
         return False
 
-    # Click ZAMAWIAM button to proceed to step2
+    # Wait for cart popup to appear
+    await asyncio.sleep(3)
+
+    # Dismiss the cart popup by clicking outside or closing it
+    # (We don't click "Dostawa i płatność" here — we'll navigate to checkout after all products are added)
     await page.evaluate("""
         () => {
-            const btn = document.querySelector('button.order');
-            if (btn) btn.click();
-        }
-    """)
-    log.info("Clicked ZAMAWIAM")
-    await asyncio.sleep(5)
-
-    # Wait up to 10s for step2 URL
-    deadline = time.time() + 10
-    while "step2" not in page.url and time.time() < deadline:
-        await asyncio.sleep(1)
-
-    if "step2" not in page.url:
-        body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
-        log.error(f"ZAMAWIAM failed, still on {page.url}: {body[:100]}")
-        return False
-
-    # === STEP 2: DELIVERY (paczkomat + checkboxes) ===
-    log.info(f"Step 2 URL: {page.url}")
-    await dismiss_overlay(page)
-    await asyncio.sleep(2)
-
-    # Select first paczkomat radio (name="machine")
-    await page.evaluate("""
-        () => {
-            const machineRadios = document.querySelectorAll('input[type="radio"][name="machine"]');
-            if (machineRadios.length > 0 && !Array.from(machineRadios).some(r => r.checked)) {
-                machineRadios[0].checked = true;
-                machineRadios[0].dispatchEvent(new Event('change', {bubbles: true}));
-            }
+            // Try to close the popup by clicking X/close button or clicking overlay
+            const closeBtn = document.querySelector('.popup-close, .close, [class*="close"], .fancybox-close');
+            if (closeBtn) { closeBtn.click(); return; }
+            // Try clicking "Zobacz produkty w koszyku" or just dismiss overlay
+            const overlay = document.querySelector('.fancybox-overlay, .popup-overlay, [class*="overlay"]');
+            if (overlay) overlay.click();
         }
     """)
     await asyncio.sleep(1)
 
-    # Check ALL checkboxes
+    return True
+
+
+async def checkout(page, test_mode=False):
+    """
+    Single-page checkout flow for kartexpol.pl (Shoper platform):
+      1. Navigate to checkout page (via basket → "Dostawa i płatność" or direct URL)
+      2. On single checkout page:
+         - Select first paczkomat radio button
+         - Select BLIK payment radio button
+         - Check ALL consent checkboxes
+         - Click "Zamawiam i płacę" button
+      3. Wait for redirect to payment page (Autopay/Przelewy24/BLIK)
+    Returns True if payment page reached.
+    """
+    # === NAVIGATE TO CHECKOUT ===
+    # First try going to basket page and clicking through to checkout
+    await page.goto(f"{BASE_URL}/pl/basket", wait_until="domcontentloaded", timeout=30000)
+    await asyncio.sleep(3)
+    await dismiss_overlay(page)
+
+    # Check if basket has items — look for checkout-related buttons
+    has_items = await page.evaluate("""
+        () => {
+            const text = document.body.innerText;
+            return text.includes('Zamawiam') || text.includes('ZAMAWIAM') ||
+                   text.includes('Dostawa i płatność') || text.includes('zamówienie');
+        }
+    """)
+    if not has_items:
+        log.error("Basket is empty — no checkout buttons found!")
+        return False
+
+    # Click "Dostawa i płatność" or "Zamawiam" button to get to checkout page
+    await page.evaluate("""
+        () => {
+            // Try "Dostawa i płatność" first (popup or basket page button)
+            const allBtns = Array.from(document.querySelectorAll('a, button, input[type="submit"]'));
+            const dostawaBtn = allBtns.find(el => (el.innerText || el.value || '').includes('Dostawa i płatność'));
+            if (dostawaBtn) { dostawaBtn.click(); return; }
+            // Fallback: click "ZAMAWIAM" or "Zamawiam" 
+            const zamBtn = allBtns.find(el => (el.innerText || el.value || '').toUpperCase().includes('ZAMAWIAM'));
+            if (zamBtn) { zamBtn.click(); return; }
+            // Last resort: click button.order
+            const orderBtn = document.querySelector('button.order');
+            if (orderBtn) orderBtn.click();
+        }
+    """)
+    log.info("Clicked checkout button from basket")
+    await asyncio.sleep(5)
+
+    # Wait for checkout page to load (may be step2 or a single-page checkout URL)
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        url = page.url
+        if "step2" in url or "checkout" in url or "order" in url:
+            break
+        await asyncio.sleep(1)
+
+    log.info(f"Checkout page URL: {page.url}")
+    await dismiss_overlay(page)
+    await asyncio.sleep(2)
+
+    # === SINGLE-PAGE CHECKOUT: SELECT PACZKOMAT ===
+    # Select the first paczkomat/InPost radio button
+    paczkomat_selected = await page.evaluate("""
+        () => {
+            // Look for radio buttons related to paczkomat/InPost delivery
+            const radios = document.querySelectorAll('input[type="radio"]');
+            for (const radio of radios) {
+                const label = radio.closest('label') || radio.parentElement;
+                const text = label ? label.innerText : '';
+                const name = radio.name || '';
+                // Match paczkomat/machine/InPost radios
+                if (name === 'machine' || text.includes('Paczkomat') || text.includes('paczkomat') || text.includes('InPost')) {
+                    if (!radio.checked) {
+                        radio.checked = true;
+                        radio.dispatchEvent(new Event('change', {bubbles: true}));
+                        radio.dispatchEvent(new Event('click', {bubbles: true}));
+                    }
+                    return true;
+                }
+            }
+            // Fallback: select first radio with name="machine"
+            const machineRadios = document.querySelectorAll('input[type="radio"][name="machine"]');
+            if (machineRadios.length > 0) {
+                machineRadios[0].checked = true;
+                machineRadios[0].dispatchEvent(new Event('change', {bubbles: true}));
+                return true;
+            }
+            return false;
+        }
+    """)
+    if paczkomat_selected:
+        log.info("Selected paczkomat delivery")
+    else:
+        log.warning("Could not find paczkomat radio — may already be selected or different layout")
+    await asyncio.sleep(2)
+
+    # === SELECT BLIK PAYMENT ===
+    blik_selected = await page.evaluate("""
+        () => {
+            const radios = document.querySelectorAll('input[type="radio"]');
+            for (const radio of radios) {
+                const label = radio.closest('label') || radio.parentElement;
+                const container = radio.closest('li, div, tr') || radio.parentElement;
+                const text = (label ? label.innerText : '') + ' ' + (container ? container.innerText : '');
+                if (text.includes('BLIK') || text.includes('Blik') || text.includes('blik')) {
+                    radio.checked = true;
+                    radio.dispatchEvent(new Event('change', {bubbles: true}));
+                    radio.dispatchEvent(new Event('click', {bubbles: true}));
+                    // Also try clicking the label
+                    if (label && label.tagName === 'LABEL') label.click();
+                    return true;
+                }
+            }
+            return false;
+        }
+    """)
+    if blik_selected:
+        log.info("Selected BLIK payment")
+    else:
+        log.warning("Could not find BLIK radio — checking if another payment is acceptable")
+    await asyncio.sleep(2)
+
+    # === CHECK ALL CONSENT CHECKBOXES ===
     await page.evaluate("""
         () => {
             document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
                 if (!cb.checked) {
                     cb.checked = true;
                     cb.dispatchEvent(new Event('change', {bubbles: true}));
+                    cb.dispatchEvent(new Event('click', {bubbles: true}));
+                    // Also click the label if present
+                    const label = cb.closest('label') || document.querySelector('label[for="' + cb.id + '"]');
+                    if (label) label.click();
                 }
             });
         }
     """)
+    log.info("Checked all consent checkboxes")
     await asyncio.sleep(1)
 
-    # Click PODSUMOWANIE
+    # === CLICK "Zamawiam i płacę" BUTTON ===
+    if test_mode:
+        # In test mode, verify button exists before clicking
+        submit_found = await page.evaluate("""
+            () => {
+                const allEls = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
+                const btn = allEls.find(el => {
+                    const text = (el.innerText || el.value || '').toLowerCase();
+                    return text.includes('zamawiam i płacę') || text.includes('zamawiam i placę') ||
+                           text.includes('zamawiam') || text.includes('złóż zamówienie');
+                });
+                return !!btn;
+            }
+        """)
+        log.info(f"[TEST MODE] 'Zamawiam i płacę' button found: {submit_found}")
+        if not submit_found:
+            body = await page.evaluate("() => document.body.innerText.substring(0, 500)")
+            log.error(f"[TEST MODE] Submit button not found! Page text: {body[:200]}")
+            return False
+
+    # Click the submit button
     await page.evaluate("""
         () => {
-            const btn = Array.from(document.querySelectorAll('a, button, input[type="submit"]'))
-                .find(el => (el.innerText || el.value || '').includes('PODSUMOWANIE'));
+            const allEls = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
+            const btn = allEls.find(el => {
+                const text = (el.innerText || el.value || '').toLowerCase();
+                return text.includes('zamawiam i płacę') || text.includes('zamawiam i placę') ||
+                       text.includes('zamawiam') || text.includes('złóż zamówienie');
+            });
             if (btn) btn.click();
         }
     """)
-    log.info("Clicked PODSUMOWANIE")
-    await asyncio.sleep(4)
-
-    # Wait up to 10s for step3 URL
-    deadline = time.time() + 10
-    while "step3" not in page.url and time.time() < deadline:
-        await asyncio.sleep(1)
-
-    if "step3" not in page.url:
-        log.error(f"PODSUMOWANIE failed, on {page.url}")
-        return False
-
-    # === STEP 3: CONFIRMATION ===
-    log.info(f"Step 3 URL: {page.url}")
-    await dismiss_overlay(page)
-    await asyncio.sleep(1)
-
-    if test_mode:
-        confirm = page.locator('button:has-text("POTWIERDZAM")')
-        found = await confirm.count()
-        log.info(f"[TEST MODE] POTWIERDZAM button found: {found > 0}")
-        if not found:
-            log.error("[TEST MODE] POTWIERDZAM button not found!")
-            return False
-        # Submit to verify payment redirect
-        await page.evaluate("() => { const btn = document.querySelector('button.order'); if(btn) btn.click(); }")
-        log.info("[TEST MODE] Clicked POTWIERDZAM ZAKUP!")
-        await asyncio.sleep(8)
-
-        # Wait up to 15s for Przelewy24 redirect
-        deadline = time.time() + 15
-        while time.time() < deadline:
-            url = page.url
-            if "przelewy24" in url or "secure.przelewy24" in url:
-                log.info(f"[TEST MODE] PAYMENT PAGE REACHED! URL: {url}")
-                return True
-            await asyncio.sleep(1)
-
-        url = page.url
-        if "przelewy24" in url or "secure.przelewy24" in url:
-            log.info(f"[TEST MODE] PAYMENT PAGE REACHED! URL: {url}")
-            return True
-        else:
-            body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
-            log.warning(f"[TEST MODE] Didn't reach payment page. URL: {url}, body: {body[:100]}")
-            return False
-
-    # REAL MODE - click confirm
-    confirm = page.locator('button:has-text("POTWIERDZAM")')
-    if await confirm.count() == 0:
-        log.error("POTWIERDZAM button not found!")
-        return False
-
-    await page.evaluate("() => { const btn = document.querySelector('button.order'); if(btn) btn.click(); }")
-    log.info("Clicked POTWIERDZAM ZAKUP!")
+    log.info("Clicked 'Zamawiam i płacę'")
     await asyncio.sleep(8)
 
-    # Wait up to 15s for Przelewy24 redirect
-    deadline = time.time() + 15
+    # === WAIT FOR PAYMENT PAGE REDIRECT ===
+    deadline = time.time() + 20
     while time.time() < deadline:
         url = page.url
-        if "przelewy24" in url or "secure.przelewy24" in url:
-            log.info(f"Payment page reached! URL: {url}")
+        if ("przelewy24" in url or "autopay" in url or "blik" in url or
+                "secure.przelewy24" in url or "pay" in url.split("/")[-1:][0] if "/" in url else False):
+            prefix = "[TEST MODE] " if test_mode else ""
+            log.info(f"{prefix}PAYMENT PAGE REACHED! URL: {url}")
             return True
         await asyncio.sleep(1)
 
+    # Final check
     url = page.url
-    if "przelewy24" in url or "secure.przelewy24" in url:
-        log.info(f"Payment page reached! URL: {url}")
+    if "przelewy24" in url or "autopay" in url or "blik" in url or "secure.przelewy24" in url:
+        prefix = "[TEST MODE] " if test_mode else ""
+        log.info(f"{prefix}Payment page reached! URL: {url}")
         return True
     else:
-        body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
-        log.warning(f"Przelewy24 not reached after confirm. URL: {url}, body: {body[:100]}")
+        body = await page.evaluate("() => document.body.innerText.substring(0, 300)")
+        prefix = "[TEST MODE] " if test_mode else ""
+        log.warning(f"{prefix}Payment page not reached. URL: {url}, body: {body[:150]}")
         return False
 
 
