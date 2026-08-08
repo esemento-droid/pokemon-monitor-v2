@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test: login and clear cart only"""
+"""Test: login, go to /pl/basket page, check what's there and try to clear"""
 import asyncio
 from patchright.async_api import async_playwright
 
@@ -27,87 +27,39 @@ async def check():
         await asyncio.sleep(1)
         await page.evaluate("""() => { const btn = Array.from(document.querySelectorAll('button[type="submit"]')).find(b => b.innerText.includes('Zaloguj')); if (btn) btn.click(); }""")
         await asyncio.sleep(5)
-        logged = 'wyloguj' in (await page.content()).lower()
-        print(f"LOGGED IN: {logged}")
-        if not logged:
-            print("LOGIN FAILED")
-            await browser.close()
-            return
+        print(f"LOGGED IN: {'wyloguj' in (await page.content()).lower()}")
 
-        # Now clear cart
-        print("Attempting to clear cart...")
-        await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(2)
+        # Go directly to basket PAGE (not popup)
+        await page.goto(f"{BASE_URL}/pl/basket", wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(3)
         await page.evaluate("""
             document.querySelectorAll('.consents, .consents__mask, [class*=consent], .cookie-bar, h-portal-target[name="modals"], .consents-modal__footer, .modal__footer').forEach(el => el.remove());
             document.body.style.pointerEvents = 'auto';
         """)
 
-        # Click cart icon
-        try:
-            cart_icon = page.locator('a[href*="basket"], [class*="cart-icon"], [class*="basket-icon"]').first
-            await cart_icon.click(force=True, timeout=5000)
-            print("Clicked cart icon via PW")
-        except Exception as e:
-            print(f"Cart icon PW failed: {e}")
-            await page.evaluate("""() => {
-                const cart = document.querySelector('a[href*="basket"]');
-                if (cart) cart.click();
-            }""")
-            print("Clicked cart icon via JS")
-        await asyncio.sleep(3)
+        # What's on the basket page?
+        body = await page.evaluate("() => document.body.innerText.substring(0, 600)")
+        print(f"BASKET PAGE URL: {page.url}")
+        print(f"BASKET BODY: {body[:400]}")
 
-        # Check what's visible now
-        popup_text = await page.evaluate("() => document.body.innerText.substring(0, 500)")
-        print(f"AFTER CART CLICK: {popup_text[:200]}")
-
-        # Look for "Wyczyść" 
-        wyczysz = await page.evaluate("""() => {
-            const els = Array.from(document.querySelectorAll('button, a, span, div'));
-            const found = els.filter(el => el.innerText.trim() === 'Wyczyść' || el.innerText.trim() === 'Wyczysc');
-            return found.map(f => ({tag: f.tagName, cls: f.className.substring(0,40), visible: f.offsetParent !== null}));
+        # Look for remove/delete/Wyczysc/Usun buttons or links
+        actions = await page.evaluate("""() => {
+            const els = Array.from(document.querySelectorAll('button, a, span'));
+            const relevant = els.filter(el => {
+                const t = (el.innerText || '').toLowerCase();
+                return t.includes('usuń') || t.includes('wyczyść') || t.includes('usuń') || 
+                       t.includes('remove') || t.includes('delete') || t === 'x' || t === '×';
+            });
+            return relevant.map(el => ({tag: el.tagName, text: el.innerText.substring(0,30), cls: el.className.substring(0,40), href: el.href || ''}));
         }""")
-        print(f"WYCZYSZ ELEMENTS: {wyczysz}")
+        print(f"REMOVE ACTIONS: {actions}")
 
-        # Click "Wyczyść"
-        try:
-            clear_btn = page.locator('text=Wyczyść').first
-            await clear_btn.click(force=True, timeout=5000)
-            print("Clicked Wyczyść via PW")
-        except Exception as e:
-            print(f"Wyczyść PW failed: {e}")
-            await page.evaluate("""() => {
-                const btn = Array.from(document.querySelectorAll('*')).find(el => el.innerText.trim() === 'Wyczyść');
-                if (btn) btn.click();
-            }""")
-            print("Clicked Wyczyść via JS")
-        await asyncio.sleep(3)
-
-        # Look for "Usuń wszystkie produkty" modal
-        modal_text = await page.evaluate("() => document.body.innerText.substring(0, 300)")
-        print(f"AFTER WYCZYSZ: {modal_text[:200]}")
-
-        # Click "Usuń wszystkie produkty"
-        try:
-            remove_btn = page.locator('button:has-text("Usuń wszystkie produkty")').first
-            await remove_btn.click(force=True, timeout=5000)
-            print("Clicked 'Usuń wszystkie produkty' via PW")
-        except Exception as e:
-            print(f"Usuń PW failed: {e}")
-            await page.evaluate("""() => {
-                const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Usuń wszystkie'));
-                if (btn) btn.click();
-            }""")
-            print("Clicked 'Usuń wszystkie' via JS")
-        await asyncio.sleep(3)
-
-        # Check result
-        result = await page.evaluate("""() => {
-            const text = document.body.innerText;
-            if (text.includes('koszyk jest pusty') || text.includes('0,00')) return 'EMPTY';
-            return 'NOT EMPTY: ' + text.substring(0, 100);
+        # Also check for prodremove links (old Shoper)
+        prodremove = await page.evaluate("""() => {
+            const links = document.querySelectorAll('a.prodremove, a[href*="remove"], a[href*="delete"]');
+            return Array.from(links).map(a => ({href: a.href, text: a.innerText.substring(0,20)}));
         }""")
-        print(f"CART STATUS: {result}")
+        print(f"PRODREMOVE LINKS: {prodremove}")
 
         await browser.close()
 
