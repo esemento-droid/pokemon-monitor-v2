@@ -183,30 +183,69 @@ async def login(page, email, password):
 
 async def clear_cart(page):
     """
-    Navigate to basket and remove all items by following a.prodremove hrefs.
-    Loops up to 20 times until cart is empty.
+    Clear cart via popup: click cart icon → "Wyczyść" → "Usuń wszystkie produkty".
+    If cart is already empty, does nothing.
     """
-    await page.goto(f"{BASE_URL}/pl/basket", wait_until="domcontentloaded", timeout=30000)
+    # Navigate to main page to access cart icon
+    await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(2)
     await dismiss_overlay(page)
 
-    # Check if cart has items
-    has_items = await page.evaluate("() => document.body.innerText.includes('ZAMAWIAM')")
-    if not has_items:
+    # Check if cart has items (look at cart count in header)
+    cart_empty = await page.evaluate("""() => {
+        const cartText = document.body.innerText;
+        // Look for "0,00" in cart area or "koszyk jest pusty"
+        const cartEl = document.querySelector('[class*="cart"] [class*="price"], [class*="basket"] [class*="total"]');
+        if (cartEl && cartEl.innerText.includes('0,00')) return true;
+        if (cartText.includes('Twój koszyk jest pusty')) return true;
+        return false;
+    }""")
+    if cart_empty:
         return  # Already empty
 
-    # Get href of prodremove and navigate to it (removes 1 item per visit)
-    for _ in range(20):
-        href = await page.evaluate("() => { const a = document.querySelector('a.prodremove'); return a ? a.href : null; }")
-        if not href:
-            break
-        await page.goto(href, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(1)
-        await dismiss_overlay(page)
-        # Check if empty now
-        has_items = await page.evaluate("() => document.body.innerText.includes('ZAMAWIAM')")
-        if not has_items:
-            break
+    # Click cart icon to open popup
+    try:
+        cart_icon = page.locator('[class*="cart"], [class*="basket"], a[href*="basket"]').first
+        await cart_icon.click(force=True, timeout=5000)
+    except Exception:
+        await page.evaluate("""() => {
+            const cart = document.querySelector('a[href*="basket"], [class*="cart-icon"], [class*="basket"]');
+            if (cart) cart.click();
+        }""")
+    await asyncio.sleep(2)
+
+    # Click "Wyczyść" button in cart popup
+    try:
+        clear_btn = page.locator('text=Wyczyść').first
+        await clear_btn.click(force=True, timeout=5000)
+        await asyncio.sleep(2)
+    except Exception:
+        await page.evaluate("""() => {
+            const btn = Array.from(document.querySelectorAll('button, a, span')).find(el => el.innerText.trim() === 'Wyczyść');
+            if (btn) btn.click();
+        }""")
+        await asyncio.sleep(2)
+
+    # Click "Usuń wszystkie produkty" in confirmation modal
+    try:
+        remove_btn = page.locator('text=Usuń wszystkie produkty').first
+        await remove_btn.click(force=True, timeout=5000)
+        await asyncio.sleep(2)
+    except Exception:
+        await page.evaluate("""() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Usuń wszystkie'));
+            if (btn) btn.click();
+        }""")
+        await asyncio.sleep(2)
+
+    # Verify cart is empty
+    await asyncio.sleep(1)
+    is_empty = await page.evaluate("""() => {
+        return document.body.innerText.includes('koszyk jest pusty') || 
+               document.body.innerText.includes('0,00');
+    }""")
+    if not is_empty:
+        log.warning("Cart may not be fully cleared")
 
 
 async def add_to_cart(page, product_url):
