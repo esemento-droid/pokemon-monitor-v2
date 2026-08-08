@@ -112,7 +112,7 @@ async def dismiss_overlay(page):
 
 async def login(page, email, password):
     """
-    Login to kartexpol.pl via JS form injection.
+    Login to kartexpol.pl via JS form injection + button click.
     Returns True if "wyloguj" detected in page after submission.
     Retries up to 3 times with 3-second waits between attempts.
     """
@@ -132,22 +132,37 @@ async def login(page, email, password):
             await dismiss_overlay(page)
             await asyncio.sleep(0.5)
 
-            # Fill form via JS (body overlay blocks PW clicks/fill)
+            # Fill form via JS with input+change events
             escaped_email = email.replace("'", "\\'")
             escaped_pass = password.replace("\\", "\\\\").replace("'", "\\'")
-            await page.evaluate(f"""
+            await page.evaluate(f"""() => {{
                 const mailEl = document.querySelector('input[name="email"]') || document.querySelector('#mail_input_long') || document.querySelector('input[name="mail"]');
                 const passEl = document.querySelector('input[name="password"]') || document.querySelector('#pass_input_long') || document.querySelector('input[name="pass"]');
-                if (mailEl) mailEl.value = '{escaped_email}';
-                if (passEl) passEl.value = '{escaped_pass}';
-            """)
+                if (mailEl) {{
+                    mailEl.focus();
+                    mailEl.value = '{escaped_email}';
+                    mailEl.dispatchEvent(new Event('input', {{bubbles:true}}));
+                    mailEl.dispatchEvent(new Event('change', {{bubbles:true}}));
+                }}
+                if (passEl) {{
+                    passEl.focus();
+                    passEl.value = '{escaped_pass}';
+                    passEl.dispatchEvent(new Event('input', {{bubbles:true}}));
+                    passEl.dispatchEvent(new Event('change', {{bubbles:true}}));
+                }}
+            }}""")
+            await asyncio.sleep(1)
 
-            # Submit form via JS
-            await page.evaluate("""
-                const form = document.querySelector('form[action*="/pl/login"]');
-                if (form) form.submit();
-            """)
-            await asyncio.sleep(4)
+            # Click "Zaloguj sie" button (NOT form.submit - that doesn't work on this Shoper version)
+            await page.evaluate("""() => {
+                const btn = Array.from(document.querySelectorAll('button[type="submit"]')).find(b => b.innerText.includes('Zaloguj'));
+                if (btn) btn.click();
+                else {
+                    const form = document.querySelector('form[action*="/pl/login"]');
+                    if (form) form.submit();
+                }
+            }""")
+            await asyncio.sleep(5)
 
             # Check for successful login — "wyloguj" link present
             content = await page.content()
