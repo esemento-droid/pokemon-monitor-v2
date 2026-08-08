@@ -334,61 +334,46 @@ async def checkout(page, test_mode=False):
     await asyncio.sleep(2)
 
     # === SINGLE-PAGE CHECKOUT: SELECT PACZKOMAT ===
-    # Select the first paczkomat radio (name="nearest_pickup_point")
-    paczkomat_selected = await page.evaluate("""
-        () => {
-            const radios = document.querySelectorAll('input[type="radio"][name="nearest_pickup_point"]');
-            if (radios.length > 0) {
-                radios[0].checked = true;
-                radios[0].dispatchEvent(new Event('change', {bubbles: true}));
-                radios[0].click();
-                return true;
+    # Click the first paczkomat from the list (must click the whole row/label, not just radio)
+    try:
+        paczkomat_row = page.locator('input[name="nearest_pickup_point"]').first
+        await paczkomat_row.click(force=True, timeout=5000)
+        log.info("Selected paczkomat (clicked radio via PW)")
+    except Exception:
+        # Fallback: click the container/label of first paczkomat
+        await page.evaluate("""() => {
+            const radio = document.querySelector('input[name="nearest_pickup_point"]');
+            if (radio) {
+                const container = radio.closest('label, li, div.pickup-point, [class*=pickup]') || radio.parentElement;
+                if (container) container.click();
+                else radio.click();
             }
-            return false;
-        }
-    """)
-    if paczkomat_selected:
-        log.info("Selected paczkomat (first nearest_pickup_point)")
-    else:
-        log.warning("Could not find paczkomat radio (nearest_pickup_point)")
-    await asyncio.sleep(2)
+        }""")
+        log.info("Selected paczkomat (JS container click)")
+    await asyncio.sleep(3)
 
-    # === SELECT BLIK PAYMENT (basket_payment value="3:509") ===
-    blik_selected = await page.evaluate("""
-        () => {
-            // BLIK is basket_payment with value "3:509"
-            const blik = document.querySelector('input[type="radio"][name="basket_payment"][value="3:509"]');
-            if (blik) {
-                blik.checked = true;
-                blik.dispatchEvent(new Event('change', {bubbles: true}));
-                blik.click();
-                return true;
-            }
-            return false;
-        }
-    """)
-    if blik_selected:
-        log.info("Selected BLIK payment (basket_payment=3:509)")
-    else:
-        log.warning("Could not find BLIK radio (basket_payment 3:509)")
-    await asyncio.sleep(2)
+    # === SELECT BLIK PAYMENT ===
+    try:
+        blik_radio = page.locator('input[name="basket_payment"][value="3:509"]')
+        await blik_radio.click(force=True, timeout=5000)
+        log.info("Selected BLIK payment (PW click)")
+    except Exception:
+        await page.evaluate("""() => {
+            const blik = document.querySelector('input[name="basket_payment"][value="3:509"]');
+            if (blik) { blik.closest('label, li, div')?.click() || blik.click(); }
+        }""")
+        log.info("Selected BLIK payment (JS fallback)")
+    await asyncio.sleep(3)
 
-    # === CHECK CONSENT CHECKBOXES (additional_2 = regulamin) ===
-    await page.evaluate("""
-        () => {
-            // Check required consent checkboxes (additional_2, additional_3)
-            const required = ['additional_2', 'additional_3'];
-            required.forEach(name => {
-                const cb = document.querySelector('input[type="checkbox"][name="' + name + '"]');
-                if (cb && !cb.checked) {
-                    cb.checked = true;
-                    cb.dispatchEvent(new Event('change', {bubbles: true}));
-                    cb.click();
-                }
-            });
-        }
-    """)
-    log.info("Checked consent checkboxes (regulamin)")
+    # === CHECK CONSENT CHECKBOXES ===
+    try:
+        cb2 = page.locator('input[name="additional_2"]')
+        if not await cb2.is_checked():
+            await cb2.click(force=True, timeout=3000)
+    except Exception:
+        pass
+    await asyncio.sleep(1)
+    log.info("Checked consent checkbox (regulamin)")
     await asyncio.sleep(1)
 
     # === CLICK "Zamawiam i płacę" BUTTON ===
