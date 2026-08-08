@@ -1,7 +1,7 @@
 import logging
 from discord_sender import discord
 from smyk_trigger import check_smyk_autobuy
-from kartexpol_trigger import check_kartexpol_autobuy
+from kartexpol_trigger import check_kartexpol_trigger, flush_kartexpol_batch
 from tantis_trigger import check_tantis_trigger, flush_tantis_batch
 from empik_trigger import check_empik_trigger
 from strefatcg_trigger import check_strefatcg_trigger
@@ -15,7 +15,6 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
     old_by_id = {str(k): v for k, v in old_products.items()}
     is_first = len(old_products) == 0 and not snapshot_done
 
-    kartexpol_batch = []
     for product in new_products:
         pid = str(product.get("id", ""))
         if not pid:
@@ -28,7 +27,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                     if product.get("available", False):
                         discord.send_nowait("NEW_PRODUCT", product)
                         check_smyk_autobuy(shop_name, "NEW_PRODUCT", product)
-                        check_kartexpol_autobuy(shop_name, "NEW_PRODUCT", product, kartexpol_batch)
+                        check_kartexpol_trigger("NEW_PRODUCT", product)
                         check_tantis_trigger("NEW_PRODUCT", product)
                         check_empik_trigger("NEW_PRODUCT", product)
                         check_strefatcg_trigger("NEW_PRODUCT", product)
@@ -48,7 +47,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                     product["price_change"] = f"{old_price} -> {new_price}"
                     discord.send_nowait("PRICE_CHANGE", product)
                     check_smyk_autobuy(shop_name, "PRICE_CHANGE", product)
-                    check_kartexpol_autobuy(shop_name, "PRICE_CHANGE", product, kartexpol_batch)
+                    check_kartexpol_trigger("PRICE_CHANGE", product)
                     check_tantis_trigger("PRICE_CHANGE", product)
                     check_empik_trigger("PRICE_CHANGE", product)
                     check_strefatcg_trigger("PRICE_CHANGE", product)
@@ -71,7 +70,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
             if restock:
                 discord.send_nowait("RESTOCK", product)
                 check_smyk_autobuy(shop_name, "RESTOCK", product)
-                check_kartexpol_autobuy(shop_name, "RESTOCK", product, kartexpol_batch)
+                check_kartexpol_trigger("RESTOCK", product)
                 check_tantis_trigger("RESTOCK", product)
                 check_empik_trigger("RESTOCK", product)
                 check_strefatcg_trigger("RESTOCK", product)
@@ -85,9 +84,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
             logger.error(f"[DETECT] Blad {shop_name}/{pid}: {e}")
             continue
 
-    if kartexpol_batch:
-        from kartexpol_trigger import fire_kartexpol_buy
-        fire_kartexpol_buy(kartexpol_batch)
+    flush_kartexpol_batch()
     flush_tantis_batch()
     flush_jc_30th_batch()
     return is_first
