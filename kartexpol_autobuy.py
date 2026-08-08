@@ -333,83 +333,61 @@ async def checkout(page, test_mode=False):
     await asyncio.sleep(2)
 
     # === SINGLE-PAGE CHECKOUT: SELECT PACZKOMAT ===
-    # Select the first paczkomat/InPost radio button
+    # Select the first paczkomat radio (name="nearest_pickup_point")
     paczkomat_selected = await page.evaluate("""
         () => {
-            // Look for radio buttons related to paczkomat/InPost delivery
-            const radios = document.querySelectorAll('input[type="radio"]');
-            for (const radio of radios) {
-                const label = radio.closest('label') || radio.parentElement;
-                const text = label ? label.innerText : '';
-                const name = radio.name || '';
-                // Match paczkomat/machine/InPost radios
-                if (name === 'machine' || text.includes('Paczkomat') || text.includes('paczkomat') || text.includes('InPost')) {
-                    if (!radio.checked) {
-                        radio.checked = true;
-                        radio.dispatchEvent(new Event('change', {bubbles: true}));
-                        radio.dispatchEvent(new Event('click', {bubbles: true}));
-                    }
-                    return true;
-                }
-            }
-            // Fallback: select first radio with name="machine"
-            const machineRadios = document.querySelectorAll('input[type="radio"][name="machine"]');
-            if (machineRadios.length > 0) {
-                machineRadios[0].checked = true;
-                machineRadios[0].dispatchEvent(new Event('change', {bubbles: true}));
+            const radios = document.querySelectorAll('input[type="radio"][name="nearest_pickup_point"]');
+            if (radios.length > 0) {
+                radios[0].checked = true;
+                radios[0].dispatchEvent(new Event('change', {bubbles: true}));
+                radios[0].click();
                 return true;
             }
             return false;
         }
     """)
     if paczkomat_selected:
-        log.info("Selected paczkomat delivery")
+        log.info("Selected paczkomat (first nearest_pickup_point)")
     else:
-        log.warning("Could not find paczkomat radio — may already be selected or different layout")
+        log.warning("Could not find paczkomat radio (nearest_pickup_point)")
     await asyncio.sleep(2)
 
-    # === SELECT BLIK PAYMENT ===
+    # === SELECT BLIK PAYMENT (basket_payment value="3:509") ===
     blik_selected = await page.evaluate("""
         () => {
-            const radios = document.querySelectorAll('input[type="radio"]');
-            for (const radio of radios) {
-                const label = radio.closest('label') || radio.parentElement;
-                const container = radio.closest('li, div, tr') || radio.parentElement;
-                const text = (label ? label.innerText : '') + ' ' + (container ? container.innerText : '');
-                if (text.includes('BLIK') || text.includes('Blik') || text.includes('blik')) {
-                    radio.checked = true;
-                    radio.dispatchEvent(new Event('change', {bubbles: true}));
-                    radio.dispatchEvent(new Event('click', {bubbles: true}));
-                    // Also try clicking the label
-                    if (label && label.tagName === 'LABEL') label.click();
-                    return true;
-                }
+            // BLIK is basket_payment with value "3:509"
+            const blik = document.querySelector('input[type="radio"][name="basket_payment"][value="3:509"]');
+            if (blik) {
+                blik.checked = true;
+                blik.dispatchEvent(new Event('change', {bubbles: true}));
+                blik.click();
+                return true;
             }
             return false;
         }
     """)
     if blik_selected:
-        log.info("Selected BLIK payment")
+        log.info("Selected BLIK payment (basket_payment=3:509)")
     else:
-        log.warning("Could not find BLIK radio — checking if another payment is acceptable")
+        log.warning("Could not find BLIK radio (basket_payment 3:509)")
     await asyncio.sleep(2)
 
-    # === CHECK ALL CONSENT CHECKBOXES ===
+    # === CHECK CONSENT CHECKBOXES (additional_2 = regulamin) ===
     await page.evaluate("""
         () => {
-            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                if (!cb.checked) {
+            // Check required consent checkboxes (additional_2, additional_3)
+            const required = ['additional_2', 'additional_3'];
+            required.forEach(name => {
+                const cb = document.querySelector('input[type="checkbox"][name="' + name + '"]');
+                if (cb && !cb.checked) {
                     cb.checked = true;
                     cb.dispatchEvent(new Event('change', {bubbles: true}));
-                    cb.dispatchEvent(new Event('click', {bubbles: true}));
-                    // Also click the label if present
-                    const label = cb.closest('label') || document.querySelector('label[for="' + cb.id + '"]');
-                    if (label) label.click();
+                    cb.click();
                 }
             });
         }
     """)
-    log.info("Checked all consent checkboxes")
+    log.info("Checked consent checkboxes (regulamin)")
     await asyncio.sleep(1)
 
     # === CLICK "Zamawiam i płacę" BUTTON ===
