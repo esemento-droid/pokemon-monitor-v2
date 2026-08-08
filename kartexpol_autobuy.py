@@ -365,16 +365,25 @@ async def checkout(page, test_mode=False):
         log.info("Selected BLIK payment (JS fallback)")
     await asyncio.sleep(3)
 
-    # === CHECK CONSENT CHECKBOXES ===
-    try:
-        cb2 = page.locator('input[name="additional_2"]')
-        if not await cb2.is_checked():
-            await cb2.click(force=True, timeout=3000)
-    except Exception:
-        pass
-    await asyncio.sleep(1)
-    log.info("Checked consent checkbox (regulamin)")
-    await asyncio.sleep(1)
+    # === CHECK ALL CONSENT CHECKBOXES (including dynamic ones after paczkomat selection) ===
+    # After selecting paczkomat, a new checkbox appears (regulamin Paczkomat 24/7)
+    # So we need to check ALL visible unchecked checkboxes
+    checked_count = await page.evaluate("""() => {
+        let count = 0;
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        for (const cb of checkboxes) {
+            // Skip cookie consent checkboxes
+            if (cb.name && (cb.name.includes('Consent') || cb.name === 'all')) continue;
+            if (cb.id && cb.id.includes('Consent')) continue;
+            if (!cb.checked) {
+                cb.click();
+                count++;
+            }
+        }
+        return count;
+    }""")
+    log.info(f"Checked {checked_count} consent checkboxes")
+    await asyncio.sleep(2)
 
     # === CLICK "Zamawiam i płacę" BUTTON ===
     if test_mode:
