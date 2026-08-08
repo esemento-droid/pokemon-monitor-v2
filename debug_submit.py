@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Debug: why Zamawiam i place button click doesnt redirect"""
+"""Debug: click Zamawiam via first PW locator"""
 import asyncio
 from patchright.async_api import async_playwright
 
@@ -35,7 +35,7 @@ async def check():
         await page.evaluate("""() => { const btn = document.querySelector('.addtobasket'); if (btn) btn.click(); }""")
         await asyncio.sleep(3)
 
-        # Go to checkout via basket
+        # Checkout
         await page.goto(f"{BASE_URL}/pl/basket", wait_until="domcontentloaded")
         await asyncio.sleep(2)
         await page.evaluate("""
@@ -50,70 +50,42 @@ async def check():
         await asyncio.sleep(6)
         print(f"CHECKOUT URL: {page.url}")
 
-        # Select paczkomat via PW locator click (not just JS)
-        try:
-            paczkomat = page.locator('input[name="nearest_pickup_point"]').first
-            await paczkomat.click(force=True, timeout=5000)
-            print("PACZKOMAT: clicked via PW locator")
-        except Exception as e:
-            print(f"PACZKOMAT PW click failed: {e}")
-            await page.evaluate("""() => { const r = document.querySelector('input[name="nearest_pickup_point"]'); if(r) { r.checked=true; r.click(); } }""")
-            print("PACZKOMAT: clicked via JS fallback")
+        # Select paczkomat
+        await page.locator('input[name="nearest_pickup_point"]').first.click(force=True)
         await asyncio.sleep(2)
+        print("PACZKOMAT: done")
 
-        # Select BLIK via PW locator click
-        try:
-            blik = page.locator('input[name="basket_payment"][value="3:509"]')
-            await blik.click(force=True, timeout=5000)
-            print("BLIK: clicked via PW locator")
-        except Exception as e:
-            print(f"BLIK PW click failed: {e}")
-            await page.evaluate("""() => { const r = document.querySelector('input[name="basket_payment"][value="3:509"]'); if(r) { r.checked=true; r.click(); } }""")
-            print("BLIK: clicked via JS fallback")
+        # Select BLIK
+        await page.locator('input[name="basket_payment"][value="3:509"]').click(force=True)
         await asyncio.sleep(2)
+        print("BLIK: done")
 
         # Check consent
-        await page.evaluate("""() => {
-            ['additional_2','additional_3'].forEach(name => {
-                const cb = document.querySelector('input[name="'+name+'"]');
-                if (cb && !cb.checked) { cb.click(); }
-            });
-        }""")
-        print("CHECKBOXES: clicked")
-        await asyncio.sleep(2)
+        cb = page.locator('input[name="additional_2"]')
+        if not await cb.is_checked():
+            await cb.click(force=True)
+        await asyncio.sleep(1)
+        print("CONSENT: done")
 
-        # Check state before submit
-        state = await page.evaluate("""() => {
-            const pacz = document.querySelector('input[name="nearest_pickup_point"]:checked');
-            const pay = document.querySelector('input[name="basket_payment"]:checked');
-            const cb2 = document.querySelector('input[name="additional_2"]');
-            const errors = document.querySelectorAll('.error, .alert, [class*="error"], [class*="alert"]');
-            const errorTexts = Array.from(errors).map(e => e.innerText.substring(0,50)).filter(t => t.length > 0);
-            return JSON.stringify({
-                paczkomat: pacz?.value || 'NONE',
-                payment: pay?.value || 'NONE', 
-                consent_checked: cb2?.checked,
-                errors: errorTexts
-            });
-        }""")
-        print(f"STATE BEFORE SUBMIT: {state}")
-
-        # Click Zamawiam via PW locator (force)
-        try:
-            submit = page.locator('button:has-text("Zamawiam i płacę")')
-            await submit.click(force=True, timeout=5000)
-            print("SUBMIT: clicked via PW locator")
-        except Exception as e:
-            print(f"SUBMIT PW failed: {e}, trying JS")
-            await page.evaluate("""() => { const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Zamawiam')); if(btn) btn.click(); }""")
-            print("SUBMIT: clicked via JS")
+        # Scroll to bottom and click submit via .first
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(1)
         
-        await asyncio.sleep(10)
-        print(f"URL AFTER SUBMIT: {page.url}")
+        submit = page.locator('button.btn_primary.btn_full-width').first
+        print(f"SUBMIT BUTTON visible: {await submit.is_visible()}")
+        await submit.scroll_into_view_if_needed()
+        await asyncio.sleep(1)
+        await submit.click(timeout=5000)
+        print("SUBMIT: clicked via PW .first")
         
-        # Check for errors on page
-        errors = await page.evaluate("() => document.body.innerText.substring(0, 400)")
-        print(f"BODY AFTER: {errors[:300]}")
+        await asyncio.sleep(15)
+        print(f"URL AFTER: {page.url}")
+        
+        if "przelewy24" in page.url or "autopay" in page.url or "blik" in page.url:
+            print("SUCCESS! Payment page reached!")
+        else:
+            body = await page.evaluate("() => document.body.innerText.substring(0, 300)")
+            print(f"FAILED. Body: {body[:200]}")
 
         await browser.close()
 
