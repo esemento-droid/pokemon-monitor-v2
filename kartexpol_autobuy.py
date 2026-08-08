@@ -136,8 +136,8 @@ async def login(page, email, password):
             escaped_email = email.replace("'", "\\'")
             escaped_pass = password.replace("\\", "\\\\").replace("'", "\\'")
             await page.evaluate(f"""
-                const mailEl = document.querySelector('#mail_input_long') || document.querySelector('input[name="mail"]');
-                const passEl = document.querySelector('#pass_input_long') || document.querySelector('input[name="pass"]');
+                const mailEl = document.querySelector('input[name="email"]') || document.querySelector('#mail_input_long') || document.querySelector('input[name="mail"]');
+                const passEl = document.querySelector('input[name="password"]') || document.querySelector('#pass_input_long') || document.querySelector('input[name="pass"]');
                 if (mailEl) mailEl.value = '{escaped_email}';
                 if (passEl) passEl.value = '{escaped_pass}';
             """)
