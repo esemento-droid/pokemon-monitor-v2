@@ -29,13 +29,13 @@ LOG_FILE = BOT_DIR / "kartexpol_autobuy.log"
 WEBHOOK_FILE = BOT_DIR / "discord_webhook_kartexpol.txt"
 
 ACCOUNTS = [
-    {"email": "esemento@gmail.com", "password": "<registered_password>", "name": "Tomasz Szczepaniak"},
-    {"email": "blackmat36@gmail.com", "password": "<registered_password>", "name": "Natalia Szczepaniak"},
-    {"email": "tjbtaniojuzbylo@gmail.com", "password": "<registered_password>", "name": "Jagoda Kaczmarek"},
-    {"email": "y24015411@gmail.com", "password": "<registered_password>", "name": "Miroslawa Szczepaniak"},
+    {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},
+    {"email": "blackmat36@gmail.com", "password": "v2@pvDGt#ZuN3ui", "name": "Natalia Szczepaniak"},
+    {"email": "tjbtaniojuzbylo@gmail.com", "password": "P9XAfQE.SCwFq5i", "name": "Jagoda Kaczmarek"},
+    {"email": "y24015411@gmail.com", "password": "huw!e.twdCmv9@B", "name": "Miroslawa Szczepaniak"},
 ]
 
-TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "<registered_password>", "name": "Marian Wasilewski"}
+TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "name": "Marian Wasilewski"}
 
 # Setup logging
 logging.basicConfig(
