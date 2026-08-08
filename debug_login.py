@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Debug kartexpol login - show what happens after form submit"""
+"""Debug kartexpol login - click Zaloguj button instead of form.submit()"""
 import asyncio
 from patchright.async_api import async_playwright
 
@@ -24,55 +24,59 @@ async def check():
         """)
         await asyncio.sleep(1)
 
-        # Fill form
+        # Fill form via JS with input events
         email = "t11008543@gmail.com"
         password = "mt!cSsphud4Zhnz"
         
-        # Check what selectors find
-        found = await page.evaluate(f"""() => {{
-            const mailEl = document.querySelector('input[name="email"]') || document.querySelector('#mail_input_long') || document.querySelector('input[name="mail"]');
-            const passEl = document.querySelector('input[name="password"]') || document.querySelector('#pass_input_long') || document.querySelector('input[name="pass"]');
-            const form = document.querySelector('form[action*="/pl/login"]');
-            return JSON.stringify({{
-                mailFound: !!mailEl, mailName: mailEl?.name, mailId: mailEl?.id,
-                passFound: !!passEl, passName: passEl?.name, passId: passEl?.id,
-                formFound: !!form, formAction: form?.action
-            }});
+        await page.evaluate(f"""() => {{
+            const mailEl = document.querySelector('input[name="email"]');
+            const passEl = document.querySelector('input[name="password"]');
+            if (mailEl) {{
+                mailEl.focus();
+                mailEl.value = '{email}';
+                mailEl.dispatchEvent(new Event('input', {{bubbles:true}}));
+                mailEl.dispatchEvent(new Event('change', {{bubbles:true}}));
+            }}
+            if (passEl) {{
+                passEl.focus();
+                passEl.value = '{password}';
+                passEl.dispatchEvent(new Event('input', {{bubbles:true}}));
+                passEl.dispatchEvent(new Event('change', {{bubbles:true}}));
+            }}
         }}""")
-        print(f"SELECTORS: {found}")
-
-        # Fill via JS
-        await page.evaluate(f"""
-            const mailEl = document.querySelector('input[name="email"]') || document.querySelector('#mail_input_long') || document.querySelector('input[name="mail"]');
-            const passEl = document.querySelector('input[name="password"]') || document.querySelector('#pass_input_long') || document.querySelector('input[name="pass"]');
-            if (mailEl) {{ mailEl.value = '{email}'; mailEl.dispatchEvent(new Event('input', {{bubbles:true}})); }}
-            if (passEl) {{ passEl.value = '{password}'; passEl.dispatchEvent(new Event('input', {{bubbles:true}})); }}
-        """)
         await asyncio.sleep(1)
         
-        # Verify values set
         vals = await page.evaluate("""() => {
             const m = document.querySelector('input[name="email"]');
             const p = document.querySelector('input[name="password"]');
-            return JSON.stringify({emailVal: m?.value, passVal: p?.value?.length});
+            return JSON.stringify({emailVal: m?.value, passLen: p?.value?.length});
         }""")
-        print(f"VALUES SET: {vals}")
+        print(f"VALUES: {vals}")
 
-        # Submit form
-        await page.evaluate("""
-            const form = document.querySelector('form[action*="/pl/login"]');
-            if (form) form.submit();
-        """)
-        print("FORM SUBMITTED")
+        # Find and click the submit button (not form.submit)
+        buttons = await page.evaluate("""() => {
+            const btns = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+            return btns.map(b => ({text: b.innerText || b.value, type: b.type, className: b.className}));
+        }""")
+        print(f"BUTTONS: {buttons}")
+
+        # Click "Zaloguj sie" button
+        clicked = await page.evaluate("""() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Zaloguj'));
+            if (btn) { btn.click(); return btn.innerText; }
+            const submit = document.querySelector('form[action*="/pl/login"] button[type="submit"]');
+            if (submit) { submit.click(); return 'submit:' + submit.innerText; }
+            return 'NOT FOUND';
+        }""")
+        print(f"CLICKED: {clicked}")
         await asyncio.sleep(6)
 
-        # Check result
         url = page.url
         content = await page.content()
         has_wyloguj = "wyloguj" in content.lower()
-        body_text = await page.evaluate("() => document.body.innerText.substring(0, 500)")
-        print(f"URL AFTER: {url}")
-        print(f"HAS WYLOGUJ: {has_wyloguj}")
+        body_text = await page.evaluate("() => document.body.innerText.substring(0, 400)")
+        print(f"URL: {url}")
+        print(f"LOGGED IN: {has_wyloguj}")
         print(f"BODY: {body_text[:300]}")
         
         await browser.close()
