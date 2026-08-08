@@ -1,135 +1,600 @@
 #!/usr/bin/env python3
-import asyncio,aiohttp,json,sys,re,logging,os
-from datetime import datetime
-logging.basicConfig(filename='/opt/pokemon-monitor-v2/kartexpol_autobuy.log',level=logging.INFO,format='%(asctime)s %(message)s')
-log=logging.getLogger(__name__)
-# --- Discord notifications ---
-WEBHOOK_FILE_KARTEXPOL = "/opt/pokemon-monitor-v2/discord_webhook_kartexpol.txt"
+"""
+Kartexpol Auto-Buy Bot
+Platform: Shoper (kartexpol.pl)
+Method: Patchright headless=False (Shoper blocks aiohttp login)
+Flow: Login → Clear cart → ATC → Basket → ZAMAWIAM →
+      Select paczkomat + checkboxes → PODSUMOWANIE → POTWIERDZAM ZAKUP → Przelewy24
+Accounts: 4 production + 1 test
+Requires: DISPLAY=:99, Xvfb running
+"""
 
-async def send_discord_kartexpol(msg):
-    try:
-        if not os.path.exists(WEBHOOK_FILE_KARTEXPOL):
-            return
-        url = open(WEBHOOK_FILE_KARTEXPOL).read().strip()
-        if not url:
-            return
-        async with aiohttp.ClientSession() as s:
-            await s.post(url, json={"content": msg})
-    except Exception as e:
-        log.warning(f"Discord send failed: {e}")
-# --- end Discord ---
+import asyncio
+import sys
+import os
+import json
+import logging
+import re
+import time
+import argparse
+from pathlib import Path
+from patchright.async_api import async_playwright
 
-BASE="https://www.kartexpol.pl"
-ACCOUNTS=[
-{"firstName":"Tomasz","lastName":"Szczepaniak","street":"Lesna 46a/2","postalCode":"62-069","city":"Paledzie","phone":"607183797","email":"esemento@gmail.com"},
-{"firstName":"Natalia","lastName":"Szczepaniak","street":"Zgoda 30b","postalCode":"60-122","city":"Poznan","phone":"514635586","email":"blackmat36@gmail.com"},
-{"firstName":"Jagoda","lastName":"Kaczmarek","street":"Bukowska 104a/7","postalCode":"60-397","city":"Poznan","phone":"535024946","email":"tjbtaniojuzbylo@gmail.com"},
-{"firstName":"Miroslawa","lastName":"Szczepaniak","street":"Bukowska 104a/7","postalCode":"60-397","city":"Poznan","phone":"603466903","email":"y24015411@gmail.com"},
+# === CONFIG ===
+BASE_URL = "https://www.kartexpol.pl"
+SHOP_NAME = "kartexpol"
+BOT_DIR = Path(__file__).parent
+COMPLETED_FILE = BOT_DIR / "kartexpol_completed.json"
+LOG_FILE = BOT_DIR / "kartexpol_autobuy.log"
+WEBHOOK_FILE = BOT_DIR / "discord_webhook_kartexpol.txt"
+
+ACCOUNTS = [
+    {"email": "esemento@gmail.com", "password": "<registered_password>", "name": "Tomasz Szczepaniak"},
+    {"email": "blackmat36@gmail.com", "password": "<registered_password>", "name": "Natalia Szczepaniak"},
+    {"email": "tjbtaniojuzbylo@gmail.com", "password": "<registered_password>", "name": "Jagoda Kaczmarek"},
+    {"email": "y24015411@gmail.com", "password": "<registered_password>", "name": "Miroslawa Szczepaniak"},
 ]
 
-async def place_order(session,account,stock_items):
-    name=f"{account['firstName']} {account['lastName']}"
-    try:
-        r=await session.post(f"{BASE}/api/basket/")
-        d=await r.json()
-        bid=d['basket']['_links']['clean']['href'].split('/')[-1]
-        log.info(f"[{name}] Basket: {bid}")
-        added=0
-        for stock_id,prod_name in stock_items:
-            r=await session.post(f"{BASE}/api/basket/{bid}/item/{stock_id}")
-            if r.status==200:
-                added+=1
-                log.info(f"[{name}] Added: {prod_name} (stock {stock_id})")
-            else:
-                log.warning(f"[{name}] Fail add {prod_name}: {r.status}")
-        if added==0:
-            return False,"No products added"
-        addr={"firstName":account["firstName"],"lastName":account["lastName"],"street":account["street"],"postalCode":account["postalCode"],"city":account["city"],"country_code":"PL","country_id":179,"phone":account["phone"],"email":account["email"]}
-        r=await session.put(f"{BASE}/api/basket/{bid}/billing-address",json=addr)
-        d=await r.json()
-        if d.get('formErrors'):
-            return False,f"Billing err: {d['formErrors']}"
-        await session.put(f"{BASE}/api/basket/{bid}/shipping-address",json=addr)
-        await session.put(f"{BASE}/api/basket/{bid}/shipping/11",json={})
-        await session.put(f"{BASE}/api/basket/{bid}/payment/3/3:9",json={})
-        await session.put(f"{BASE}/api/basket/{bid}/additional-fields",json={"2":"1"})
-        r=await session.post(f"{BASE}/api/basket/{bid}/place-order",json={})
-        d=await r.json()
-        if d.get("isPlaced"):
-            oid=d.get("orderId","?")
-            log.info(f"[{name}] ORDER PLACED #{oid} ({added} products)")
-            await send_discord_kartexpol(f"\u2705 **{name}** - zamowienie #{oid} ({added} produktow)")
-            return True,oid
-        else:
-            flash=d.get("flashMessages",[])
-            inv=d.get("basket",{}).get("invalidSections",{})
-            log.error(f"[{name}] FAILED: {flash} {inv}")
-            return False,f"{flash} {inv}"
-    except Exception as e:
-        log.error(f"[{name}] Exception: {e}")
-        return False,str(e)
+TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "<registered_password>", "name": "Marian Wasilewski"}
 
-async def get_stock_id(session,product_id):
-    try:
-        r=await session.get(f"{BASE}/pl/p/-/{product_id}",allow_redirects=True)
-        html=await r.text()
-        m=re.search(r'"stock_id":\s*(\d+)',html)
-        if m:return int(m.group(1))
-        m=re.search(r'data-stock[_-]id["\s=:]+["\']?(\d+)',html)
-        if m:return int(m.group(1))
-        return None
-    except:return None
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOG_FILE, mode="a"),
+    ]
+)
+log = logging.getLogger("kartexpol_autobuy")
 
-async def buy_products(products):
-    log.info(f"=== KARTEXPOL BUY: {len(products)} products ===")
-    for p in products:
-        log.info(f"  {p.get('name')} | {p.get('url')}")
-    headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36","Accept":"application/json","Content-Type":"application/json"}
-    async with aiohttp.ClientSession(headers=headers) as session:
-        stock_items=[]
-        for p in products:
-            sid=p.get('stock_id')
-            if not sid:
-                pid_m=re.search(r'/(\d+)$',p.get('url',''))
-                if pid_m:
-                    pid=int(pid_m.group(1))
-                    sid=await get_stock_id(session,pid)
-                    if not sid:sid=pid
-            if sid:
-                stock_items.append((sid,p.get('name',f'product_{sid}')))
-            else:
-                log.warning(f"No stock_id for: {p.get('name')}")
-        if not stock_items:
-            log.error("No stock IDs, aborting")
+
+# === COMPLETED TRACKER ===
+
+def load_completed():
+    """Load completed purchases from JSON file. Return {} if missing or malformed."""
+    try:
+        if COMPLETED_FILE.exists():
+            return json.loads(COMPLETED_FILE.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning(f"Failed to load completed file: {e}")
+    return {}
+
+
+def save_completed(data):
+    """Write completed dict to JSON file with indent=2."""
+    COMPLETED_FILE.write_text(json.dumps(data, indent=2))
+
+
+def is_completed(product_id, email):
+    """Check if email has already completed purchase for product_id."""
+    completed = load_completed()
+    return email in completed.get(product_id, [])
+
+
+def mark_completed(product_id, email):
+    """Add email to completed[product_id] list and save."""
+    completed = load_completed()
+    if product_id not in completed:
+        completed[product_id] = []
+    if email not in completed[product_id]:
+        completed[product_id].append(email)
+    save_completed(completed)
+
+
+# === DISCORD NOTIFICATIONS ===
+
+async def send_discord(message):
+    """Send Discord notification via webhook."""
+    try:
+        if not WEBHOOK_FILE.exists():
+            log.warning("No Discord webhook file")
             return
-        log.info(f"Stock items: {stock_items}")
-        results=[]
-        for account in ACCOUNTS:
-            ok,res=await place_order(session,account,stock_items)
-            name=f"{account['firstName']} {account['lastName']}"
-            print(f"[{'OK' if ok else 'FAIL'}] {name}: {res}",flush=True)
-            results.append((name,ok,res))
-            await asyncio.sleep(1)
-    ok=sum(1 for _,s,_ in results if s)
-    log.info(f"=== DONE: {ok}/4 orders ===")
-    for n,s,r in results:
-        log.info(f"  {n}: {'OK #'+str(r) if s else 'FAIL '+str(r)}")
-    print(f"\n=== DONE: {ok}/4 orders placed ===",flush=True)
-    # Discord summary
-    lines = [f"  {n}: {'OK #'+str(r) if s else 'FAIL'}" for n,s,r in results]
-    await send_discord_kartexpol(f"\U0001f6d2 **Kartexpol AutoBuy** - {ok}/4 zamowien\n" + "\n".join(lines))
+        wh_url = WEBHOOK_FILE.read_text().strip()
+        if not wh_url:
+            return
+        import aiohttp
+        async with aiohttp.ClientSession() as s:
+            await s.post(wh_url, json={"content": message}, timeout=aiohttp.ClientTimeout(total=10))
+    except Exception as e:
+        log.warning(f"Discord send failed: {e}")
 
-if __name__=="__main__":
-    if len(sys.argv)>1:
-        items=[]
-        for arg in sys.argv[1:]:
+
+# === BROWSER AUTOMATION ===
+
+async def dismiss_overlay(page):
+    """Remove cookie consent overlays and restore pointer-events on body."""
+    await page.evaluate("""
+        document.querySelectorAll('.consents, .consents__mask, [class*=consent], .cookie-bar').forEach(el => el.remove());
+        document.body.style.pointerEvents = 'auto';
+    """)
+
+
+async def login(page, email, password):
+    """
+    Login to kartexpol.pl via JS form injection.
+    Returns True if "wyloguj" detected in page after submission.
+    Retries up to 3 times with 3-second waits between attempts.
+    """
+    for attempt in range(3):
+        try:
+            await page.goto(f"{BASE_URL}/pl/login", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(3)
+
+            # Remove overlays — try clicking consent button first, then JS removal
             try:
-                sid=int(arg)
-                items.append({"stock_id":sid,"name":f"Product (stock {sid})","url":""})
-            except ValueError:
-                items.append({"url":arg,"name":arg.split('/')[-1]})
-        asyncio.run(buy_products(items))
+                consent = page.locator('.consents__btn')
+                if await consent.count() > 0:
+                    await consent.first.click(timeout=3000)
+                    await asyncio.sleep(1)
+            except Exception:
+                pass
+            await dismiss_overlay(page)
+            await asyncio.sleep(0.5)
+
+            # Fill form via JS (body overlay blocks PW clicks/fill)
+            escaped_email = email.replace("'", "\\'")
+            escaped_pass = password.replace("\\", "\\\\").replace("'", "\\'")
+            await page.evaluate(f"""
+                const mailEl = document.querySelector('#mail_input_long') || document.querySelector('input[name="mail"]');
+                const passEl = document.querySelector('#pass_input_long') || document.querySelector('input[name="pass"]');
+                if (mailEl) mailEl.value = '{escaped_email}';
+                if (passEl) passEl.value = '{escaped_pass}';
+            """)
+
+            # Submit form via JS
+            await page.evaluate("""
+                const form = document.querySelector('form[action*="/pl/login"]');
+                if (form) form.submit();
+            """)
+            await asyncio.sleep(4)
+
+            # Check for successful login — "wyloguj" link present
+            content = await page.content()
+            if "wyloguj" in content.lower() or "Wyloguj" in content:
+                return True
+
+            log.warning(f"Login attempt {attempt+1} failed for {email}, url={page.url}")
+        except Exception as e:
+            log.warning(f"Login attempt {attempt+1} error for {email}: {e}")
+
+        # Wait 3 seconds before retry
+        if attempt < 2:
+            await asyncio.sleep(3)
+
+    return False
+
+
+async def clear_cart(page):
+    """
+    Navigate to basket and remove all items by following a.prodremove hrefs.
+    Loops up to 20 times until cart is empty.
+    """
+    await page.goto(f"{BASE_URL}/pl/basket", wait_until="domcontentloaded", timeout=30000)
+    await asyncio.sleep(2)
+    await dismiss_overlay(page)
+
+    # Check if cart has items
+    has_items = await page.evaluate("() => document.body.innerText.includes('ZAMAWIAM')")
+    if not has_items:
+        return  # Already empty
+
+    # Get href of prodremove and navigate to it (removes 1 item per visit)
+    for _ in range(20):
+        href = await page.evaluate("() => { const a = document.querySelector('a.prodremove'); return a ? a.href : null; }")
+        if not href:
+            break
+        await page.goto(href, wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(1)
+        await dismiss_overlay(page)
+        # Check if empty now
+        has_items = await page.evaluate("() => document.body.innerText.includes('ZAMAWIAM')")
+        if not has_items:
+            break
+
+
+async def add_to_cart(page, product_url):
+    """
+    Navigate to product page and click .addtobasket via JS.
+    Returns True on success, False if button not found/disabled.
+    """
+    try:
+        await page.goto(product_url, wait_until="domcontentloaded", timeout=30000)
+    except Exception as e:
+        log.warning(f"Failed to load product page {product_url}: {e}")
+        return False
+    await asyncio.sleep(2)
+    await dismiss_overlay(page)
+
+    # Click ATC button via JS
+    clicked = await page.evaluate("""
+        () => {
+            const btn = document.querySelector('.addtobasket') ||
+                        document.querySelector('button.addtobasket') ||
+                        document.querySelector('[class*="addtobasket"]') ||
+                        document.querySelector('form[action*="basket"] button[type="submit"]');
+            if (btn && !btn.disabled) {
+                btn.click();
+                return true;
+            }
+            return false;
+        }
+    """)
+
+    if not clicked:
+        # Fallback: try PW locator with force
+        try:
+            atc = page.locator('.addtobasket, button:has-text("Do koszyka")')
+            if await atc.count() > 0:
+                await atc.first.click(force=True, timeout=5000)
+                clicked = True
+        except Exception as e:
+            log.warning(f"ATC fallback click failed for {product_url}: {e}")
+
+    if clicked:
+        await asyncio.sleep(2)
+        return True
+
+    log.warning(f"ATC button not found or disabled for {product_url}")
+    return False
+
+
+async def checkout(page, test_mode=False):
+    """
+    Complete 3-step checkout:
+      1. Basket → click ZAMAWIAM → verify step2 URL
+      2. Step2 → select paczkomat radio, check all checkboxes → PODSUMOWANIE → verify step3 URL
+      3. Step3 → click POTWIERDZAM ZAKUP → verify przelewy24 redirect
+    Returns True if Przelewy24 payment page reached.
+    """
+    # === STEP 1: BASKET PAGE ===
+    await page.goto(f"{BASE_URL}/pl/basket", wait_until="domcontentloaded", timeout=30000)
+    await asyncio.sleep(2)
+    await dismiss_overlay(page)
+
+    # Check if basket has items
+    has_items = await page.evaluate("() => document.body.innerText.includes('ZAMAWIAM')")
+    if not has_items:
+        log.error("Basket is empty!")
+        return False
+
+    # Click ZAMAWIAM button to proceed to step2
+    await page.evaluate("""
+        () => {
+            const btn = document.querySelector('button.order');
+            if (btn) btn.click();
+        }
+    """)
+    log.info("Clicked ZAMAWIAM")
+    await asyncio.sleep(5)
+
+    # Wait up to 10s for step2 URL
+    deadline = time.time() + 10
+    while "step2" not in page.url and time.time() < deadline:
+        await asyncio.sleep(1)
+
+    if "step2" not in page.url:
+        body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
+        log.error(f"ZAMAWIAM failed, still on {page.url}: {body[:100]}")
+        return False
+
+    # === STEP 2: DELIVERY (paczkomat + checkboxes) ===
+    log.info(f"Step 2 URL: {page.url}")
+    await dismiss_overlay(page)
+    await asyncio.sleep(2)
+
+    # Select first paczkomat radio (name="machine")
+    await page.evaluate("""
+        () => {
+            const machineRadios = document.querySelectorAll('input[type="radio"][name="machine"]');
+            if (machineRadios.length > 0 && !Array.from(machineRadios).some(r => r.checked)) {
+                machineRadios[0].checked = true;
+                machineRadios[0].dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        }
+    """)
+    await asyncio.sleep(1)
+
+    # Check ALL checkboxes
+    await page.evaluate("""
+        () => {
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (!cb.checked) {
+                    cb.checked = true;
+                    cb.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            });
+        }
+    """)
+    await asyncio.sleep(1)
+
+    # Click PODSUMOWANIE
+    await page.evaluate("""
+        () => {
+            const btn = Array.from(document.querySelectorAll('a, button, input[type="submit"]'))
+                .find(el => (el.innerText || el.value || '').includes('PODSUMOWANIE'));
+            if (btn) btn.click();
+        }
+    """)
+    log.info("Clicked PODSUMOWANIE")
+    await asyncio.sleep(4)
+
+    # Wait up to 10s for step3 URL
+    deadline = time.time() + 10
+    while "step3" not in page.url and time.time() < deadline:
+        await asyncio.sleep(1)
+
+    if "step3" not in page.url:
+        log.error(f"PODSUMOWANIE failed, on {page.url}")
+        return False
+
+    # === STEP 3: CONFIRMATION ===
+    log.info(f"Step 3 URL: {page.url}")
+    await dismiss_overlay(page)
+    await asyncio.sleep(1)
+
+    if test_mode:
+        confirm = page.locator('button:has-text("POTWIERDZAM")')
+        found = await confirm.count()
+        log.info(f"[TEST MODE] POTWIERDZAM button found: {found > 0}")
+        if not found:
+            log.error("[TEST MODE] POTWIERDZAM button not found!")
+            return False
+        # Submit to verify payment redirect
+        await page.evaluate("() => { const btn = document.querySelector('button.order'); if(btn) btn.click(); }")
+        log.info("[TEST MODE] Clicked POTWIERDZAM ZAKUP!")
+        await asyncio.sleep(8)
+
+        # Wait up to 15s for Przelewy24 redirect
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            url = page.url
+            if "przelewy24" in url or "secure.przelewy24" in url:
+                log.info(f"[TEST MODE] PAYMENT PAGE REACHED! URL: {url}")
+                return True
+            await asyncio.sleep(1)
+
+        url = page.url
+        if "przelewy24" in url or "secure.przelewy24" in url:
+            log.info(f"[TEST MODE] PAYMENT PAGE REACHED! URL: {url}")
+            return True
+        else:
+            body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
+            log.warning(f"[TEST MODE] Didn't reach payment page. URL: {url}, body: {body[:100]}")
+            return False
+
+    # REAL MODE - click confirm
+    confirm = page.locator('button:has-text("POTWIERDZAM")')
+    if await confirm.count() == 0:
+        log.error("POTWIERDZAM button not found!")
+        return False
+
+    await page.evaluate("() => { const btn = document.querySelector('button.order'); if(btn) btn.click(); }")
+    log.info("Clicked POTWIERDZAM ZAKUP!")
+    await asyncio.sleep(8)
+
+    # Wait up to 15s for Przelewy24 redirect
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        url = page.url
+        if "przelewy24" in url or "secure.przelewy24" in url:
+            log.info(f"Payment page reached! URL: {url}")
+            return True
+        await asyncio.sleep(1)
+
+    url = page.url
+    if "przelewy24" in url or "secure.przelewy24" in url:
+        log.info(f"Payment page reached! URL: {url}")
+        return True
     else:
-        print("Usage: python kartexpol_autobuy.py <stock_id1> [stock_id2] ...")
-        print("  or pass product URLs as arguments")
-        sys.exit(1)
+        body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
+        log.warning(f"Przelewy24 not reached after confirm. URL: {url}, body: {body[:100]}")
+        return False
+
+
+async def logout(page):
+    """
+    Logout from kartexpol.pl. Used only for error recovery mid-flow.
+    Normal flow just closes the browser context.
+    """
+    try:
+        await page.goto(f"{BASE_URL}/pl/logout", wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(2)
+    except Exception as e:
+        log.warning(f"Logout navigation error: {e}")
+
+
+
+# === PRODUCT ID EXTRACTION ===
+
+def extract_product_id(url):
+    """
+    Extract product ID from URL — last numeric segment of the URL path.
+    Examples:
+        "https://www.kartexpol.pl/pl/p/Product-Name/12345" → "12345"
+        "https://www.kartexpol.pl/pl/p/Some-Product/67890" → "67890"
+        "https://example.com/path/no-number" → "no-number" (fallback)
+    """
+    # Try to find last numeric segment in URL path
+    match = re.search(r'/(\d+)(?:[/?#]|$)', url)
+    if match:
+        return match.group(1)
+    # Fallback: use last path segment
+    path = url.rstrip('/').split('?')[0].split('#')[0]
+    return path.split('/')[-1]
+
+
+# === ACCOUNT BATCH PROCESSING ===
+
+async def run_for_account_batch(page, account, product_urls, test_mode=False):
+    """
+    Run full buy flow for one account with MULTIPLE products in one cart.
+    
+    Returns one of: "success", "skipped", "login_failed", "atc_failed", "checkout_failed"
+    """
+    email = account["email"]
+    name = account["name"]
+
+    # Filter out already completed products
+    urls_to_buy = []
+    for url in product_urls:
+        pid = extract_product_id(url)
+        if not is_completed(pid, email):
+            urls_to_buy.append(url)
+
+    if not urls_to_buy:
+        log.info(f"[{name}] All products already completed, skipping")
+        return "skipped"
+
+    log.info(f"[{name}] Starting... ({email}) - {len(urls_to_buy)} products")
+
+    # Login
+    ok = await login(page, email, account["password"])
+    if not ok:
+        log.error(f"[{name}] Login FAILED")
+        return "login_failed"
+    log.info(f"[{name}] Logged in")
+
+    # Clear cart
+    await clear_cart(page)
+    log.info(f"[{name}] Cart cleared")
+
+    # Add ALL products to cart
+    added = 0
+    for url in urls_to_buy:
+        ok = await add_to_cart(page, url)
+        if ok:
+            added += 1
+            log.info(f"[{name}] Added: {url.split('/')[-2][:40]}")
+        else:
+            log.warning(f"[{name}] ATC failed: {url.split('/')[-2][:40]}")
+
+    if added == 0:
+        log.error(f"[{name}] No products added to cart!")
+        return "atc_failed"
+
+    log.info(f"[{name}] {added}/{len(urls_to_buy)} products in cart")
+
+    # Checkout (all products in one order)
+    ok = await checkout(page, test_mode=test_mode)
+    if ok:
+        log.info(f"[{name}] ORDER PLACED! ({added} products)")
+        if not test_mode:
+            # Mark all added products as completed
+            for url in urls_to_buy:
+                pid = extract_product_id(url)
+                mark_completed(pid, email)
+            await send_discord(f"✅ **{name}** - zamówienie złożone! ({added} produktów)\n💳 Zapłać BLIK na stronie płatności")
+        return "success"
+    else:
+        log.error(f"[{name}] Checkout FAILED")
+        return "checkout_failed"
+
+
+# === MAIN ENTRY POINT ===
+
+async def main():
+    parser = argparse.ArgumentParser(description="Kartexpol Auto-Buy Bot")
+    parser.add_argument("product_urls", nargs="*", help="Product URL(s) to buy")
+    parser.add_argument("--test", action="store_true", help="Use test account (t11008543@gmail.com)")
+    parser.add_argument("--accounts", type=int, default=4, help="Number of accounts to process (1-4, default: 4)")
+    parser.add_argument("--start", type=int, default=1, help="Start from account number N (1-indexed, 1-4, default: 1)")
+    parser.add_argument("--qty", type=int, default=1, help="Quantity per product per account (1-10, default: 1)")
+    args = parser.parse_args()
+
+    # Validate: at least one URL required
+    if not args.product_urls:
+        parser.error("At least one product URL is required")
+
+    # Validate --accounts range (1-4)
+    if args.accounts < 1 or args.accounts > 4:
+        parser.error(f"--accounts must be between 1 and 4 (got {args.accounts})")
+
+    # Validate --start range (1-4)
+    if args.start < 1 or args.start > 4:
+        parser.error(f"--start must be between 1 and 4 (got {args.start})")
+
+    # Validate --qty range (1-10)
+    if args.qty < 1 or args.qty > 10:
+        parser.error(f"--qty must be between 1 and 10 (got {args.qty})")
+
+    # Check DISPLAY environment variable (warn if not :99 but don't block)
+    display = os.environ.get("DISPLAY", "")
+    if display != ":99":
+        log.warning(f"DISPLAY is '{display}' (expected ':99'). Browser may fail without Xvfb.")
+
+    # Build product URL list (repeat URLs based on --qty)
+    product_urls = []
+    for url in args.product_urls:
+        for _ in range(args.qty):
+            product_urls.append(url)
+
+    # Select accounts
+    if args.test:
+        accounts_to_use = [TEST_ACCOUNT]
+        log.info("=== TEST MODE (using test account) ===")
+    else:
+        accounts_to_use = ACCOUNTS[args.start - 1 : args.start - 1 + args.accounts]
+
+    log.info(f"Products ({len(args.product_urls)}):")
+    for url in args.product_urls:
+        log.info(f"  {url}")
+    log.info(f"Accounts: {len(accounts_to_use)}, Qty: {args.qty}, Start: {args.start}")
+    log.info(f"Test mode: {args.test}")
+
+    # Notify Discord
+    if not args.test:
+        prod_list = "\n".join([f"• {url.split('/')[-2][:50]}" for url in args.product_urls])
+        await send_discord(f"🚨 **KARTEXPOL AutoBuy** uruchomiony!\n{prod_list}\nKonta: {len(accounts_to_use)}")
+
+    results = []
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=False,
+            args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
+        )
+
+        for i, account in enumerate(accounts_to_use):
+            ctx = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            )
+            page = await ctx.new_page()
+
+            try:
+                result = await run_for_account_batch(page, account, product_urls, test_mode=args.test)
+                results.append((account["name"], result))
+            except Exception as e:
+                log.error(f"[{account['name']}] Exception: {e}")
+                results.append((account["name"], f"error: {e}"))
+            finally:
+                await ctx.close()
+
+            # Small delay between accounts
+            if i < len(accounts_to_use) - 1:
+                await asyncio.sleep(2)
+
+        await browser.close()
+
+    # Summary
+    log.info("\n=== SUMMARY ===")
+    success_count = 0
+    for name, result in results:
+        status = "✅" if result == "success" else "❌"
+        log.info(f"  {status} {name}: {result}")
+        if result == "success":
+            success_count += 1
+
+    log.info(f"\nTotal: {success_count}/{len(results)} orders placed")
+
+    # Discord summary
+    if not args.test:
+        lines = [f"🛒 **Kartexpol AutoBuy** - {success_count}/{len(results)} zamówień!"]
+        for name, result in results:
+            icon = "✅" if result == "success" else "❌"
+            lines.append(f"{icon} {name}: {result}")
+        await send_discord("\n".join(lines))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
