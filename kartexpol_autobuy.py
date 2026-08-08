@@ -27,6 +27,7 @@ BOT_DIR = Path(__file__).parent
 COMPLETED_FILE = BOT_DIR / "kartexpol_completed.json"
 LOG_FILE = BOT_DIR / "kartexpol_autobuy.log"
 WEBHOOK_FILE = BOT_DIR / "discord_webhook_kartexpol.txt"
+PROXY = "http://127.0.0.1:8888"
 
 ACCOUNTS = [
     {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},
@@ -650,7 +651,7 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
-            args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
+            args=['--disable-blink-features=AutomationControlled', '--no-sandbox', f'--proxy-server={PROXY}']
         )
 
         for i, account in enumerate(accounts_to_use):
