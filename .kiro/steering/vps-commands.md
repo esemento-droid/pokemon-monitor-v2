@@ -4,23 +4,20 @@ inclusion: always
 
 # VPS Command Execution Pattern
 
-The user cannot easily copy-paste long commands. When providing VPS commands for the user to run:
+The user runs commands on VPS from their PHONE. They cannot copy-paste multiline commands.
 
-1. **Always wrap commands in a paste.rs-friendly format** — give the user a single command that:
-   - Runs the actual command on VPS
-   - Pipes the output to `curl -s -d @- https://paste.rs/` 
-   - This generates a paste.rs URL the user can share back
+## Rules:
 
-2. **Format:**
-```bash
-COMMAND_HERE 2>&1 | curl -s -d @- https://paste.rs/
+1. **NEVER give multiline commands in chat** — they break on mobile paste
+2. **For anything longer than one line** — save it as a .py or .sh script file in the repo, push to main, then tell user to git pull and run it
+3. **Always pipe output to paste.rs** so user can share results back
+4. **Format for simple commands:**
+
+```
+git pull && DISPLAY=:99 /opt/pokemon-monitor-v2/venv/bin/python3 SCRIPT.py 2>&1 | curl -s -d @- https://paste.rs/
 ```
 
-3. **For multi-line or complex commands:**
-```bash
-bash -c 'COMMANDS_HERE' 2>&1 | curl -s -d @- https://paste.rs/
-```
-
-4. **The user will paste back the paste.rs URL** — fetch it to see the output.
-
-5. **This applies to ALL commands meant for the VPS** — never give raw commands without the paste.rs pipe.
+5. **User will paste back the paste.rs URL** — fetch it with web_fetch to see output
+6. **NEVER use `curl paste.rs | bash`** — newlines get mangled and it breaks
+7. **Always use the venv python:** `/opt/pokemon-monitor-v2/venv/bin/python3`
+8. **Always prefix with `DISPLAY=:99`** for any browser automation
