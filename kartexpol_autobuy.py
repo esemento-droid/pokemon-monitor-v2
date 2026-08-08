@@ -365,9 +365,9 @@ async def checkout(page, test_mode=False):
         log.info("Selected BLIK payment (JS fallback)")
     await asyncio.sleep(3)
 
-    # === CHECK ALL CONSENT CHECKBOXES (including dynamic ones after paczkomat selection) ===
-    # After selecting paczkomat, a new checkbox appears (regulamin Paczkomat 24/7)
-    # So we need to check ALL visible unchecked checkboxes
+    # === CHECK REQUIRED CONSENT CHECKBOXES ===
+    # Check regulamin sklepu (additional_2) + regulamin Paczkomat 24/7 (additional_3 or dynamic)
+    # Do NOT check "Chcę otrzymać fakturę" (additional_3 might be invoice)
     checked_count = await page.evaluate("""() => {
         let count = 0;
         const checkboxes = document.querySelectorAll('input[type="checkbox"]');
@@ -375,6 +375,11 @@ async def checkout(page, test_mode=False):
             // Skip cookie consent checkboxes
             if (cb.name && (cb.name.includes('Consent') || cb.name === 'all')) continue;
             if (cb.id && cb.id.includes('Consent')) continue;
+            // Skip invoice checkbox - look for "faktur" in nearby label text
+            const label = cb.closest('label') || cb.parentElement;
+            const labelText = label ? label.innerText.toLowerCase() : '';
+            if (labelText.includes('faktur')) continue;
+            // Check required ones (regulamin sklepu + regulamin paczkomat)
             if (!cb.checked) {
                 cb.click();
                 count++;
@@ -382,7 +387,7 @@ async def checkout(page, test_mode=False):
         }
         return count;
     }""")
-    log.info(f"Checked {checked_count} consent checkboxes")
+    log.info(f"Checked {checked_count} consent checkboxes (skipped faktura)")
     await asyncio.sleep(2)
 
     # === CLICK "Zamawiam i płacę" BUTTON ===
