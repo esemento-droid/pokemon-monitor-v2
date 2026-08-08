@@ -103,10 +103,11 @@ async def send_discord(message):
 # === BROWSER AUTOMATION ===
 
 async def dismiss_overlay(page):
-    """Remove cookie consent overlays and restore pointer-events on body."""
+    """Remove cookie consent overlays, modals, and restore pointer-events."""
     await page.evaluate("""
-        document.querySelectorAll('.consents, .consents__mask, [class*=consent], .cookie-bar').forEach(el => el.remove());
+        document.querySelectorAll('.consents, .consents__mask, [class*=consent], .cookie-bar, h-portal-target[name="modals"], .consents-modal__footer, .modal__footer').forEach(el => el.remove());
         document.body.style.pointerEvents = 'auto';
+        document.body.style.overflow = 'auto';
     """)
 
 
@@ -410,18 +411,20 @@ async def checkout(page, test_mode=False):
             log.error(f"[TEST MODE] Submit button not found! Page text: {body[:200]}")
             return False
 
-    # Click the submit button
-    await page.evaluate("""
-        () => {
-            const allEls = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
-            const btn = allEls.find(el => {
-                const text = (el.innerText || el.value || '').toLowerCase();
-                return text.includes('zamawiam i płacę') || text.includes('zamawiam i placę') ||
-                       text.includes('zamawiam') || text.includes('złóż zamówienie');
-            });
+    # Remove any remaining overlays/modals blocking clicks
+    await dismiss_overlay(page)
+    await asyncio.sleep(0.5)
+
+    # Click the submit button via PW locator (force=True to bypass any remaining overlays)
+    try:
+        submit_btn = page.locator('button.btn_primary.btn_full-width').first
+        await submit_btn.click(force=True, timeout=10000)
+    except Exception:
+        # Fallback: JS click
+        await page.evaluate("""() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Zamawiam'));
             if (btn) btn.click();
-        }
-    """)
+        }""")
     log.info("Clicked 'Zamawiam i płacę'")
     await asyncio.sleep(8)
 
