@@ -1,0 +1,101 @@
+{
+    "accounts": [
+        {
+            "email": "esemento@gmail.com",
+            "password": "cR!9GW#x2wqJtGw",
+            "billing": {
+                "first_name": "Tomasz",
+                "last_name": "Szczepaniak",
+                "address_1": "Leśna 46a/2",
+                "city": "Palędzie",
+                "postcode": "62-069",
+                "country": "PL",
+                "email": "esemento@gmail.com",
+                "phone": "607183797"
+            },
+            "shipping": {
+                "first_name": "Tomasz",
+                "last_name": "Szczepaniak",
+                "address_1": "Leśna 46a/2",
+                "city": "Palędzie",
+                "postcode": "62-069",
+                "country": "PL",
+                "phone": "607183797"
+            }
+        },
+        {
+            "email": "blackmat36@gmail.com",
+            "password": "v2@pvDGt#ZuN3ui",
+            "billing": {
+                "first_name": "Natalia",
+                "last_name": "Szczepaniak",
+                "address_1": "Zgoda 30b",
+                "city": "Poznań",
+                "postcode": "60-122",
+                "country": "PL",
+                "email": "blackmat36@gmail.com",
+                "phone": "514635586"
+            },
+            "shipping": {
+                "first_name": "Natalia",
+                "last_name": "Szczepaniak",
+                "address_1": "Zgoda 30b",
+                "city": "Poznań",
+                "postcode": "60-122",
+                "country": "PL",
+                "phone": "514635586"
+            }
+        },
+        {
+            "email": "tjbtaniojuzbylo@gmail.com",
+            "password": "P9XAfQE.SCwFq5i",
+            "billing": {
+                "first_name": "Jagoda",
+                "last_name": "Kaczmarek",
+                "address_1": "Bukowska 104a/7",
+                "city": "Poznań",
+                "postcode": "60-397",
+                "country": "PL",
+                "email": "tjbtaniojuzbylo@gmail.com",
+                "phone": "535024946"
+            },
+            "shipping": {
+                "first_name": "Jagoda",
+                "last_name": "Kaczmarek",
+                "address_1": "Bukowska 104a/7",
+                "city": "Poznań",
+                "postcode": "60-397",
+                "country": "PL",
+                "phone": "535024946"
+            }
+        },
+        {
+            "email": "y24015411@gmail.com",
+            "password": "huw!e.twdCmv9@B",
+            "billing": {
+                "first_name": "Mirosława",
+                "last_name": "Szczepaniak",
+                "address_1": "Bukowska 104a/7",
+                "city": "Poznań",
+                "postcode": "60-397",
+                "country": "PL",
+                "email": "y24015411@gmail.com",
+                "phone": "603466903"
+            },
+            "shipping": {
+                "first_name": "Mirosława",
+                "last_name": "Szczepaniak",
+                "address_1": "Bukowska 104a/7",
+                "city": "Poznań",
+                "postcode": "60-397",
+                "country": "PL",
+                "phone": "603466903"
+            }
+        }
+    ],
+    "discord_webhook": "ENV",
+    "keywords": ["30th", "30 anniversary", "30-lecie", "30 lecie", "anniversary", "celebrations", "30 rocznica"],
+    "shipping_rate": "flat_rate:15",
+    "poll_interval": 5,
+    "quantity_etb": 2
+}

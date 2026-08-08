@@ -1,0 +1,41 @@
+import json
+import os
+
+SHOP = "kuzniakart"
+
+async def get_products():
+    path = "/tmp/kuznia_cat_55.json"
+    if not os.path.exists(path):
+        print("[KUZNIAKART] brak danych")
+        return []
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    products = []
+    banned = ["star wars","riftbound","league of legends","lorcana","disney","magic the gathering"]
+    for category in data.get("expandedCategories", []):
+        for p in category.get("products", []):
+            name = p.get("name", "")
+            name_lower = name.lower()
+            if any(x in name_lower for x in banned):
+                continue
+            if "pokemon" not in name_lower and "pokémon" not in name_lower:
+                continue
+            overrides = p.get("defaultOptionsOverrides", {}).get("pricesOverrides", {})
+            variation = p.get("defaultOptionsOverrides", {}).get("variationOverrides", {})
+            price = overrides.get("basePrice", "")
+            media = variation.get("mediaItems", [])
+            image = media[0].get("image800pxUrl", "") if media else ""
+            sold_out = variation.get("isSoldOut", False)
+            pid = str(p.get("identifier", {}).get("productId", ""))
+            products.append({
+                "id": f"kuzniakart_{pid}",
+                "name": name,
+                "price": f"{price:.2f} zl" if isinstance(price, (int, float)) else str(price),
+                "url": "https://kuzniakart.pl",
+                "image": image,
+                "stock": "Brak" if sold_out else "Dostepny",
+                "available": not sold_out,
+                "shop": SHOP,
+            })
+    print(f"[KUZNIAKART] {len(products)} produktow")
+    return products

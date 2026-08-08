@@ -1,0 +1,58 @@
+import aiohttp
+
+SHOP = "magiccafe"
+BASE = "https://magiccafe.eu/wp-json/wc/store/v1/products"
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "one piece", "lorcana", "yu-gi-oh", "digimon", "magic the", "japonsk", "japońsk", "japanese", "japan", "korean", "koreańsk", "korea", "chiński", "chinese", "china", "portfolio", "mat", "deck box", "pudełko"]
+
+async def get_products():
+    products = []
+    seen = set()
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        page = 1
+        while True:
+            url = f"{BASE}?per_page=100&category=pokemon&page={page}"
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status != 200:
+                        break
+                    data = await resp.json()
+            except:
+                break
+            if not data:
+                break
+            for item in data:
+                pid = str(item.get("id", ""))
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                name = item.get("name", "").replace("&#8211;", "-").replace("&amp;", "&").replace("&#8217;", "'")
+                name_low = name.lower()
+                if "pokemon" not in name_low and "pokémon" not in name_low:
+                    continue
+                if any(ex in name_low for ex in EXCLUDE):
+                    continue
+                price_raw = item.get("prices", {}).get("price", "0")
+                try:
+                    price = f"{int(price_raw) / 100:.2f} zl"
+                except:
+                    price = "brak"
+                in_stock = item.get("is_in_stock", False)
+                url_prod = item.get("permalink", "")
+                images = item.get("images", [])
+                image = images[0].get("src", "") if images else ""
+                products.append({
+                    "id": f"magiccafe_{pid}",
+                    "name": name,
+                    "price": price,
+                    "shop": SHOP,
+                    "url": url_prod,
+                    "image": image,
+                    "stock": None,
+                    "available": in_stock,
+                })
+            if len(data) < 100:
+                break
+            page += 1
+    print(f"[MAGICCAFE] {len(products)} produktow")
+    return products
