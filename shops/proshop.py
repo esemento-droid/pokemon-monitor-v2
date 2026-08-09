@@ -45,7 +45,7 @@ async def _solve_cf(session, url):
         "task": {
             "type": "AntiCloudflareTask",
             "websiteURL": url,
-            "proxy": proxy_str,
+            
             "userAgent": UA,
         }
     }
