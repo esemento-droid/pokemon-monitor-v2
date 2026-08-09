@@ -104,28 +104,41 @@ async def checkout(page):
     }""")
     await asyncio.sleep(1)
     inpost = page.locator('input[name="shipment"][value="15"]')
+    # Click the LABEL/container, not just the radio input (Sellingo listens on parent)
     try:
-        await inpost.click(force=True, timeout=5000)
+        inpost_label = page.locator('input[name="shipment"][value="15"]').locator('..')
+        await inpost_label.click(timeout=5000)
     except:
-        await page.evaluate("""() => {
-            const r = document.querySelector('input[name="shipment"][value="15"]');
-            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
-        }""")
+        # Try clicking the text "InPost Paczkomat"
+        try:
+            await page.locator('text=InPost Paczkomat').first.click(timeout=5000)
+        except:
+            await page.evaluate("""() => {
+                const r = document.querySelector('input[name="shipment"][value="15"]');
+                if (r) {
+                    const label = r.closest('label') || r.closest('.c-radio-field') || r.parentElement;
+                    if (label) label.click();
+                    else r.click();
+                }
+            }""")
     await asyncio.sleep(5)
 
     # Debug: what buttons are visible after selecting InPost
     btns_after_inpost = await page.evaluate("""() => {
-        const btns = document.querySelectorAll('button, a, span');
+        const all = document.querySelectorAll('button, a, span, div');
         const visible = [];
-        for (const b of btns) {
+        for (const b of all) {
             const text = (b.innerText || '').trim().substring(0, 50);
             if (b.offsetParent !== null && text && (text.toLowerCase().includes('wyszukaj') || text.toLowerCase().includes('wybierz') || text.toLowerCase().includes('zmień') || text.toLowerCase().includes('punkt'))) {
                 visible.push({tag: b.tagName, text, cls: (b.className||'').substring(0, 100)});
             }
         }
-        return JSON.stringify(visible);
+        // Also check if InPost radio is now checked
+        const inpostRadio = document.querySelector('input[name="shipment"][value="15"]');
+        const isChecked = inpostRadio ? inpostRadio.checked : false;
+        return JSON.stringify({buttons: visible, inpostChecked: isChecked});
     }""")
-    print(f"  Buttons after InPost select: {btns_after_inpost}")
+    print(f"  After InPost click: {btns_after_inpost}")
 
     # Click Wyszukaj
     await page.evaluate("""() => {
