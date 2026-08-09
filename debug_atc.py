@@ -10,11 +10,27 @@ async def main():
             args=['--no-sandbox', '--proxy-server=http://127.0.0.1:8888']
         )
         page = await browser.new_page()
-        await page.goto('https://tcgumisia.pl/pokemon-tcg-poke-ball-tin-2025', wait_until='domcontentloaded', timeout=30000)
-        await asyncio.sleep(10)  # Wait longer for JS render
+        # Try both URL variants
+        urls_to_try = [
+            'https://tcgumisia.pl/pokemon-tcg-poke-ball-tin-2025',
+            'https://tcgumisia.pl/pokemon-tcg-2026-pokemon-day-collection',
+            'https://tcgumisia.pl/pokemon-tcg-ionos-bellibolt-ex-premium-collection',
+        ]
+        
+        for url in urls_to_try:
+            print(f"\n=== Testing: {url} ===")
+            resp = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            print(f"Status: {resp.status}, Title check...")
+            await asyncio.sleep(8)
+            
+            title = await page.evaluate("() => document.title")
+            print(f"Title: {title}")
+            
+            if '404' in title:
+                print("SKIP - 404")
+                continue
 
-        # First: just dump ALL text visible on page that mentions "dodaj" or "koszyk" or product area
-        info = await page.evaluate("""() => {
+            info = await page.evaluate("""() => {
             const results = [];
             
             // 1. Find element with text "Dodaj do koszyka" anywhere
@@ -47,7 +63,8 @@ async def main():
             
             return JSON.stringify(results, null, 2);
         }""")
-        print(info)
+            print(info)
+        
         await browser.close()
 
 asyncio.run(main())
