@@ -111,7 +111,21 @@ async def checkout(page):
             const r = document.querySelector('input[name="shipment"][value="15"]');
             if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
         }""")
-    await asyncio.sleep(3)
+    await asyncio.sleep(5)
+
+    # Debug: what buttons are visible after selecting InPost
+    btns_after_inpost = await page.evaluate("""() => {
+        const btns = document.querySelectorAll('button, a, span');
+        const visible = [];
+        for (const b of btns) {
+            const text = (b.innerText || '').trim().substring(0, 50);
+            if (b.offsetParent !== null && text && (text.toLowerCase().includes('wyszukaj') || text.toLowerCase().includes('wybierz') || text.toLowerCase().includes('zmień') || text.toLowerCase().includes('punkt'))) {
+                visible.push({tag: b.tagName, text, cls: (b.className||'').substring(0, 100)});
+            }
+        }
+        return JSON.stringify(visible);
+    }""")
+    print(f"  Buttons after InPost select: {btns_after_inpost}")
 
     # Click Wyszukaj
     await page.evaluate("""() => {
