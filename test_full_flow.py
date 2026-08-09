@@ -140,12 +140,15 @@ async def checkout(page):
     }""")
     print(f"  After InPost click: {btns_after_inpost}")
 
-    # Click Wyszukaj
-    await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, a, span'));
-        const s = btns.find(el => (el.innerText || '').toLowerCase().includes('wyszukaj'));
-        if (s) s.click();
-    }""")
+    # Click "Wyszukaj" button (.inpost_search_point - it's a DIV not a button!)
+    wyszukaj = page.locator('.inpost_search_point')
+    try:
+        await wyszukaj.click(timeout=5000)
+    except:
+        await page.evaluate("""() => {
+            const btn = document.querySelector('.inpost_search_point, .search_point_button');
+            if (btn) btn.click();
+        }""")
     await asyncio.sleep(3)
 
     # Debug: what's visible after clicking Wyszukaj
