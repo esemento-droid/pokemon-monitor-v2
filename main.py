@@ -120,8 +120,14 @@ async def shop_worker(name, module):
     Kazdy dziala w petli: scrape → detect → save → sleep.
     NIE czeka na inne sklepy. NIE uzywa lockow.
     """
-    # Stagger start — nie odpala 130 sklepow na raz
-    await asyncio.sleep(random.uniform(0, 30))
+    # Stagger start — nodriver shops get extra spacing to avoid Chrome conflicts
+    if name in NODRIVER_SHOPS:
+        # Space nodriver shops 30s apart to avoid concurrent Chrome launches
+        nodriver_list = sorted(NODRIVER_SHOPS)
+        idx = nodriver_list.index(name) if name in nodriver_list else 0
+        await asyncio.sleep(30 + idx * 30)
+    else:
+        await asyncio.sleep(random.uniform(0, 30))
 
     scan_stats[name] = {"ok": 0, "err": 0, "last": None, "last_scan_time": 0}
 
