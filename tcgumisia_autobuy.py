@@ -353,19 +353,17 @@ async def checkout(page, account, test_mode=False):
     # === TAB 1: KOSZYK - Select delivery + payment ===
     log.info("Tab 1: Selecting InPost Paczkomat...")
 
-    # Click InPost Paczkomat radio/option
-    await page.evaluate("""() => {
-        const labels = Array.from(document.querySelectorAll('label, div, span, li'));
-        const inpost = labels.find(el => {
-            const text = (el.innerText || '').toLowerCase();
-            return text.includes('inpost') || text.includes('paczkomat');
-        });
-        if (inpost) {
-            const radio = inpost.querySelector('input[type="radio"]') || inpost;
-            radio.click();
-        }
-    }""")
-    await asyncio.sleep(2)
+    # Click InPost radio: input[name="shipment"][value="15"]
+    inpost_radio = page.locator('input[name="shipment"][value="15"]')
+    try:
+        await inpost_radio.click(force=True, timeout=5000)
+    except Exception:
+        # Click parent label
+        await page.evaluate("""() => {
+            const r = document.querySelector('input[name="shipment"][value="15"]');
+            if (r) { r.closest('label').click(); }
+        }""")
+    await asyncio.sleep(3)
 
     # Click "Wyszukaj" button to open paczkomat search
     await page.evaluate("""() => {
@@ -400,7 +398,6 @@ async def checkout(page, account, test_mode=False):
         }}""")
         await asyncio.sleep(2)
 
-
     # Select PAD04M from dropdown/results
     await page.evaluate(f"""() => {{
         const items = Array.from(document.querySelectorAll('li, div, span, a, option'));
@@ -421,34 +418,32 @@ async def checkout(page, account, test_mode=False):
         });
         if (wybierz) wybierz.click();
     }""")
+    await asyncio.sleep(3)
+
+    log.info("Tab 1: Selecting Blik/Karta payment...")
+
+    # Select Blik/Karta: input[name="payment"][value="25"]
+    # May be hidden until InPost is selected — use force=True
+    blik_radio = page.locator('input[name="payment"][value="25"]')
+    try:
+        await blik_radio.click(force=True, timeout=5000)
+    except Exception:
+        await page.evaluate("""() => {
+            const r = document.querySelector('input[name="payment"][value="25"]');
+            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); }
+        }""")
     await asyncio.sleep(2)
 
-    log.info("Tab 1: Selecting tpay Blik payment...")
-
-    # Select tpay / Blik payment method
-    await page.evaluate("""() => {
-        const labels = Array.from(document.querySelectorAll('label, div, span, li'));
-        const tpay = labels.find(el => {
-            const text = (el.innerText || '').toLowerCase();
-            return text.includes('tpay') || text.includes('blik') || text.includes('karta płatnicza');
-        });
-        if (tpay) {
-            const radio = tpay.querySelector('input[type="radio"]') || tpay;
-            radio.click();
-        }
-    }""")
-    await asyncio.sleep(2)
-
-    # Click "Dalej" button (Tab 1 → Tab 2)
+    # Click "Dalej" button (class: js-cart-next)
     log.info("Tab 1: Clicking Dalej...")
-    await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, a, input[type="submit"]'));
-        const dalej = btns.find(el => {
-            const text = (el.innerText || el.value || '').toLowerCase().trim();
-            return text === 'dalej' || text.includes('dalej');
-        });
-        if (dalej) dalej.click();
-    }""")
+    dalej_btn = page.locator('.js-cart-next')
+    try:
+        await dalej_btn.click(timeout=5000)
+    except Exception:
+        await page.evaluate("""() => {
+            const btn = document.querySelector('.js-cart-next');
+            if (btn) btn.click();
+        }""")
     await asyncio.sleep(4)
 
 
@@ -494,30 +489,30 @@ async def checkout(page, account, test_mode=False):
     }}""")
     await asyncio.sleep(1)
 
-    # Check regulamin checkbox (required) - skip faktura and newsletter
-    await page.evaluate("""() => {
-        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-        for (const cb of checkboxes) {
-            const label = cb.closest('label') || cb.parentElement;
-            const labelText = label ? label.innerText.toLowerCase() : '';
-            // Check regulamin (required)
-            if (labelText.includes('regulamin') || labelText.includes('oświadczam') || labelText.includes('akceptuj')) {
-                if (!cb.checked) cb.click();
-            }
-        }
-    }""")
+    # Check regulamin checkbox: input[name="rules"] with force click
+    rules_cb = page.locator('input[name="rules"]')
+    try:
+        if await rules_cb.count() > 0:
+            if not await rules_cb.is_checked():
+                await rules_cb.click(force=True, timeout=5000)
+                log.info("Tab 2: Regulamin checked")
+    except Exception:
+        await page.evaluate("""() => {
+            const cb = document.querySelector('input[name="rules"]');
+            if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change', {bubbles:true})); }
+        }""")
     await asyncio.sleep(1)
 
-    # Click "Przejdź dalej" button (Tab 2 → Tab 3)
+    # Click "Przejdź dalej" button (Tab 2 → Tab 3) — same .js-cart-next
     log.info("Tab 2: Clicking Przejdź dalej...")
-    await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, a, input[type="submit"]'));
-        const dalej = btns.find(el => {
-            const text = (el.innerText || el.value || '').toLowerCase();
-            return text.includes('przejdź dalej') || text.includes('przejdz dalej');
-        });
-        if (dalej) dalej.click();
-    }""")
+    dalej_btn2 = page.locator('.js-cart-next')
+    try:
+        await dalej_btn2.click(timeout=5000)
+    except Exception:
+        await page.evaluate("""() => {
+            const btn = document.querySelector('.js-cart-next');
+            if (btn) btn.click();
+        }""")
     await asyncio.sleep(4)
 
     # === TAB 3: PŁATNOŚĆ - Confirm and submit ===
