@@ -222,42 +222,65 @@ async def add_to_cart(page, product_url, qty=1):
 
     # Set quantity if > 1
     if qty > 1:
-        await page.evaluate(f"""() => {{
-            const qtyInput = document.querySelector('input[name="quantity"], input[type="number"], input[class*="qty"]');
-            if (qtyInput) {{
-                qtyInput.value = '{qty}';
-                qtyInput.dispatchEvent(new Event('input', {{bubbles:true}}));
-                qtyInput.dispatchEvent(new Event('change', {{bubbles:true}}));
-            }}
-        }}""")
-        await asyncio.sleep(1)
+        # Clear existing value and type new one
+        qty_input = page.locator('input[type="number"], input[name="quantity"], input[class*="qty"]').first
+        try:
+            await qty_input.triple_click(timeout=3000)
+            await qty_input.fill(str(qty))
+            await asyncio.sleep(1)
+        except Exception:
+            await page.evaluate(f"""() => {{
+                const qtyInput = document.querySelector('input[type="number"], input[name="quantity"], input[class*="qty"]');
+                if (qtyInput) {{
+                    qtyInput.value = '{qty}';
+                    qtyInput.dispatchEvent(new Event('input', {{bubbles:true}}));
+                    qtyInput.dispatchEvent(new Event('change', {{bubbles:true}}));
+                }}
+            }}""")
+            await asyncio.sleep(1)
 
-    # Click "Dodaj do koszyka" button
-    clicked = await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
-        const atcBtn = btns.find(el => {
-            const text = (el.innerText || el.value || '').toLowerCase();
-            return text.includes('dodaj do koszyka') || text.includes('do koszyka');
-        });
-        if (atcBtn && !atcBtn.disabled) {
-            atcBtn.click();
-            return true;
-        }
-        return false;
-    }""")
+    # Click "Dodaj do koszyka" using Playwright locator (triggers proper event handlers)
+    clicked = False
+    try:
+        atc_btn = page.locator('button:has-text("Dodaj do koszyka"), a:has-text("Dodaj do koszyka"), input[value*="Dodaj do koszyka"]').first
+        await atc_btn.click(timeout=5000)
+        clicked = True
+    except Exception:
+        # Fallback: JS click
+        clicked = await page.evaluate("""() => {
+            const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
+            const atcBtn = btns.find(el => {
+                const text = (el.innerText || el.value || '').toLowerCase();
+                return text.includes('dodaj do koszyka') || text.includes('do koszyka');
+            });
+            if (atcBtn && !atcBtn.disabled) {
+                atcBtn.click();
+                return true;
+            }
+            return false;
+        }""")
 
     if not clicked:
         log.warning(f"ATC button not found or disabled for {product_url}")
         return False
 
-    await asyncio.sleep(3)
+    # Wait for cart popup / confirmation
+    await asyncio.sleep(4)
 
-    # Close popup (if any) — click X or outside, NOT "Przejdź do koszyka"
+    # Verify product was added — check for popup with "Przejdź do koszyka" or cart count badge
+    added = await page.evaluate("""() => {
+        const text = document.body.innerText.toLowerCase();
+        // Sellingo shows popup with "Przejdź do koszyka" or button changes to "Dodano do koszyka"
+        return text.includes('przejdź do koszyka') || text.includes('dodano do koszyka') || 
+               text.includes('produkt został dodany') || text.includes('koszyk');
+    }""")
+    if not added:
+        log.warning(f"Product may not have been added to cart: {product_url}")
+
+    # Close popup if visible (click X or outside)
     await page.evaluate("""() => {
-        // Close cart popup by clicking X button
         const closeBtn = document.querySelector('.cart-popup-close, .popup-close, [class*="close"], button[aria-label="Close"]');
         if (closeBtn) { closeBtn.click(); return; }
-        // Or click overlay to dismiss
         const overlay = document.querySelector('.popup-overlay, .modal-overlay, [class*="overlay"]');
         if (overlay) overlay.click();
     }""")
@@ -565,6 +588,12 @@ async def run_for_account(page, account, product_urls, qty, test_mode=False):
         return "atc_failed"
 
     log.info(f"[{name}] {added}/{len(urls_to_buy)} products in cart")
+
+    # Debug: check what /koszyk shows before checkout
+    await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
+    await asyncio.sleep(3)
+    cart_text = await page.evaluate("() => document.body.innerText.substring(0, 500)")
+    log.info(f"[{name}] Cart page content: {cart_text[:200]}")
 
     # Checkout
     ok = await checkout(page, test_mode=test_mode)
