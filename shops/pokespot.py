@@ -12,7 +12,7 @@ EXCLUDE = ["sleeve", "koszulk", "toploader", "playmat", "album", "portfolio", "b
 
 async def get_products():
     products = []
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
+    async with aiohttp.ClientSession(headers=HEADERS, connector=aiohttp.TCPConnector(ssl=False)) as session:
         async with session.get(CAT_URL, timeout=aiohttp.ClientTimeout(total=30)) as r:
             html = await r.text()
 

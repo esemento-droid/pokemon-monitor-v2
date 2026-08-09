@@ -12,7 +12,7 @@ EXCLUDE = ["album", "koszulk", "toploader", "sleeve", "figurk", "pluszak", "kloc
 async def get_products():
     products = []
     seen = set()
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
+    async with aiohttp.ClientSession(headers=HEADERS, connector=aiohttp.TCPConnector(ssl=False)) as session:
         # Fetch page 1 to detect max pages
         async with session.get(START_URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
             if resp.status != 200:

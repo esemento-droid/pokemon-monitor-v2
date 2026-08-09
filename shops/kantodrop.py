@@ -18,7 +18,7 @@ async def fetch_page(session, url):
 async def get_products():
     products = []
     seen = set()
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
+    async with aiohttp.ClientSession(headers=HEADERS, connector=aiohttp.TCPConnector(ssl=False)) as session:
         html1 = await fetch_page(session, BASE_URL.format(1))
         if not html1:
             return []
