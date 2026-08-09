@@ -1,57 +1,136 @@
+"""
+Proshop.pl - scraper Pokemon
+Strona za Cloudflare - wymaga nodriver (undetected Chrome) do bypass.
+Fallback: jeśli nodriver nie dostępny, próbuje aiohttp (w razie zmiany CF).
+"""
 import asyncio
-from playwright.async_api import async_playwright
-from bs4 import BeautifulSoup
 import re
+import logging
+import json
+
+log = logging.getLogger("monitor")
 
 SHOP = "proshop"
 URL = "https://www.proshop.pl/Pokemon"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-EXCLUDE = ["portfolio", "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro", "ultrapro", "plush", "figure", "figurk", "playset", "carry case", "clip", "play 'n"]
+EXCLUDE = ["portfolio", "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro",
+           "ultrapro", "plush", "figure", "figurk", "playset", "carry case", "clip", "play 'n",
+           "playmat", "mata ", "puzzle", "lego"]
+
+EXTRACT_JS = """
+JSON.stringify((function(){
+    const result = [];
+    const items = document.querySelectorAll('li.site-productlist-item, .product-list-item, [data-product-id]');
+    for (const item of items) {
+        try {
+            const nameEl = item.querySelector('h2[product-display-name], .site-product-link, [class*="product-name"], h2, h3');
+            if (!nameEl) continue;
+            const name = nameEl.textContent.trim();
+            if (!name || name.length < 5) continue;
+            const pidEl = item.querySelector('input[name=productId], [data-product-id]');
+            const pid = pidEl ? (pidEl.value || pidEl.getAttribute('data-product-id') || '') : '';
+            if (!pid) continue;
+            const priceEl = item.querySelector('.site-currency-lg, [class*="price"], .product-price');
+            let price = '';
+            if (priceEl) {
+                const m = priceEl.textContent.match(/([\d.,]+)/);
+                if (m) price = m[1].replace(/\\.(?=\\d{3})/g, '').replace(',', '.');
+            }
+            const linkEl = item.querySelector('a.site-product-link, a[href*="/"]');
+            let href = linkEl ? linkEl.getAttribute('href') || '' : '';
+            if (href && !href.startsWith('http')) href = 'https://www.proshop.pl' + href;
+            const btn = item.querySelector('button.site-btn-green, .btn-add-to-cart, [class*="add-to-cart"]');
+            const imgEl = item.querySelector('img[src]');
+            let img = '';
+            if (imgEl) {
+                img = imgEl.src || '';
+                if (img && !img.startsWith('http')) img = 'https://www.proshop.pl' + img;
+            }
+            result.push({pid, name, price, url: href, available: !!btn, img});
+        } catch(e) {}
+    }
+    return result;
+})())
+"""
 
 
 async def get_products():
     products = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(user_agent=UA)
-        await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(12)
-        html = await page.content()
-        await browser.close()
-    soup = BeautifulSoup(html, "lxml")
-    items = soup.select("li.site-productlist-item")
-    for item in items:
-        name_el = item.select_one("h2[product-display-name]")
-        name = name_el.get_text(strip=True) if name_el else ""
-        if not name or len(name) < 5:
-            continue
-        if any(ex in name.lower() for ex in EXCLUDE):
-            continue
-        pid_el = item.select_one("input[name=productId]")
-        pid = pid_el.get("value", "") if pid_el else ""
-        if not pid:
-            continue
-        price_el = item.select_one(".site-currency-lg")
-        price = "brak"
-        if price_el:
-            pt = price_el.get_text(strip=True)
-            pm = re.search(r"([\d,.]+)", pt)
-            if pm:
-                price = pm.group(1).replace(".", "").replace(",", ".") + " zl"
-        link = item.select_one("a.site-product-link")
-        href = ""
-        if link:
-            href = "https://www.proshop.pl" + link.get("href", "")
-        btn = item.select_one("button.site-btn-green")
-        available = btn is not None
-        img = item.select_one("img[src]")
-        image = ""
-        if img:
-            src = img.get("src", "")
-            if src.startswith("/"):
-                image = "https://www.proshop.pl" + src
-            else:
-                image = src
-        products.append({"id": "proshop_" + pid, "name": name, "price": price, "shop": SHOP, "url": href, "image": image, "stock": None, "available": available})
-    print("[PROSHOP]", len(products), "produktow")
+
+    try:
+        import nodriver as uc
+    except ImportError:
+        log.error("[proshop] nodriver not installed - cannot bypass Cloudflare")
+        return []
+
+    browser = None
+    try:
+        browser = await uc.start(
+            headless=False,
+            browser_args=[
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+            ],
+        )
+
+        page = await browser.get(URL)
+
+        # Wait for CF challenge to resolve
+        await asyncio.sleep(15)
+
+        # Verify page loaded (not CF challenge)
+        title = await page.evaluate("document.title")
+        if not title or "moment" in title.lower() or "attention" in title.lower() or "cloudflare" in title.lower():
+            log.warning("[proshop] CF not resolved, retrying...")
+            await asyncio.sleep(10)
+            title = await page.evaluate("document.title")
+            if not title or "attention" in title.lower():
+                log.error("[proshop] CF block - cannot access")
+                return []
+
+        # Extract products via JS
+        raw = await page.evaluate(EXTRACT_JS)
+        if not raw:
+            log.warning("[proshop] No data from JS extraction")
+            return []
+
+        try:
+            items = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            log.error("[proshop] Failed to parse JS data")
+            return []
+
+        seen = set()
+        for item in items:
+            pid = item.get("pid", "")
+            name = item.get("name", "")
+            if not pid or not name or pid in seen:
+                continue
+            if any(ex in name.lower() for ex in EXCLUDE):
+                continue
+            seen.add(pid)
+            price_val = item.get("price", "")
+            price_str = f"{price_val} zl" if price_val else "brak"
+            products.append({
+                "id": f"proshop_{pid}",
+                "name": name,
+                "price": price_str,
+                "shop": SHOP,
+                "url": item.get("url", ""),
+                "image": item.get("img", ""),
+                "stock": None,
+                "available": item.get("available", False),
+            })
+
+    except Exception as e:
+        log.error(f"[proshop] Error: {e}")
+    finally:
+        if browser:
+            try:
+                browser.stop()
+            except:
+                pass
+
+    print(f"[PROSHOP] {len(products)} produktow")
     return products

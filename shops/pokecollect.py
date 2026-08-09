@@ -29,14 +29,75 @@ CATEGORIES = [
     ("/pl/c/Produkty-generacjami/24", "24"),
     ("/pl/c/Unikaty/35", "35"),
     ("/pl/c/Outlet/39", "39"),
+    ("/pl/c/30th-Celebration/118", "118"),
+    ("/pl/c/Karty-Japonskie/61", "61"),
 ]
 EXCLUDE = ["ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "mata ", "playmat", "przypink", "lego", "figurk", "maskotk", "pluszak", "pudelk", "pude\u0142k", "one piece"]
+
+
+def parse_page(s):
+    """Parse products from a category page - supports both extended and photo view types."""
+    results = []
+    # Primary: try .product_view-extended (main product container)
+    items = s.select(".product_view-extended")
+    # Fallback: if no extended items, try .product-inner-wrap (photo view mode)
+    if not items:
+        items = s.select(".product-inner-wrap")
+
+    for tile in items:
+        name_el = tile.select_one("span.productname") or tile.select_one("a.prodname")
+        if not name_el:
+            continue
+        name = name_el.get_text(strip=True)
+        if any(ex in name.lower() for ex in EXCLUDE):
+            continue
+        price = "brak"
+        # Try em.color first (discounted price)
+        price_el = tile.select_one("em.color")
+        if price_el:
+            pt = price_el.get_text(strip=True).replace("\xa0", "").replace(" ", "").replace("z\u0142", "").replace(",", ".").strip()
+            try:
+                price = f"{float(pt):.2f} zl"
+            except (ValueError, TypeError):
+                pass
+        # Fallback: .price div text
+        if price == "brak":
+            price_div = tile.select_one(".price")
+            if price_div:
+                m2 = re.search(r'(\d[\d\s]*[,.]\d+)\s*z', price_div.get_text())
+                if m2:
+                    pt = m2.group(1).replace(" ", "").replace("\xa0", "").replace(",", ".")
+                    try:
+                        price = f"{float(pt):.2f} zl"
+                    except (ValueError, TypeError):
+                        pass
+        link = tile.select_one('a[href*="/pl/p/"]')
+        prod_url = BASE + link["href"] if link else ""
+        pid = ""
+        if link:
+            parts = link["href"].strip("/").split("/")
+            pid = parts[-1] if parts else ""
+        if not pid:
+            continue
+        img = tile.select_one("img")
+        image = ""
+        if img:
+            image = img.get("data-src") or img.get("src") or ""
+            if image and not image.startswith("http"):
+                image = BASE + image
+            if "base64" in image:
+                image = ""
+        text = tile.get_text(" ", strip=True).lower()
+        available = "koszyk" in text or "dodaj" in text
+        results.append({"id": f"pokecollect_{pid}", "name": name, "price": price, "shop": SHOP, "url": prod_url, "image": image, "stock": None, "available": available})
+    return results
+
 
 async def fetch_category(session, path, cat_id):
     products = []
     url = f"{BASE}{path}"
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
             if resp.status != 200:
                 return products
             html = await resp.text()
@@ -50,54 +111,6 @@ async def fetch_category(session, path, cat_id):
         if m:
             pages.add(int(m.group(1)))
     max_page = max(pages)
-
-    def parse_page(s):
-        results = []
-        for tile in s.select(".product_view-extended"):
-            name_el = tile.select_one("span.productname")
-            if not name_el:
-                continue
-            name = name_el.get_text(strip=True)
-            if any(ex in name.lower() for ex in EXCLUDE):
-                continue
-            price = "brak"
-            # Try em.color first (discounted price)
-            price_el = tile.select_one("em.color")
-            if price_el:
-                pt = price_el.get_text(strip=True).replace("\xa0", "").replace(" ", "").replace("z\u0142", "").replace(",", ".").strip()
-                try:
-                    price = f"{float(pt):.2f} zl"
-                except:
-                    pass
-            # Fallback: .price div text
-            if price == "brak":
-                price_div = tile.select_one(".price")
-                if price_div:
-                    m2 = re.search(r'(\d[\d\s]*[,.]\d+)\s*z', price_div.get_text())
-                    if m2:
-                        pt = m2.group(1).replace(" ", "").replace(" ", "").replace(",", ".")
-                        try:
-                            price = f"{float(pt):.2f} zl"
-                        except:
-                            pass
-            link = tile.select_one('a[href*="/pl/p/"]')
-            prod_url = BASE + link["href"] if link else ""
-            pid = ""
-            if link:
-                parts = link["href"].strip("/").split("/")
-                pid = parts[-1] if parts else ""
-            img = tile.select_one("img")
-            image = ""
-            if img:
-                image = img.get("data-src") or img.get("src") or ""
-                if image and not image.startswith("http"):
-                    image = BASE + image
-                if "base64" in image:
-                    image = ""
-            text = tile.get_text(" ", strip=True).lower()
-            available = "koszyk" in text
-            results.append({"id": f"pokecollect_{pid}", "name": name, "price": price, "shop": SHOP, "url": prod_url, "image": image, "stock": None, "available": available})
-        return results
 
     products.extend(parse_page(soup))
     if max_page > 1:
@@ -116,6 +129,7 @@ async def fetch_category(session, path, cat_id):
                 continue
             products.extend(parse_page(BeautifulSoup(h, "lxml")))
     return products
+
 
 async def get_products():
     seen = set()

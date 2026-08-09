@@ -25,7 +25,7 @@ def parse_page(html):
         pid = tile.get("product-id", "")
         name = tile.get("name", "")
         price = tile.get("price", "")
-        if not pid or not name or len(name) < 5 or (price and float(price) < 30):
+        if not pid or not name or len(name) < 5:
             continue
         if any(ex in name.lower() for ex in EXCLUDE):
             continue

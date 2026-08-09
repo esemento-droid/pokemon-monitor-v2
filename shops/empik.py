@@ -17,7 +17,7 @@ EXCLUDE_KW = [
     "minimalistyczna mata",
 ]
 MAX_PAGES = 3
-PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
+PROXY_ADDR = os.environ.get("PROXY_ADDR", "none")
 
 EXTRACT_JS = """
 JSON.stringify((function(){
@@ -55,28 +55,43 @@ async def get_products():
     products = []
     seen_ids = set()
 
-    browser = await uc.start(
-        headless=False,
-        browser_args=[
-            f"--proxy-server=http://{PROXY_ADDR}",
-            "--no-sandbox",
-            "--disable-gpu",
-            "--disable-dev-shm-usage",
-        ],
-    )
+    browser_args = [
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--disable-setuid-sandbox",
+        "--disable-extensions",
+        "--disable-background-networking",
+    ]
+    # Only add proxy if PROXY_ADDR is set and reachable
+    if PROXY_ADDR and PROXY_ADDR != "none":
+        browser_args.append(f"--proxy-server=http://{PROXY_ADDR}")
+
+    try:
+        browser = await uc.start(
+            headless=True,
+            sandbox=False,
+            browser_args=browser_args,
+        )
+    except Exception as e:
+        log.error(f"[empik] Failed to start browser: {e}")
+        return []
 
     try:
         page = await browser.get(SEARCH_URL)
 
         # CF resolves automatically with nodriver, just wait for page load
-        await asyncio.sleep(10)
+        await asyncio.sleep(12)
 
         # Verify page loaded
         title = await page.evaluate("document.title")
-        if not title or "moment" in title.lower():
-            log.warning("[empik] CF not resolved")
-            browser.stop()
-            return []
+        if not title or "moment" in title.lower() or "just a moment" in title.lower():
+            log.warning("[empik] CF not resolved, waiting longer...")
+            await asyncio.sleep(10)
+            title = await page.evaluate("document.title")
+            if not title or "moment" in title.lower():
+                log.error("[empik] CF block - cannot access")
+                return []
 
         for pg in range(1, MAX_PAGES + 1):
             if pg > 1:
