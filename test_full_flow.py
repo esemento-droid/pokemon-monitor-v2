@@ -119,15 +119,30 @@ async def checkout(page):
         const s = btns.find(el => (el.innerText || '').toLowerCase().includes('wyszukaj'));
         if (s) s.click();
     }""")
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
 
-    # Search PAD04M
-    search = page.locator('input[placeholder*="Szukaj"], input[placeholder*="miasto"], input[placeholder*="adres"]').first
+    # Debug: what's visible after clicking Wyszukaj
+    after_wyszukaj = await page.evaluate("""() => {
+        const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
+        const visible = [];
+        for (const inp of inputs) {
+            if (inp.offsetParent !== null) {
+                visible.push({placeholder: inp.placeholder, cls: (inp.className||'').substring(0,80), name: inp.name});
+            }
+        }
+        return JSON.stringify(visible);
+    }""")
+    print(f"  Visible inputs after Wyszukaj: {after_wyszukaj}")
+
+    # Search paczkomat - try all visible text inputs
+    search = page.locator('input[placeholder*="Szukaj"], input[placeholder*="miasto"], input[placeholder*="adres"], input[placeholder*="nazw"]').first
     try:
         await search.click(timeout=5000)
         await search.fill(PACZKOMAT)
-        await asyncio.sleep(2)
-    except:
+        await asyncio.sleep(3)
+    except Exception as e:
+        print(f"  Search input error: {e}")
+        # Fallback
         await page.evaluate(f"""() => {{
             const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
             for (const inp of inputs) {{
@@ -138,7 +153,15 @@ async def checkout(page):
                 }}
             }}
         }}""")
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
+
+    # Debug: check if dropdown appeared
+    dropdown = await page.evaluate(f"""() => {{
+        const items = Array.from(document.querySelectorAll('li, div, span, a, option'));
+        const matches = items.filter(el => (el.innerText || '').toUpperCase().includes('{PACZKOMAT}') && el.offsetParent !== null);
+        return matches.map(el => ({{tag: el.tagName, text: (el.innerText||'').substring(0,60), cls: (el.className||'').substring(0,80)}}));
+    }}""")
+    print(f"  Dropdown items with {PACZKOMAT}: {dropdown}")
 
     # Select PAD04M
     await page.evaluate(f"""() => {{
