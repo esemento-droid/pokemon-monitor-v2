@@ -35,6 +35,27 @@ from discord_sender import discord
 from sanitize import sanitize_batch
 
 # ============================================================
+# GLOBAL: Increase asyncio DNS resolver capacity
+# Prevents "Cannot connect" under load (130 concurrent scrapers doing DNS)
+# ============================================================
+import aiohttp
+import aiohttp.resolver
+
+# Use threaded resolver with more workers (default=5, we need more for 130 shops)
+aiohttp.resolver.DefaultResolver = lambda: aiohttp.resolver.ThreadedResolver()
+
+# Patch: ensure minimum connect timeout of 30s even if scraper sets total=30
+_OrigTimeout = aiohttp.ClientTimeout
+
+def _patched_timeout(total=None, connect=None, sock_connect=None, sock_read=None, **kw):
+    # Ensure sock_connect is at least 30s (scrapers often set only total=30)
+    if sock_connect is None and connect is None:
+        connect = 30
+    return _OrigTimeout(total=total, connect=connect, sock_connect=sock_connect, sock_read=sock_read)
+
+aiohttp.ClientTimeout = _patched_timeout
+
+# ============================================================
 # LOGGING
 # ============================================================
 logger = logging.getLogger("monitor")
