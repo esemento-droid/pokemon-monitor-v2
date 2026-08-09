@@ -15,21 +15,17 @@ async def main():
 
         info = await page.evaluate("""() => {
             const results = [];
-            const els = document.querySelectorAll('button, a, input[type="submit"], [onclick], form');
+            // Get ALL buttons and inputs on page
+            const els = document.querySelectorAll('button, input[type="submit"], form');
             for (const el of els) {
-                const text = (el.innerText || el.value || '').toLowerCase().substring(0, 60);
-                const href = el.getAttribute('href') || '';
-                const onclick = el.getAttribute('onclick') || '';
-                const cls = (el.className || '').substring(0, 120);
+                const text = (el.innerText || el.value || '').substring(0, 80);
+                const cls = (el.className || '').substring(0, 150);
                 const tag = el.tagName;
                 const action = el.getAttribute('action') || '';
-                const method = el.getAttribute('method') || '';
-                if (text.includes('koszyk') || text.includes('dodaj') || 
-                    cls.includes('cart') || cls.includes('basket') || cls.includes('add') ||
-                    action.includes('koszyk') || action.includes('cart') ||
-                    href.includes('koszyk') || href.includes('cart')) {
-                    results.push({tag, text, href, onclick: onclick.substring(0,150), cls, id: el.id, action, method});
-                }
+                const type = el.getAttribute('type') || '';
+                const name = el.getAttribute('name') || '';
+                const dataAttrs = Array.from(el.attributes).filter(a => a.name.startsWith('data-')).map(a => a.name + '=' + a.value.substring(0,50)).join(', ');
+                results.push({tag, text: text.replace(/\\n/g,' ').trim(), cls, action, type, name, data: dataAttrs});
             }
             return JSON.stringify(results, null, 2);
         }""")
