@@ -251,6 +251,18 @@ async def add_to_cart(page, product_url, qty=1):
         return False
 
     await asyncio.sleep(3)
+
+    # Close popup (if any) — click X or outside, NOT "Przejdź do koszyka"
+    await page.evaluate("""() => {
+        // Close cart popup by clicking X button
+        const closeBtn = document.querySelector('.cart-popup-close, .popup-close, [class*="close"], button[aria-label="Close"]');
+        if (closeBtn) { closeBtn.click(); return; }
+        // Or click overlay to dismiss
+        const overlay = document.querySelector('.popup-overlay, .modal-overlay, [class*="overlay"]');
+        if (overlay) overlay.click();
+    }""")
+    await asyncio.sleep(1)
+
     log.info(f"Added to cart: {product_url.split('/')[-1][:50]}")
     return True
 
@@ -265,15 +277,30 @@ async def checkout(page, test_mode=False):
     """
     # === Navigate to cart/checkout ===
     await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(3)
+    await asyncio.sleep(4)
 
-    # Check cart has items
+    # Check cart has items — look for product names, prices, or quantity inputs
     has_items = await page.evaluate("""() => {
         const text = document.body.innerText;
-        return text.includes('Dalej') || text.includes('Metoda dostawy') || text.includes('PLN');
+        // Sellingo cart shows "Metoda dostawy" only when there are items
+        // Empty cart says "Twój koszyk jest pusty" or similar
+        if (text.includes('koszyk jest pusty') || text.includes('Brak produktów')) return false;
+        // Has items if we see delivery method, quantity controls, or product price in cart
+        return text.includes('Metoda dostawy') || text.includes('Ilość') || 
+               (text.includes('PLN') && text.includes('Dalej'));
     }""")
     if not has_items:
-        log.error("Cart appears empty!")
+        # Second check - maybe page loaded slowly
+        await asyncio.sleep(3)
+        has_items = await page.evaluate("""() => {
+            const text = document.body.innerText;
+            if (text.includes('koszyk jest pusty') || text.includes('Brak produktów')) return false;
+            return text.includes('Metoda dostawy') || text.includes('Ilość') || 
+                   (text.includes('PLN') && text.includes('Dalej'));
+        }""")
+    if not has_items:
+        body = await page.evaluate("() => document.body.innerText.substring(0, 300)")
+        log.error(f"Cart appears empty! Page text: {body[:200]}")
         return False
 
     # === TAB 1: KOSZYK - Select delivery + payment ===
