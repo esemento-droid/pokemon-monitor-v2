@@ -429,7 +429,8 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
-            args=['--disable-blink-features=AutomationControlled', '--no-sandbox']
+            args=['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+            proxy={"server": "http://127.0.0.1:8888"},
         )
         
         for i, account in enumerate(accounts_to_use):

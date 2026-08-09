@@ -397,7 +397,7 @@ async def buy_one(acc, url, p, test_mode=False):
     """Full flow for one account: login -> clear cart -> add -> checkout."""
     nm = f"{acc['firstName']} ({acc['email'][:8]})"
     log.info(f"[{nm}] === START {'(TEST MODE)' if test_mode else '(PRODUCTION)'} ===")
-    b = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"])
+    b = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"], proxy={"server": "http://127.0.0.1:8888"})
     ctx = await b.new_context(viewport={"width": 1920, "height": 1080})
     pg = await ctx.new_page()
     try:

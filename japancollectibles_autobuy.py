@@ -100,6 +100,7 @@ async def buy_product(account, product_url, product_id, qty=1, dry_run=False):
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
             ],
+            proxy={"server": "http://127.0.0.1:8888"},
         )
         context = await browser.new_context(
             viewport={"width": 1280, "height": 900},
