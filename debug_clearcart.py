@@ -52,14 +52,18 @@ async def main():
                 print(f'Cart EMPTY after {i} removals')
                 break
 
-            # Click delete button via PW locator
-            del_btn = page.locator('.js-cart-product-delete').first
+            # Click delete button via PW locator (desktop version)
+            del_btn = page.locator('.js-cart-product-delete.c-table-product__delete--desktop').first
             try:
                 count = await del_btn.count()
                 if count == 0:
-                    print(f'No delete button found after {i} removals')
-                    break
-                await del_btn.click(timeout=5000)
+                    # Try any visible delete button
+                    del_btn = page.locator('.js-cart-product-delete').first
+                    count = await del_btn.count()
+                    if count == 0:
+                        print(f'No delete button found after {i} removals')
+                        break
+                await del_btn.click(force=True, timeout=5000)
             except Exception as e:
                 print(f'Click failed: {e}')
                 break
