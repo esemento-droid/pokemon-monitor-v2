@@ -12,7 +12,7 @@ async def init_db():
     global _pool
     if _pool is not None:
         return
-    _pool = await asyncpg.create_pool(PG_DSN, min_size=1, max_size=3)
+    _pool = await asyncpg.create_pool(PG_DSN, min_size=2, max_size=10)
     async with _pool.acquire() as conn:
         await conn.execute("""CREATE TABLE IF NOT EXISTS products (
             id TEXT NOT NULL, shop TEXT NOT NULL, name TEXT, price TEXT,
