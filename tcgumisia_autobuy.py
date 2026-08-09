@@ -198,63 +198,68 @@ async def login(page, email, password):
 async def clear_cart(page):
     """Go to /koszyk and click remove (X) buttons for all items."""
     await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(3)
+    await asyncio.sleep(4)
 
-    # Check if cart is empty
-    is_empty = await page.evaluate("""() => {
-        const text = document.body.innerText.toLowerCase();
-        return text.includes('koszyk jest pusty') || text.includes('brak produktów');
-    }""")
-    if is_empty:
-        log.info("Cart already empty")
-        return
+    # Try removing items up to 5 times (each item gets its own remove click)
+    for attempt in range(5):
+        # Check cart value from header
+        cart_val = await page.evaluate("""() => {
+            const el = document.querySelector('.js-cart-value');
+            return el ? el.innerText.trim() : '0';
+        }""")
+        
+        # Check page text
+        page_text = await page.evaluate("() => document.body.innerText.substring(0, 500)")
+        
+        if "koszyk jest pusty" in page_text.lower() or "brak produktów" in page_text.lower():
+            log.info("Cart is empty")
+            return
+        
+        if cart_val == "0" and "Dalej" not in page_text and "Metoda dostawy" not in page_text:
+            log.info("Cart appears empty (value=0, no checkout elements)")
+            return
 
-    # Click all remove buttons (red X icon in Sellingo cart)
-    # From screenshot: it's a small "Usuń" link or X icon next to each product
-    removed = await page.evaluate("""() => {
-        let count = 0;
-        // Try multiple selectors for remove buttons
-        const selectors = [
-            'a[title*="Usuń"]', 'button[title*="Usuń"]',
-            '.js-remove-product', '[class*="remove"]', '[class*="delete"]',
-            'a:has(svg)', '.c-cart-product__remove'
-        ];
-        for (const sel of selectors) {
-            const btns = document.querySelectorAll(sel);
-            btns.forEach(btn => { btn.click(); count++; });
-            if (count > 0) break;
-        }
-        // Also try clicking any element with "Usuń" text
-        if (count === 0) {
+        # Find and click remove button
+        removed = await page.evaluate("""() => {
+            // Sellingo cart: red X icon or "Usuń" text link next to product
+            const selectors = [
+                '.c-cart-product__remove', '.js-remove-product',
+                'a[title*="Usuń"]', 'button[title*="Usuń"]',
+                '[class*="remove"]', '[class*="delete"]'
+            ];
+            for (const sel of selectors) {
+                const btn = document.querySelector(sel);
+                if (btn && btn.offsetParent !== null) { btn.click(); return sel; }
+            }
+            // Try "Usuń" text
             const els = Array.from(document.querySelectorAll('a, button, span'));
             for (const el of els) {
-                if ((el.innerText || '').trim() === 'Usuń') {
+                if ((el.innerText || '').trim() === 'Usuń' && el.offsetParent !== null) {
                     el.click();
-                    count++;
+                    return 'text:Usuń';
                 }
             }
-        }
-        return count;
-    }""")
-    log.info(f"Removed {removed} items from cart")
-    await asyncio.sleep(2)
-
-    # If items remain, try again
-    still_has = await page.evaluate("""() => {
-        const text = document.body.innerText.toLowerCase();
-        return !text.includes('koszyk jest pusty') && !text.includes('brak produktów');
-    }""")
-    if still_has:
-        # Reload and try once more
-        await page.reload()
-        await asyncio.sleep(2)
-        await page.evaluate("""() => {
-            const els = Array.from(document.querySelectorAll('a, button, span'));
-            for (const el of els) {
-                if ((el.innerText || '').trim() === 'Usuń') el.click();
+            // Try the red X (icon without text)
+            const icons = document.querySelectorAll('svg, i, [class*="icon-close"], [class*="icon-remove"]');
+            for (const icon of icons) {
+                const parent = icon.closest('a, button');
+                if (parent && parent.offsetParent !== null) {
+                    parent.click();
+                    return 'icon-parent';
+                }
             }
+            return null;
         }""")
-        await asyncio.sleep(2)
+
+        if removed:
+            log.info(f"Removed item from cart (selector: {removed}), attempt {attempt+1}")
+            await asyncio.sleep(2)
+            # Reload page to see updated cart
+            await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(3)
+        else:
+            log.info(f"No remove button found, cart may be empty (attempt {attempt+1})")
+            return
 
 
 async def add_to_cart(page, product_url, qty=1):
