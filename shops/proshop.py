@@ -8,7 +8,7 @@ import re
 log = logging.getLogger("monitor")
 
 SHOP = "proshop"
-URL = "https://www.proshop.pl/Pokemon"
+URL = "https://www.proshop.pl/Pokemon/Pokemon?f~pokmon_tcg=bokse~booster-tin-og-tema~tin~tilbehor"
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
 EXCLUDE = ["portfolio", "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro",
            "ultrapro", "plush", "figure", "figurk", "playset", "carry case", "clip", "play 'n",
