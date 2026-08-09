@@ -208,18 +208,15 @@ async def clear_cart(page):
             log.info("Cart is empty")
             return
 
-        # Click first visible delete button
-        clicked = await page.evaluate("""() => {
-            const btn = document.querySelector('.js-cart-product-delete');
-            if (btn && btn.offsetParent !== null) {
-                btn.click();
-                return true;
-            }
-            return false;
-        }""")
-
-        if not clicked:
-            log.info("No more items to remove")
+        # Click first visible delete button (PW locator - div doesn't have native .click in some contexts)
+        del_btn = page.locator('.js-cart-product-delete').first
+        try:
+            if await del_btn.count() == 0:
+                log.info("No more items to remove")
+                return
+            await del_btn.click(timeout=5000)
+        except Exception:
+            log.info("Delete button click failed, cart may be empty")
             return
 
         log.info(f"Removed item from cart (attempt {attempt+1})")

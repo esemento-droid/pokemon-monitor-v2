@@ -52,13 +52,16 @@ async def main():
                 print(f'Cart EMPTY after {i} removals')
                 break
 
-            clicked = await page.evaluate("""() => {
-                const btn = document.querySelector('.js-cart-product-delete');
-                if (btn) { btn.click(); return true; }
-                return false;
-            }""")
-            if not clicked:
-                print(f'No delete button found after {i} removals')
+            # Click delete button via PW locator
+            del_btn = page.locator('.js-cart-product-delete').first
+            try:
+                count = await del_btn.count()
+                if count == 0:
+                    print(f'No delete button found after {i} removals')
+                    break
+                await del_btn.click(timeout=5000)
+            except Exception as e:
+                print(f'Click failed: {e}')
                 break
 
             print(f'Removed item {i+1}')
