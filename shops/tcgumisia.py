@@ -17,7 +17,7 @@ SHOP = "tcgumisia.pl"
 BASE_URL = "https://tcgumisia.pl"
 CATEGORY_URLS = ["/pokemon", "/pre-order"]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-EXCLUDE_KEYWORDS = ["lorcana", "one piece", "flesh and blood", "fab", "disney", "album", "sleeve", "koszulk", "binder", "toploader", "ultra pro", "ochraniacz", "plastikowy", "jpn", "(jpn", "deck", "pencil", "riftbound"]
+EXCLUDE_KEYWORDS = ["lorcana", "one piece", "flesh and blood", "fab", "disney", "album", "sleeve", "koszulk", "binder", "toploader", "ultra pro", "ochraniacz", "plastikowy", "jpn", "(jpn", "deck", "pencil", "riftbound", "cyberpunk"]
 POKEMON_KEYWORDS = ["pokemon", "pokémon", "pikachu", "charizard", "booster", "etb", "trainer box"]
 
 
@@ -93,7 +93,10 @@ async def get_products():
                             link = a
                             break
                     href = link.get("href", "") if link else ""
-                    pid = href.replace("https://tcgumisia.pl/", "").rstrip("/").replace("/", "_") if href else ""
+                    # Normalize: remove trailing /75 (category suffix) to avoid duplicates
+                    href_clean = re.sub(r'/\d+$', '', href.rstrip("/"))
+                    pid = href_clean.replace("https://tcgumisia.pl/", "").replace("/", "_") if href_clean else ""
+                    href = href_clean
                     if not pid or pid in seen_ids:
                         continue
                     seen_ids.add(pid)
