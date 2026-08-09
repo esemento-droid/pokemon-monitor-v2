@@ -103,83 +103,88 @@ async def send_discord(message):
 async def login(page, email, password):
     """
     Login via Sellingo modal: click 'Konto' icon → fill E-mail + Hasło → click 'Zaloguj się'
+    Selectors from debug: button.js-open-modal[data-aside-target=modal-aside-entry-form],
+    form.js-login-form, button.js-submit-login
     """
     for attempt in range(3):
         try:
             await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(3)
+            await asyncio.sleep(4)
 
-            # Click account/login icon to open modal
-            await page.evaluate("""() => {
-                const links = Array.from(document.querySelectorAll('a, button, span, div'));
-                const konto = links.find(el => {
-                    const text = (el.innerText || '').trim().toLowerCase();
-                    const href = (el.getAttribute('href') || '').toLowerCase();
-                    return text === 'konto' || href.includes('login') || href.includes('konto');
-                });
-                if (konto) konto.click();
-            }""")
+            # Accept cookies if present
+            try:
+                cookie_btn = page.locator('.js-accept-cookie-alert-1')
+                if await cookie_btn.count() > 0:
+                    await cookie_btn.click(timeout=3000)
+                    await asyncio.sleep(1)
+            except Exception:
+                pass
+
+            # Click "Konto" button to open login modal
+            try:
+                konto_btn = page.locator('button[data-aside-target="modal-aside-entry-form"]')
+                await konto_btn.click(timeout=5000)
+            except Exception:
+                await page.evaluate("""() => {
+                    const btn = document.querySelector('button[data-aside-target="modal-aside-entry-form"]');
+                    if (btn) btn.click();
+                }""")
             await asyncio.sleep(2)
 
-            # Fill email and password in modal
+            # Fill email in login form
             escaped_email = email.replace("'", "\\'")
             escaped_pass = password.replace("\\", "\\\\").replace("'", "\\'")
 
             await page.evaluate(f"""() => {{
-                const inputs = document.querySelectorAll('input');
-                let emailInput = null, passInput = null;
+                const form = document.querySelector('.js-login-form');
+                if (!form) return;
+                const inputs = form.querySelectorAll('input');
                 for (const inp of inputs) {{
                     const type = (inp.type || '').toLowerCase();
                     const placeholder = (inp.placeholder || '').toLowerCase();
-                    const name = (inp.name || '').toLowerCase();
-                    if (type === 'email' || placeholder.includes('e-mail') || placeholder.includes('email') || name.includes('email') || name.includes('mail')) {{
-                        emailInput = inp;
+                    if (type === 'email' || placeholder.includes('e-mail') || placeholder.includes('email')) {{
+                        inp.focus();
+                        inp.value = '{escaped_email}';
+                        inp.dispatchEvent(new Event('input', {{bubbles:true}}));
+                        inp.dispatchEvent(new Event('change', {{bubbles:true}}));
                     }}
-                    if (type === 'password' || placeholder.includes('has') || name.includes('pass') || name.includes('has')) {{
-                        passInput = inp;
+                    if (type === 'password' || placeholder.includes('has')) {{
+                        inp.focus();
+                        inp.value = '{escaped_pass}';
+                        inp.dispatchEvent(new Event('input', {{bubbles:true}}));
+                        inp.dispatchEvent(new Event('change', {{bubbles:true}}));
                     }}
-                }}
-                if (emailInput) {{
-                    emailInput.focus();
-                    emailInput.value = '{escaped_email}';
-                    emailInput.dispatchEvent(new Event('input', {{bubbles:true}}));
-                    emailInput.dispatchEvent(new Event('change', {{bubbles:true}}));
-                }}
-                if (passInput) {{
-                    passInput.focus();
-                    passInput.value = '{escaped_pass}';
-                    passInput.dispatchEvent(new Event('input', {{bubbles:true}}));
-                    passInput.dispatchEvent(new Event('change', {{bubbles:true}}));
                 }}
             }}""")
             await asyncio.sleep(1)
 
-
-            # Click "Zaloguj się" button
-            await page.evaluate("""() => {
-                const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
-                const loginBtn = btns.find(el => {
-                    const text = (el.innerText || el.value || '').toLowerCase();
-                    return text.includes('zaloguj');
-                });
-                if (loginBtn) loginBtn.click();
-            }""")
+            # Click "Zaloguj się" button (class: js-submit-login)
+            try:
+                login_btn = page.locator('.js-submit-login')
+                await login_btn.click(timeout=5000)
+            except Exception:
+                await page.evaluate("""() => {
+                    const btn = document.querySelector('.js-submit-login');
+                    if (btn) btn.click();
+                }""")
             await asyncio.sleep(5)
 
-            # Verify login success - check for logout link or account name
+            # Verify login — page should reload/redirect, check for account content
             content = await page.content()
-            if "wyloguj" in content.lower() or "moje zamówienia" in content.lower():
+            page_text = await page.evaluate("() => document.body.innerText.toLowerCase()")
+            if "wyloguj" in page_text or "moje zamówienia" in page_text or "historia zamówień" in page_text:
                 return True
 
-            # Alternative: check if modal closed and account icon changed
+            # Also check if the cart header now shows user info
             logged = await page.evaluate("""() => {
+                // After login modal closes, check if "Konto" changed or wyloguj appeared
                 const text = document.body.innerText.toLowerCase();
-                return text.includes('wyloguj') || text.includes('moje zamówienia') || text.includes('moje konto');
+                return text.includes('wyloguj') || text.includes('moje konto') || text.includes('zamówienia');
             }""")
             if logged:
                 return True
 
-            log.warning(f"Login attempt {attempt+1} failed for {email}")
+            log.warning(f"Login attempt {attempt+1} failed for {email}, page_url={page.url}")
         except Exception as e:
             log.warning(f"Login attempt {attempt+1} error for {email}: {e}")
 
@@ -191,9 +196,9 @@ async def login(page, email, password):
 
 
 async def clear_cart(page):
-    """Navigate to cart page and remove all items if any."""
+    """Go to /koszyk and click remove (X) buttons for all items."""
     await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
 
     # Check if cart is empty
     is_empty = await page.evaluate("""() => {
@@ -201,14 +206,55 @@ async def clear_cart(page):
         return text.includes('koszyk jest pusty') || text.includes('brak produktów');
     }""")
     if is_empty:
+        log.info("Cart already empty")
         return
 
-    # Remove all items - click all remove (X) buttons
-    await page.evaluate("""() => {
-        const removeBtns = document.querySelectorAll('[class*="remove"], [class*="delete"], a[title*="Usuń"], button[title*="Usuń"]');
-        removeBtns.forEach(btn => btn.click());
+    # Click all remove buttons (red X icon in Sellingo cart)
+    # From screenshot: it's a small "Usuń" link or X icon next to each product
+    removed = await page.evaluate("""() => {
+        let count = 0;
+        // Try multiple selectors for remove buttons
+        const selectors = [
+            'a[title*="Usuń"]', 'button[title*="Usuń"]',
+            '.js-remove-product', '[class*="remove"]', '[class*="delete"]',
+            'a:has(svg)', '.c-cart-product__remove'
+        ];
+        for (const sel of selectors) {
+            const btns = document.querySelectorAll(sel);
+            btns.forEach(btn => { btn.click(); count++; });
+            if (count > 0) break;
+        }
+        // Also try clicking any element with "Usuń" text
+        if (count === 0) {
+            const els = Array.from(document.querySelectorAll('a, button, span'));
+            for (const el of els) {
+                if ((el.innerText || '').trim() === 'Usuń') {
+                    el.click();
+                    count++;
+                }
+            }
+        }
+        return count;
     }""")
+    log.info(f"Removed {removed} items from cart")
     await asyncio.sleep(2)
+
+    # If items remain, try again
+    still_has = await page.evaluate("""() => {
+        const text = document.body.innerText.toLowerCase();
+        return !text.includes('koszyk jest pusty') && !text.includes('brak produktów');
+    }""")
+    if still_has:
+        # Reload and try once more
+        await page.reload()
+        await asyncio.sleep(2)
+        await page.evaluate("""() => {
+            const els = Array.from(document.querySelectorAll('a, button, span'));
+            for (const el of els) {
+                if ((el.innerText || '').trim() === 'Usuń') el.click();
+            }
+        }""")
+        await asyncio.sleep(2)
 
 
 async def add_to_cart(page, product_url, qty=1):
