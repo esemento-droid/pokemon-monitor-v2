@@ -95,8 +95,20 @@ async def checkout(page):
     await asyncio.sleep(4)
 
     # Tab 1: Select InPost Paczkomat (radio shipment=15)
+    # Scroll into view first, then click
+    await page.evaluate("""() => {
+        const r = document.querySelector('input[name="shipment"][value="15"]');
+        if (r) r.scrollIntoView({block: 'center'});
+    }""")
+    await asyncio.sleep(1)
     inpost = page.locator('input[name="shipment"][value="15"]')
-    await inpost.click(force=True, timeout=5000)
+    try:
+        await inpost.click(force=True, timeout=5000)
+    except:
+        await page.evaluate("""() => {
+            const r = document.querySelector('input[name="shipment"][value="15"]');
+            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
+        }""")
     await asyncio.sleep(3)
 
     # Click Wyszukaj
@@ -142,9 +154,20 @@ async def checkout(page):
     }""")
     await asyncio.sleep(3)
 
-    # Select Blik/Karta (radio payment=25, force because may be hidden)
+    # Select Blik/Karta (radio payment=25, scroll + force click)
+    await page.evaluate("""() => {
+        const r = document.querySelector('input[name="payment"][value="25"]');
+        if (r) r.scrollIntoView({block: 'center'});
+    }""")
+    await asyncio.sleep(1)
     blik = page.locator('input[name="payment"][value="25"]')
-    await blik.click(force=True, timeout=5000)
+    try:
+        await blik.click(force=True, timeout=5000)
+    except:
+        await page.evaluate("""() => {
+            const r = document.querySelector('input[name="payment"][value="25"]');
+            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
+        }""")
     await asyncio.sleep(2)
 
     # Click Dalej

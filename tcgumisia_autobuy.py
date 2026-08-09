@@ -354,14 +354,18 @@ async def checkout(page, account, test_mode=False):
     log.info("Tab 1: Selecting InPost Paczkomat...")
 
     # Click InPost radio: input[name="shipment"][value="15"]
+    await page.evaluate("""() => {
+        const r = document.querySelector('input[name="shipment"][value="15"]');
+        if (r) r.scrollIntoView({block: 'center'});
+    }""")
+    await asyncio.sleep(1)
     inpost_radio = page.locator('input[name="shipment"][value="15"]')
     try:
         await inpost_radio.click(force=True, timeout=5000)
     except Exception:
-        # Click parent label
         await page.evaluate("""() => {
             const r = document.querySelector('input[name="shipment"][value="15"]');
-            if (r) { r.closest('label').click(); }
+            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
         }""")
     await asyncio.sleep(3)
 
@@ -423,14 +427,18 @@ async def checkout(page, account, test_mode=False):
     log.info("Tab 1: Selecting Blik/Karta payment...")
 
     # Select Blik/Karta: input[name="payment"][value="25"]
-    # May be hidden until InPost is selected — use force=True
+    await page.evaluate("""() => {
+        const r = document.querySelector('input[name="payment"][value="25"]');
+        if (r) r.scrollIntoView({block: 'center'});
+    }""")
+    await asyncio.sleep(1)
     blik_radio = page.locator('input[name="payment"][value="25"]')
     try:
         await blik_radio.click(force=True, timeout=5000)
     except Exception:
         await page.evaluate("""() => {
             const r = document.querySelector('input[name="payment"][value="25"]');
-            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); }
+            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
         }""")
     await asyncio.sleep(2)
 
