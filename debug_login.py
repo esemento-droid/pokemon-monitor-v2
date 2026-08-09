@@ -41,17 +41,22 @@ async def main():
 
         # Listen for network requests AND responses
         requests_log = []
-        def on_request(req):
-            if 'login' in req.url.lower() or 'auth' in req.url.lower() or req.method == 'POST':
-                requests_log.append(f'{req.method} {req.url}')
+        async def on_request(req):
+            if req.method == 'POST' and 'login' in req.url.lower():
+                post_data = req.post_data or 'NO POST DATA'
+                requests_log.append(f'{req.method} {req.url} BODY: {post_data[:200]}')
         
         responses_log = []
-        def on_response(resp):
+        async def on_response(resp):
             if 'login' in resp.url.lower() or 'account' in resp.url.lower():
-                responses_log.append(f'{resp.status} {resp.url}')
+                try:
+                    body = await resp.text()
+                    responses_log.append(f'{resp.status} {resp.url} BODY: {body[:300]}')
+                except:
+                    responses_log.append(f'{resp.status} {resp.url} (no body)')
         
-        page.on('request', on_request)
-        page.on('response', on_response)
+        page.on('request', lambda req: asyncio.ensure_future(on_request(req)))
+        page.on('response', lambda resp: asyncio.ensure_future(on_response(resp)))
 
         # Click login button using Playwright click
         login_btn = page.locator('.js-submit-login')
@@ -59,7 +64,7 @@ async def main():
         await asyncio.sleep(6)
 
         # Show network requests
-        print(f'Network requests after login click: {len(requests_log)}')
+        print(f'Requests: {len(requests_log)}')
         for r in requests_log:
             print(f'  {r}')
         print(f'Responses: {len(responses_log)}')
