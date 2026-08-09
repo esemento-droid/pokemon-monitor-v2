@@ -299,7 +299,7 @@ async def add_to_cart(page, product_url, qty=1):
 
 
 
-async def checkout(page, test_mode=False):
+async def checkout(page, account, test_mode=False):
     """
     Sellingo 3-tab checkout:
     Tab 1 (Koszyk): Select InPost Paczkomat + tpay Blik → search PAD04M → Dalej
@@ -436,11 +436,47 @@ async def checkout(page, test_mode=False):
     await asyncio.sleep(4)
 
 
-    # === TAB 2: DANE - Check regulamin, click Przejdź dalej ===
-    log.info("Tab 2: Checking regulamin...")
+    # === TAB 2: DANE - Fill data if needed, check regulamin, click Przejdź dalej ===
+    log.info("Tab 2: Checking/filling data...")
 
-    # Wait for Tab 2 to load (look for "Dane" or form fields)
+    # Wait for Tab 2 to load
     await asyncio.sleep(2)
+
+    # Fill address data if fields are empty (Sellingo may not pre-fill even for logged users)
+    # Account data mapping
+    ACCOUNT_DATA = {
+        "esemento@gmail.com": {"first": "Tomasz", "last": "Szczepaniak", "street": "Leśna", "number": "46a/2", "zip": "62-069", "city": "Palędzie", "phone": "607183797"},
+        "blackmat36@gmail.com": {"first": "Natalia", "last": "Szczepaniak", "street": "Leśna", "number": "46a/2", "zip": "62-069", "city": "Palędzie", "phone": "607183797"},
+        "tjbtaniojuzbylo@gmail.com": {"first": "Jagoda", "last": "Kaczmarek", "street": "Leśna", "number": "46a/2", "zip": "62-069", "city": "Palędzie", "phone": "607183797"},
+        "y24015411@gmail.com": {"first": "Miroslawa", "last": "Szczepaniak", "street": "Leśna", "number": "46a/2", "zip": "62-069", "city": "Palędzie", "phone": "607183797"},
+        "t11008543@gmail.com": {"first": "Marian", "last": "Wasilewski", "street": "Konduktorska", "number": "14", "zip": "00-775", "city": "Warszawa", "phone": "672245321"},
+    }
+    email = account["email"]
+    data = ACCOUNT_DATA.get(email, ACCOUNT_DATA["t11008543@gmail.com"])
+    
+    await page.evaluate(f"""() => {{
+        function fillIfEmpty(selector, value) {{
+            const els = document.querySelectorAll(selector);
+            for (const el of els) {{
+                if (el.offsetParent !== null && !el.value.trim()) {{
+                    el.focus();
+                    el.value = value;
+                    el.dispatchEvent(new Event('input', {{bubbles:true}}));
+                    el.dispatchEvent(new Event('change', {{bubbles:true}}));
+                    el.dispatchEvent(new Event('blur', {{bubbles:true}}));
+                }}
+            }}
+        }}
+        fillIfEmpty('input[name="name"], input[name="first_name"], input[placeholder*="Imię"]', '{data["first"]}');
+        fillIfEmpty('input[name="surname"], input[name="last_name"], input[placeholder*="Nazwisko"]', '{data["last"]}');
+        fillIfEmpty('input[name="street"], input[placeholder*="Ulica"]', '{data["street"]}');
+        fillIfEmpty('input[name="building_number"], input[name="street_number"], input[placeholder*="Numer domu"]', '{data["number"]}');
+        fillIfEmpty('input[name="zip_code"], input[name="postcode"], input[placeholder*="Kod"]', '{data["zip"]}');
+        fillIfEmpty('input[name="city"], input[placeholder*="Miasto"]', '{data["city"]}');
+        fillIfEmpty('input[name="phone"], input[placeholder*="Telefon"]', '{data["phone"]}');
+        fillIfEmpty('input[name="email"], input[placeholder*="E-mail"], input[type="email"]', '{email}');
+    }}""")
+    await asyncio.sleep(1)
 
     # Check regulamin checkbox (required) - skip faktura and newsletter
     await page.evaluate("""() => {
@@ -598,7 +634,7 @@ async def run_for_account(page, account, product_urls, qty, test_mode=False):
     log.info(f"[{name}] {added}/{len(urls_to_buy)} products in cart")
 
     # Checkout
-    ok = await checkout(page, test_mode=test_mode)
+    ok = await checkout(page, account, test_mode=test_mode)
     if ok:
         log.info(f"[{name}] ORDER PLACED! ({added} products)")
         if not test_mode:
