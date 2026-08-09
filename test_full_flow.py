@@ -23,7 +23,7 @@ from patchright.async_api import async_playwright
 
 # Test product — pick any cheap available product on tcgumisia
 # Update this URL to a product that's currently in stock!
-TEST_PRODUCT_URL = "https://tcgumisia.pl/pokemon-tcg-scarlet-violet-prismatic-evolutions-booster-bundle-6-boosterow"
+TEST_PRODUCT_URL = "https://tcgumisia.pl/pokemon-tcg-mega-forces-tin-mega-zeraora-ex-pre-oerder"
 
 
 async def main():
