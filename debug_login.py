@@ -28,31 +28,20 @@ async def main():
         }""")
         await asyncio.sleep(2)
 
-        # Fill login form
-        await page.evaluate("""() => {
-            const form = document.querySelector('.js-login-form');
-            if (!form) { console.log('NO FORM FOUND'); return; }
-            const inputs = form.querySelectorAll('input');
-            for (const inp of inputs) {
-                if (inp.type === 'email' || inp.placeholder.toLowerCase().includes('e-mail')) {
-                    inp.value = 't11008543@gmail.com';
-                    inp.dispatchEvent(new Event('input', {bubbles:true}));
-                    inp.dispatchEvent(new Event('change', {bubbles:true}));
-                }
-                if (inp.type === 'password' || inp.placeholder.toLowerCase().includes('has')) {
-                    inp.value = 'mt!cSsphud4Zhnz';
-                    inp.dispatchEvent(new Event('input', {bubbles:true}));
-                    inp.dispatchEvent(new Event('change', {bubbles:true}));
-                }
-            }
-        }""")
-        await asyncio.sleep(1)
+        # Fill login form using Playwright native type (triggers keydown/keyup/keypress)
+        email_input = page.locator('.js-login-form input[type="email"], .js-login-form input[placeholder*="E-mail"]').first
+        pass_input = page.locator('.js-login-form input[type="password"]').first
+        
+        await email_input.click()
+        await email_input.fill('t11008543@gmail.com')
+        await asyncio.sleep(0.5)
+        await pass_input.click()
+        await pass_input.fill('mt!cSsphud4Zhnz')
+        await asyncio.sleep(0.5)
 
-        # Click login button
-        await page.evaluate("""() => {
-            const btn = document.querySelector('.js-submit-login');
-            if (btn) btn.click();
-        }""")
+        # Click login button using Playwright click
+        login_btn = page.locator('.js-submit-login')
+        await login_btn.click()
         await asyncio.sleep(6)
 
         # Check cookies
