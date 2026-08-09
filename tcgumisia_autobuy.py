@@ -132,8 +132,18 @@ async def login(page, email, password):
     """
     for attempt in range(3):
         try:
-            await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(4)
+            await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45000)
+            await asyncio.sleep(6)
+
+            # Wait for PoW challenge to resolve (nodea) — page may show "Weryfikacja"
+            for _ in range(10):
+                has_pow = await page.evaluate("""() => {
+                    const text = document.body ? document.body.innerText : '';
+                    return text.includes('Weryfikacja') || text.includes('nodea');
+                }""")
+                if not has_pow:
+                    break
+                await asyncio.sleep(2)
 
             # Accept cookies if present
             try:
@@ -147,13 +157,19 @@ async def login(page, email, password):
             # Click "Konto" button to open login modal
             try:
                 konto_btn = page.locator('button[data-aside-target="modal-aside-entry-form"]')
-                await konto_btn.click(timeout=5000)
+                await konto_btn.click(timeout=8000)
             except Exception:
                 await page.evaluate("""() => {
                     const btn = document.querySelector('button[data-aside-target="modal-aside-entry-form"]');
                     if (btn) btn.click();
                 }""")
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
+
+            # Wait for login form to appear
+            try:
+                await page.locator('.js-login-form').wait_for(state="visible", timeout=8000)
+            except Exception:
+                log.warning(f"Login form not visible after 8s (attempt {attempt+1})")
 
             # Fill email in login form using PW fill() (triggers proper key events)
             email_input = page.locator('.js-login-form input[type="email"], .js-login-form input[placeholder*="E-mail"]').first
@@ -177,31 +193,37 @@ async def login(page, email, password):
                 }""")
             await asyncio.sleep(6)
 
-            # Verify login — check if cart shows a value or account CSS loaded
-            # Sellingo doesn't show "wyloguj" on main page, but loads account styles
-            page_text = await page.evaluate("() => document.body.innerText")
-            
-            # Check if cart header shows non-zero value (means session is active with items)
-            # OR check if account-aside CSS loaded (sign of successful login)
+            # Verify login — check if login succeeded
             logged = await page.evaluate("""() => {
-                // Check if account module loaded
-                const accountStyle = document.querySelector('link[href*="aside-account"]');
-                if (accountStyle) return true;
-                // Check response by looking for login error message
-                const errorEl = document.querySelector('.js-login-form .error, .js-login-form [class*="error"]');
-                if (errorEl && errorEl.innerText.includes('nieprawidłowe')) return false;
-                // If modal closed, likely success
-                const modal = document.querySelector('.js-login-form');
-                if (modal && !modal.closest('.is-active, .is-open, [class*="active"]')) return true;
-                return false;
+                try {
+                    // Check if account module loaded (sign of logged-in state)
+                    const accountStyle = document.querySelector('link[href*="aside-account"]');
+                    if (accountStyle) return true;
+                    // Check if login form is gone (modal closed = success)
+                    const modal = document.querySelector('.js-login-form');
+                    if (!modal) return true;
+                    const modalParent = modal.closest('[class*="aside"], [class*="modal"]');
+                    if (modalParent) {
+                        const style = window.getComputedStyle(modalParent);
+                        if (style.display === 'none' || style.visibility === 'hidden') return true;
+                    }
+                    // Check for error message
+                    const errorEl = document.querySelector('.js-login-form .error, .js-login-form [class*="error"]');
+                    if (errorEl && errorEl.innerText && errorEl.innerText.includes('nieprawidłowe')) return false;
+                    // Check if "wyloguj" link appeared anywhere
+                    const links = Array.from(document.querySelectorAll('a'));
+                    if (links.some(a => (a.href || '').includes('wyloguj'))) return true;
+                    return false;
+                } catch(e) { return false; }
             }""")
             if logged:
+                log.info(f"Login verified (attempt {attempt+1})")
                 return True
 
             # Fallback: navigate to /koszyk and see if it shows products or "kup bez rejestracji"
             await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(3)
-            cart_text = await page.evaluate("() => document.body.innerText.toLowerCase()")
+            await asyncio.sleep(4)
+            cart_text = await page.evaluate("() => (document.body ? document.body.innerText : '').toLowerCase()")
             if "kup bez rejestracji" not in cart_text and "koszyk jest pusty" not in cart_text:
                 return True
 
@@ -210,7 +232,7 @@ async def login(page, email, password):
             log.warning(f"Login attempt {attempt+1} error for {email}: {e}")
 
         if attempt < 2:
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)
 
     return False
 
