@@ -193,70 +193,41 @@ async def login(page, email, password):
 
 
 async def clear_cart(page):
-    """Go to /koszyk and click remove (X) buttons for all items."""
+    """Go to /koszyk and click remove buttons for all items."""
     await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(4)
 
-    # Try removing items up to 5 times (each item gets its own remove click)
-    for attempt in range(5):
-        # Check cart value from header
-        cart_val = await page.evaluate("""() => {
-            const el = document.querySelector('.js-cart-value');
-            return el ? el.innerText.trim() : '0';
+    # Remove items one by one (Sellingo: div.js-cart-product-delete)
+    for attempt in range(10):
+        # Check if cart is empty
+        is_empty = await page.evaluate("""() => {
+            const text = document.body.innerText.toLowerCase();
+            return text.includes('koszyk jest pusty') || text.includes('brak produktów');
         }""")
-        
-        # Check page text
-        page_text = await page.evaluate("() => document.body.innerText.substring(0, 500)")
-        
-        if "koszyk jest pusty" in page_text.lower() or "brak produktów" in page_text.lower():
+        if is_empty:
             log.info("Cart is empty")
             return
-        
-        if cart_val == "0" and "Dalej" not in page_text and "Metoda dostawy" not in page_text:
-            log.info("Cart appears empty (value=0, no checkout elements)")
-            return
 
-        # Find and click remove button
-        removed = await page.evaluate("""() => {
-            // Sellingo cart: red X icon or "Usuń" text link next to product
-            const selectors = [
-                '.c-cart-product__remove', '.js-remove-product',
-                'a[title*="Usuń"]', 'button[title*="Usuń"]',
-                '[class*="remove"]', '[class*="delete"]'
-            ];
-            for (const sel of selectors) {
-                const btn = document.querySelector(sel);
-                if (btn && btn.offsetParent !== null) { btn.click(); return sel; }
+        # Click first visible delete button
+        clicked = await page.evaluate("""() => {
+            const btn = document.querySelector('.js-cart-product-delete');
+            if (btn && btn.offsetParent !== null) {
+                btn.click();
+                return true;
             }
-            // Try "Usuń" text
-            const els = Array.from(document.querySelectorAll('a, button, span'));
-            for (const el of els) {
-                if ((el.innerText || '').trim() === 'Usuń' && el.offsetParent !== null) {
-                    el.click();
-                    return 'text:Usuń';
-                }
-            }
-            // Try the red X (icon without text)
-            const icons = document.querySelectorAll('svg, i, [class*="icon-close"], [class*="icon-remove"]');
-            for (const icon of icons) {
-                const parent = icon.closest('a, button');
-                if (parent && parent.offsetParent !== null) {
-                    parent.click();
-                    return 'icon-parent';
-                }
-            }
-            return null;
+            return false;
         }""")
 
-        if removed:
-            log.info(f"Removed item from cart (selector: {removed}), attempt {attempt+1}")
-            await asyncio.sleep(2)
-            # Reload page to see updated cart
-            await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(3)
-        else:
-            log.info(f"No remove button found, cart may be empty (attempt {attempt+1})")
+        if not clicked:
+            log.info("No more items to remove")
             return
+
+        log.info(f"Removed item from cart (attempt {attempt+1})")
+        await asyncio.sleep(2)
+
+        # Reload to see updated cart
+        await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(3)
 
 
 async def add_to_cart(page, product_url, qty=1):
@@ -577,9 +548,8 @@ async def checkout(page, account, test_mode=False):
             body = await page.evaluate("() => document.body.innerText.substring(0, 500)")
             log.error(f"[TEST MODE] Submit button not found! Page text: {body[:200]}")
             return False
-        # In test mode, DON'T click submit - just verify it exists
-        log.info("[TEST MODE] Order ready to submit - NOT clicking (test mode)")
-        return True
+        # TEST MODE: click submit to verify full flow (real order on test account!)
+        log.info("[TEST MODE] Clicking 'Zamawiam i płacę' (real order on test account)")
 
 
     # Click "Zamawiam i płacę" button
