@@ -27,7 +27,7 @@ COMPLETED_FILE = BOT_DIR / "tcgumisia_completed.json"
 LOG_FILE = BOT_DIR / "tcgumisia_autobuy.log"
 WEBHOOK_FILE = BOT_DIR / "discord_webhook_strefatcg.txt"
 PROXY = "http://127.0.0.1:8888"
-PACZKOMAT = "PAD04M"
+PACZKOMAT = "WAW65N"
 
 ACCOUNTS = [
     {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},
@@ -99,6 +99,30 @@ async def send_discord(message):
 
 
 # === BROWSER AUTOMATION ===
+
+async def logout(page):
+    """Logout from Sellingo — navigate to logout URL or click logout link."""
+    try:
+        # Sellingo logout is typically at /wyloguj or via JS
+        await page.goto(f"{BASE_URL}/wyloguj", wait_until="domcontentloaded", timeout=15000)
+        await asyncio.sleep(2)
+        log.info("Logged out via /wyloguj")
+    except Exception as e:
+        log.warning(f"Logout navigation failed: {e}, trying JS...")
+        try:
+            await page.evaluate("""() => {
+                const links = Array.from(document.querySelectorAll('a'));
+                const logout = links.find(a => {
+                    const href = (a.href || '').toLowerCase();
+                    const text = (a.innerText || '').toLowerCase();
+                    return href.includes('wyloguj') || href.includes('logout') || text.includes('wyloguj');
+                });
+                if (logout) logout.click();
+            }""")
+            await asyncio.sleep(2)
+        except Exception:
+            pass
+
 
 async def login(page, email, password):
     """
@@ -353,100 +377,153 @@ async def checkout(page, account, test_mode=False):
     # === TAB 1: KOSZYK - Select delivery + payment ===
     log.info("Tab 1: Selecting InPost Paczkomat...")
 
-    # Click InPost radio: input[name="shipment"][value="15"]
+    # Click InPost radio — click PARENT LABEL of input[name="shipment"][value="15"]
     await page.evaluate("""() => {
         const r = document.querySelector('input[name="shipment"][value="15"]');
-        if (r) r.scrollIntoView({block: 'center'});
+        if (r) {
+            r.scrollIntoView({block: 'center'});
+            const label = r.closest('label') || r.parentElement;
+            if (label) label.click();
+            else { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); }
+        }
     }""")
-    await asyncio.sleep(1)
-    inpost_radio = page.locator('input[name="shipment"][value="15"]')
-    try:
-        await inpost_radio.click(force=True, timeout=5000)
-    except Exception:
-        await page.evaluate("""() => {
-            const r = document.querySelector('input[name="shipment"][value="15"]');
-            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
-        }""")
     await asyncio.sleep(3)
 
-    # Click "Wyszukaj" button to open paczkomat search
-    await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, a, span'));
-        const searchBtn = btns.find(el => {
-            const text = (el.innerText || '').toLowerCase();
-            return text.includes('wyszukaj') || text.includes('wybierz punkt');
-        });
-        if (searchBtn) searchBtn.click();
+    # Verify InPost is selected
+    inpost_checked = await page.evaluate("""() => {
+        const r = document.querySelector('input[name="shipment"][value="15"]');
+        return r ? r.checked : false;
     }""")
+    if not inpost_checked:
+        log.warning("InPost radio not checked, trying force click...")
+        try:
+            await page.locator('input[name="shipment"][value="15"]').click(force=True, timeout=3000)
+        except Exception:
+            pass
     await asyncio.sleep(2)
 
-    # Type PAD04M in search input
-    search_input = page.locator('input[placeholder*="Szukaj"], input[placeholder*="miasto"], input[placeholder*="adres"]').first
+    # Click "Wyszukaj" button — .inpost_search_point (DIV not button!)
+    log.info("Tab 1: Clicking Wyszukaj paczkomat...")
+    try:
+        wyszukaj = page.locator('.inpost_search_point')
+        await wyszukaj.click(force=True, timeout=5000)
+    except Exception:
+        await page.evaluate("""() => {
+            const el = document.querySelector('.inpost_search_point');
+            if (el) el.click();
+        }""")
+    await asyncio.sleep(2)
+
+    # Type paczkomat code in input[name="easypack-search"] — use type() char by char!
+    log.info(f"Tab 1: Typing paczkomat code '{PACZKOMAT}'...")
+    search_input = page.locator('input[name="easypack-search"]')
     try:
         await search_input.click(timeout=5000)
-        await search_input.fill(PACZKOMAT)
-        await asyncio.sleep(2)
-    except Exception:
-        # Fallback: find any visible text input in the paczkomat modal
+        await asyncio.sleep(0.5)
+        # Clear any existing text
+        await search_input.fill("")
+        await asyncio.sleep(0.3)
+        # Type char by char with delay (triggers autocomplete properly)
+        await search_input.type(PACZKOMAT, delay=100)
+    except Exception as e:
+        log.warning(f"easypack-search type failed: {e}, trying JS fallback...")
         await page.evaluate(f"""() => {{
-            const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
-            for (const inp of inputs) {{
-                if (inp.offsetParent !== null) {{
-                    inp.focus();
-                    inp.value = '{PACZKOMAT}';
+            const inp = document.querySelector('input[name="easypack-search"]');
+            if (inp) {{
+                inp.focus();
+                inp.value = '';
+                const text = '{PACZKOMAT}';
+                for (let i = 0; i < text.length; i++) {{
+                    inp.value += text[i];
                     inp.dispatchEvent(new Event('input', {{bubbles:true}}));
-                    inp.dispatchEvent(new Event('change', {{bubbles:true}}));
-                    break;
                 }}
             }}
         }}""")
-        await asyncio.sleep(2)
-
-    # Select PAD04M from dropdown/results
-    await page.evaluate(f"""() => {{
-        const items = Array.from(document.querySelectorAll('li, div, span, a, option'));
-        const pad = items.find(el => {{
-            const text = (el.innerText || el.textContent || '').toUpperCase();
-            return text.includes('{PACZKOMAT}') && el.offsetParent !== null;
-        }});
-        if (pad) pad.click();
-    }}""")
-    await asyncio.sleep(2)
-
-    # If there's a "Wybierz" button on the point popup, click it
-    await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, a'));
-        const wybierz = btns.find(el => {
-            const text = (el.innerText || '').toLowerCase();
-            return text.includes('wybierz') && el.offsetParent !== null;
-        });
-        if (wybierz) wybierz.click();
-    }""")
     await asyncio.sleep(3)
 
-    log.info("Tab 1: Selecting Blik/Karta payment...")
+    # Click dropdown item — .inpost-search__item-list.point
+    log.info("Tab 1: Clicking paczkomat dropdown item...")
+    try:
+        dropdown_item = page.locator('.inpost-search__item-list.point').first
+        # Wait for dropdown to appear
+        await dropdown_item.wait_for(state="visible", timeout=8000)
+        await asyncio.sleep(0.5)
+        await dropdown_item.click(timeout=5000)
+        log.info("Paczkomat dropdown item clicked via locator")
+    except Exception as e:
+        log.warning(f"Dropdown click via locator failed: {e}, trying JS...")
+        # JS fallback — click first visible .inpost-search__item-list.point
+        clicked_js = await page.evaluate(f"""() => {{
+            const items = document.querySelectorAll('.inpost-search__item-list.point');
+            for (const item of items) {{
+                if (item.offsetParent !== null || item.offsetHeight > 0) {{
+                    item.click();
+                    return true;
+                }}
+            }}
+            // Fallback: any element containing paczkomat code
+            const all = document.querySelectorAll('.inpost-search__item-list li, .inpost-search__item-list div');
+            for (const el of all) {{
+                if ((el.textContent || '').toUpperCase().includes('{PACZKOMAT}')) {{
+                    el.click();
+                    return true;
+                }}
+            }}
+            return false;
+        }}""")
+        if clicked_js:
+            log.info("Paczkomat dropdown item clicked via JS")
+        else:
+            log.error("FAILED to click paczkomat dropdown item!")
+    await asyncio.sleep(2)
 
-    # Select Blik/Karta: input[name="payment"][value="25"]
+    # Verify paczkomat was selected (check if widget closed or confirmation text appeared)
+    paczkomat_ok = await page.evaluate(f"""() => {{
+        const body = document.body.innerText.toUpperCase();
+        return body.includes('{PACZKOMAT}');
+    }}""")
+    if paczkomat_ok:
+        log.info(f"Paczkomat {PACZKOMAT} confirmed on page")
+    else:
+        log.warning(f"Paczkomat {PACZKOMAT} text NOT found on page after selection")
+
+    # Close InPost widget if still open (click outside or "X" button)
+    await page.evaluate("""() => {
+        // Try closing any modal/overlay that might block further clicks
+        const close = document.querySelector('.inpost-search__close, .inpost_close, [class*="inpost"] .close');
+        if (close) close.click();
+    }""")
+    await asyncio.sleep(1)
+
+    log.info("Tab 1: Selecting Blik payment...")
+
+    # Select Blik: input[name="payment"][value="25"] — force=True (hidden until InPost selected)
     await page.evaluate("""() => {
         const r = document.querySelector('input[name="payment"][value="25"]');
         if (r) r.scrollIntoView({block: 'center'});
     }""")
     await asyncio.sleep(1)
-    blik_radio = page.locator('input[name="payment"][value="25"]')
     try:
+        blik_radio = page.locator('input[name="payment"][value="25"]')
         await blik_radio.click(force=True, timeout=5000)
+        log.info("Blik radio clicked")
     except Exception:
         await page.evaluate("""() => {
             const r = document.querySelector('input[name="payment"][value="25"]');
-            if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); r.dispatchEvent(new Event('click', {bubbles:true})); }
+            if (r) {
+                const label = r.closest('label') || r.parentElement;
+                if (label) label.click();
+                else { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); }
+            }
         }""")
+        log.info("Blik radio clicked via JS")
     await asyncio.sleep(2)
 
-    # Click "Dalej" button (class: js-cart-next)
+    # Click "Dalej" button (class: js-cart-next) — force=True (widget may block pointer)
     log.info("Tab 1: Clicking Dalej...")
-    dalej_btn = page.locator('.js-cart-next')
     try:
-        await dalej_btn.click(timeout=5000)
+        dalej_btn = page.locator('.js-cart-next')
+        await dalej_btn.click(force=True, timeout=5000)
     except Exception:
         await page.evaluate("""() => {
             const btn = document.querySelector('.js-cart-next');
@@ -511,11 +588,11 @@ async def checkout(page, account, test_mode=False):
         }""")
     await asyncio.sleep(1)
 
-    # Click "Przejdź dalej" button (Tab 2 → Tab 3) — same .js-cart-next
+    # Click "Przejdź dalej" button (Tab 2 → Tab 3) — same .js-cart-next, force=True
     log.info("Tab 2: Clicking Przejdź dalej...")
-    dalej_btn2 = page.locator('.js-cart-next')
     try:
-        await dalej_btn2.click(timeout=5000)
+        dalej_btn2 = page.locator('.js-cart-next')
+        await dalej_btn2.click(force=True, timeout=5000)
     except Exception:
         await page.evaluate("""() => {
             const btn = document.querySelector('.js-cart-next');
@@ -742,7 +819,13 @@ async def main():
                 log.error(f"[{account['name']}] Exception: {e}")
                 results.append((account["name"], f"error: {e}"))
             finally:
+                # Logout before closing context (clean server-side session)
+                try:
+                    await logout(page)
+                except Exception:
+                    pass
                 await ctx.close()
+                log.info(f"[{account['name']}] Context closed (fresh session for next account)")
 
             if i < len(accounts_to_use) - 1:
                 await asyncio.sleep(2)
