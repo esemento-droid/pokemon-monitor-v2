@@ -120,8 +120,8 @@ async def shop_worker(name, module):
     Kazdy dziala w petli: scrape → detect → save → sleep.
     NIE czeka na inne sklepy. NIE uzywa lockow.
     """
-    # Stagger start — spread HTTP shops over first 30s
-    await asyncio.sleep(random.uniform(0, 30))
+    # Stagger start — spread HTTP shops over first 120s to avoid connection storm
+    await asyncio.sleep(random.uniform(0, 120))
 
     scan_stats[name] = {"ok": 0, "err": 0, "last": None, "last_scan_time": 0}
 
@@ -202,6 +202,8 @@ async def shop_worker(name, module):
 
         # --- DELAY ---
         delay = _get_delay(name, error=(scan_stats[name]["err"] > 0), scan_time=scan_time)
+        # Add random jitter (0-3s) to prevent burst synchronization
+        delay += random.uniform(0, 3)
         await asyncio.sleep(delay)
 
 
