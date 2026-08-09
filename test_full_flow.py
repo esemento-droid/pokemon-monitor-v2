@@ -225,9 +225,21 @@ async def main():
         print("TEST 1: Real order on test account")
         print("=" * 50)
         ctx1 = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+            locale="pl-PL"
         )
         page1 = await ctx1.new_page()
+        await page1.add_init_script("""
+            Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+            Object.defineProperty(navigator, 'languages', {get: () => ['pl-PL', 'pl', 'en-US', 'en']});
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(param) {
+                if (param === 37445) return 'Intel Inc.';
+                if (param === 37446) return 'Intel Iris OpenGL Engine';
+                return getParameter.call(this, param);
+            };
+        """)
 
         await login(page1, TEST_ACCOUNT["email"], TEST_ACCOUNT["password"])
         await clear_cart(page1)
@@ -247,9 +259,21 @@ async def main():
         print("TEST 2: Login esemento + add to cart")
         print("=" * 50)
         ctx2 = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+            locale="pl-PL"
         )
         page2 = await ctx2.new_page()
+        await page2.add_init_script("""
+            Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+            Object.defineProperty(navigator, 'languages', {get: () => ['pl-PL', 'pl', 'en-US', 'en']});
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(param) {
+                if (param === 37445) return 'Intel Inc.';
+                if (param === 37446) return 'Intel Iris OpenGL Engine';
+                return getParameter.call(this, param);
+            };
+        """)
 
         await login(page2, ACCOUNT_2["email"], ACCOUNT_2["password"])
         await clear_cart(page2)
