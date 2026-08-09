@@ -164,8 +164,8 @@ async def checkout(page):
     }""")
     print(f"  Visible inputs after Wyszukaj: {after_wyszukaj}")
 
-    # Search paczkomat - try all visible text inputs
-    search = page.locator('input[placeholder*="Szukaj"], input[placeholder*="miasto"], input[placeholder*="adres"], input[placeholder*="nazw"]').first
+    # Search paczkomat - use exact selector for InPost widget input
+    search = page.locator('input[name="easypack-search"]').first
     try:
         await search.click(timeout=5000)
         await search.fill(PACZKOMAT)
@@ -174,13 +174,11 @@ async def checkout(page):
         print(f"  Search input error: {e}")
         # Fallback
         await page.evaluate(f"""() => {{
-            const inputs = document.querySelectorAll('input[type="text"], input[type="search"]');
-            for (const inp of inputs) {{
-                if (inp.offsetParent !== null) {{
-                    inp.focus(); inp.value = '{PACZKOMAT}';
-                    inp.dispatchEvent(new Event('input', {{bubbles:true}}));
-                    break;
-                }}
+            const inp = document.querySelector('input[name="easypack-search"], input.search-input');
+            if (inp) {{
+                inp.focus(); inp.value = '{PACZKOMAT}';
+                inp.dispatchEvent(new Event('input', {{bubbles:true}}));
+                inp.dispatchEvent(new Event('keyup', {{bubbles:true}}));
             }}
         }}""")
         await asyncio.sleep(3)
@@ -225,8 +223,8 @@ async def checkout(page):
         }""")
     await asyncio.sleep(2)
 
-    # Click Dalej
-    await page.locator('.js-cart-next').click(timeout=5000)
+    # Click Dalej (force=True because InPost widget may block pointer events)
+    await page.locator('.js-cart-next').click(force=True, timeout=5000)
     await asyncio.sleep(4)
     # Debug: check what tab we're on
     tab_info = await page.evaluate("""() => {
@@ -249,8 +247,8 @@ async def checkout(page):
         pass
     await asyncio.sleep(1)
 
-    # Click Przejdź dalej (.js-cart-next)
-    await page.locator('.js-cart-next').click(timeout=5000)
+    # Click Przejdź dalej (.js-cart-next) force=True
+    await page.locator('.js-cart-next').click(force=True, timeout=5000)
     await asyncio.sleep(4)
     # Debug: check tab
     tab_info2 = await page.evaluate("""() => {
