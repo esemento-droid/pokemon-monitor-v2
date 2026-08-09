@@ -50,9 +50,12 @@ async def login(page, email, password):
 async def clear_cart(page):
     """Clear all items from cart"""
     await page.goto(f"{BASE_URL}/koszyk", wait_until='domcontentloaded', timeout=30000)
-    await asyncio.sleep(4)
+    await asyncio.sleep(5)
     for i in range(10):
-        empty = await page.evaluate("""() => document.body.innerText.toLowerCase().includes('koszyk jest pusty')""")
+        empty = await page.evaluate("""() => {
+            if (!document.body) return true;
+            return document.body.innerText.toLowerCase().includes('koszyk jest pusty');
+        }""")
         if empty:
             print(f"  Cart empty after {i} removals")
             return
@@ -63,7 +66,7 @@ async def clear_cart(page):
         await del_btn.click(force=True, timeout=5000)
         await asyncio.sleep(2)
         await page.goto(f"{BASE_URL}/koszyk", wait_until='domcontentloaded', timeout=30000)
-        await asyncio.sleep(3)
+        await asyncio.sleep(4)
     print("  Cart cleared (max attempts)")
 
 
