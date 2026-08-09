@@ -15,17 +15,26 @@ async def main():
 
         info = await page.evaluate("""() => {
             const results = [];
-            // Get ALL buttons and inputs on page
-            const els = document.querySelectorAll('button, input[type="submit"], form');
+            // Search broadly - any element that might be an ATC button
+            const els = document.querySelectorAll('*');
             for (const el of els) {
-                const text = (el.innerText || el.value || '').substring(0, 80);
-                const cls = (el.className || '').substring(0, 150);
-                const tag = el.tagName;
-                const action = el.getAttribute('action') || '';
-                const type = el.getAttribute('type') || '';
-                const name = el.getAttribute('name') || '';
-                const dataAttrs = Array.from(el.attributes).filter(a => a.name.startsWith('data-')).map(a => a.name + '=' + a.value.substring(0,50)).join(', ');
-                results.push({tag, text: text.replace(/\\n/g,' ').trim(), cls, action, type, name, data: dataAttrs});
+                const text = (el.innerText || el.textContent || '').trim();
+                const cls = (el.className || '');
+                // Look for anything with "dodaj" or "add" or "cart" in class/text
+                if ((typeof cls === 'string' && (cls.includes('add') || cls.includes('cart') || cls.includes('product') || cls.includes('buy'))) ||
+                    (text.toLowerCase().includes('dodaj do koszyka') && el.children.length === 0)) {
+                    const tag = el.tagName;
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        results.push({
+                            tag,
+                            text: text.substring(0, 80),
+                            cls: (typeof cls === 'string' ? cls : '').substring(0, 150),
+                            rect: `${Math.round(rect.x)}x${Math.round(rect.y)} ${Math.round(rect.width)}x${Math.round(rect.height)}`,
+                            data: Array.from(el.attributes || []).filter(a => a.name.startsWith('data-') || a.name === 'role').map(a => a.name + '=' + a.value.substring(0,50)).join(', ')
+                        });
+                    }
+                }
             }
             return JSON.stringify(results, null, 2);
         }""")
