@@ -14,7 +14,6 @@ PRODUCT_URL = "https://tcgumisia.pl/pokemon-tcg-ionos-bellibolt-ex-premium-colle
 PACZKOMAT = "WAW65N"
 
 TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "name": "Marian Wasilewski"}
-ACCOUNT_2 = {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"}
 
 
 async def login(page, email, password):
@@ -176,6 +175,16 @@ async def checkout(page):
     # Click Dalej
     await page.locator('.js-cart-next').click(timeout=5000)
     await asyncio.sleep(4)
+    # Debug: check what tab we're on
+    tab_info = await page.evaluate("""() => {
+        const url = location.href;
+        const text = document.body.innerText.substring(0, 200);
+        const activeTab = document.querySelector('.is-active, [class*="active"]');
+        const tabText = activeTab ? activeTab.innerText.substring(0, 30) : 'none';
+        return {url, text: text.substring(0, 150), tab: tabText};
+    }""")
+    print(f"  After Dalej: url={tab_info.get('url','?')}, tab={tab_info.get('tab','?')}")
+    print(f"  Page text: {tab_info.get('text','')[:100]}")
     print("  Tab 1 done (InPost + Blik + Dalej)")
 
     # Tab 2: Check regulamin (input[name="rules"])
@@ -190,6 +199,12 @@ async def checkout(page):
     # Click Przejdź dalej (.js-cart-next)
     await page.locator('.js-cart-next').click(timeout=5000)
     await asyncio.sleep(4)
+    # Debug: check tab
+    tab_info2 = await page.evaluate("""() => {
+        const text = document.body.innerText.substring(0, 200);
+        return text.substring(0, 150);
+    }""")
+    print(f"  After Przejdź dalej: {tab_info2[:100]}")
     print("  Tab 2 done (regulamin + Przejdź dalej)")
 
     # Tab 3: Click Zamawiam i płacę
@@ -253,44 +268,10 @@ async def main():
             print("  FAILED: could not add to cart")
 
         await ctx1.close()
-        print()
-
-        await asyncio.sleep(3)
-
-        # === TEST 2: Login esemento + ATC only ===
-        print("=" * 50)
-        print("TEST 2: Login esemento + add to cart")
-        print("=" * 50)
-        ctx2 = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080},
-            locale="pl-PL"
-        )
-        page2 = await ctx2.new_page()
-        await page2.add_init_script("""
-            Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
-            Object.defineProperty(navigator, 'languages', {get: () => ['pl-PL', 'pl', 'en-US', 'en']});
-            const getParameter = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(param) {
-                if (param === 37445) return 'Intel Inc.';
-                if (param === 37446) return 'Intel Iris OpenGL Engine';
-                return getParameter.call(this, param);
-            };
-        """)
-
-        await login(page2, ACCOUNT_2["email"], ACCOUNT_2["password"])
-        await clear_cart(page2)
-        ok = await add_to_cart(page2, PRODUCT_URL)
-        if ok:
-            print("  SUCCESS: Product in cart for esemento!")
-        else:
-            print("  FAILED: could not add to cart for esemento")
-
-        await ctx2.close()
 
         await browser.close()
         print("\n" + "=" * 50)
-        print("ALL TESTS DONE")
+        print("TEST DONE")
         print("=" * 50)
 
 
