@@ -1,64 +1,121 @@
-"""
-Scraper: battlestash.pl
-Silnik: WooCommerce Store API
-Metoda: aiohttp (API omija Cloudflare)
-Kategoria: 712 (Pokemon TCG)
-"""
+"""Battlestash.pl scraper - nodriver + proxy (CF blocks all non-homepage)"""
 import asyncio
+import os
+import json
 import logging
-import aiohttp
-import html
+import re
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger("monitor")
+
 SHOP = "battlestash.pl"
-API_URL = "https://battlestash.pl/wp-json/wc/store/v1/products"
-CATEGORY_ID = 712
-PER_PAGE = 100
-MAX_PAGES = 3
+URL = "https://battlestash.pl/kategoria-produktu/pokemon-tcg/"
+PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
+EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat",
+           "one piece", "lorcana", "yu-gi-oh", "digimon", "magic", "mata", "deck box"]
+
+EXTRACT_JS = """
+JSON.stringify((function(){
+    const result = [];
+    const items = document.querySelectorAll('.product, .type-product, li.product');
+    for (const item of items) {
+        try {
+            const nameEl = item.querySelector('.woocommerce-loop-product__title, h2, h3');
+            if (!nameEl) continue;
+            const name = nameEl.textContent.trim();
+            if (!name || name.length < 5) continue;
+            const link = item.querySelector('a[href*="/product/"], a.woocommerce-LoopProduct-link');
+            const href = link ? link.getAttribute('href') || '' : '';
+            const priceEl = item.querySelector('.price ins .amount, .price .amount, .price');
+            let price = '';
+            if (priceEl) {
+                const raw = priceEl.textContent.replace(/\\s/g, '').replace(/\\u00a0/g, '');
+                const m = raw.match(/([\\d.,]+)/);
+                if (m) price = m[1].replace('.', '').replace(',', '.');
+            }
+            const imgEl = item.querySelector('img');
+            const img = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
+            const addBtn = item.querySelector('.add_to_cart_button, [class*="add-to-cart"]');
+            const available = addBtn !== null;
+            const pidMatch = href.match(/\\/([^\\/]+)\\/?$/);
+            const pid = pidMatch ? pidMatch[1] : '';
+            result.push({pid, name, price, url: href, img, available});
+        } catch(e) {}
+    }
+    return result;
+})())
+"""
 
 
 async def get_products():
+    import nodriver as uc
+
     products = []
+
+    browser_args = [
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+    ]
+    if PROXY_ADDR and PROXY_ADDR != "none":
+        browser_args.append(f"--proxy-server=http://{PROXY_ADDR}")
+
     try:
-        async with aiohttp.ClientSession() as session:
-            for page in range(1, MAX_PAGES + 1):
-                url = f"{API_URL}?category={CATEGORY_ID}&per_page={PER_PAGE}&page={page}"
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), proxy="http://127.0.0.1:8888") as resp:
-                    if resp.status != 200:
-                        logger.error(f"[battlestash] HTTP {resp.status}")
-                        break
-                    data = await resp.json()
-                if not data:
-                    break
-                for p in data:
-                    pid = str(p.get("id", ""))
-                    name = html.unescape(p.get("name", ""))
-                    link = p.get("permalink", "")
-                    # Dostepnosc
-                    available = p.get("is_in_stock", False)
-                    # Cena (w groszach)
-                    prices = p.get("prices", {})
-                    price_raw = prices.get("price", "0")
-                    try:
-                        price = f"{int(price_raw) / 100:.2f} PLN"
-                    except (ValueError, TypeError):
-                        price = "brak"
-                    # Obrazek
-                    images = p.get("images", [])
-                    image = images[0].get("src", "") if images else ""
-                    products.append({
-                        "id": f"battlestash_{pid}",
-                        "name": name,
-                        "price": price,
-                        "shop": SHOP,
-                        "url": link,
-                        "image": image,
-                        "stock": 1 if available else 0,
-                        "available": available,
-                    })
-                if len(data) < PER_PAGE:
-                    break
+        browser = await uc.start(headless=False, sandbox=False, browser_args=browser_args)
     except Exception as e:
-        logger.error(f"[battlestash] Error: {e}")
-    logger.info(f"[battlestash] {len(products)} produktow ({sum(1 for p in products if p['available'])} avail)")
+        log.error(f"[battlestash] Failed to start browser: {e}")
+        return []
+
+    try:
+        page = await browser.get(URL)
+        await asyncio.sleep(12)
+
+        title = await page.evaluate("document.title")
+        if not title or "moment" in title.lower() or "attention" in title.lower():
+            log.warning("[battlestash] CF not resolved, waiting...")
+            await asyncio.sleep(10)
+            title = await page.evaluate("document.title")
+            if not title or "moment" in title.lower():
+                log.error("[battlestash] CF block")
+                return []
+
+        raw = await page.evaluate(EXTRACT_JS)
+        if not raw:
+            return []
+
+        try:
+            items = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+        seen = set()
+        for item in items:
+            pid = item.get("pid", "")
+            name = item.get("name", "")
+            if not pid or not name or pid in seen:
+                continue
+            if any(ex in name.lower() for ex in EXCLUDE):
+                continue
+            seen.add(pid)
+            price_val = item.get("price", "")
+            price_str = f"{price_val} zl" if price_val else "brak"
+            products.append({
+                "id": f"battlestash_{pid}",
+                "name": name,
+                "price": price_str,
+                "shop": SHOP,
+                "url": item.get("url", ""),
+                "image": item.get("img", ""),
+                "stock": None,
+                "available": item.get("available", False),
+            })
+
+    except Exception as e:
+        log.error(f"[battlestash] Error: {e}")
+    finally:
+        try:
+            browser.stop()
+        except:
+            pass
+
+    print(f"[BATTLESTASH] {len(products)} produktow")
     return products
