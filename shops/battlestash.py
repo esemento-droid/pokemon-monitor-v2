@@ -24,7 +24,6 @@ JSON.stringify((function(){
             if (!nameEl) continue;
             const name = nameEl.textContent.trim();
             if (!name || name.length < 5) continue;
-            if (!name.toLowerCase().includes('pokemon') && !name.toLowerCase().includes('pokémon')) continue;
             const link = item.querySelector('a[href*="/product/"], a.woocommerce-LoopProduct-link');
             const href = link ? link.getAttribute('href') || '' : '';
             const priceEl = item.querySelector('.price ins .amount, .price .amount, .price');
@@ -99,7 +98,11 @@ async def get_products():
             name = item.get("name", "")
             if not pid or not name or pid in seen:
                 continue
-            if any(ex in name.lower() for ex in EXCLUDE):
+            # Pokemon only
+            name_lower = name.lower()
+            if "pokemon" not in name_lower and "pokémon" not in name_lower:
+                continue
+            if any(ex in name_lower for ex in EXCLUDE):
                 continue
             seen.add(pid)
             price_val = item.get("price", "")
