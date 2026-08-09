@@ -40,6 +40,8 @@ def parse_products(html, seen_ids):
         name = re.sub(r"^Wi.cej informacji o ", "", name)
         if not name or len(name) < 5:
             continue
+        if "pokemon" not in name.lower() and "pokémon" not in name.lower():
+            continue
         if any(ex in name.lower() for ex in EXCLUDE):
             continue
         # ID from href

@@ -11,7 +11,8 @@ SHOP = "battlestash.pl"
 URL = "https://battlestash.pl/kategoria-produktu/pokemon-tcg/"
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
 EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat",
-           "one piece", "lorcana", "yu-gi-oh", "digimon", "magic", "mata", "deck box"]
+           "one piece", "lorcana", "yu-gi-oh", "digimon", "magic", "mata", "deck box",
+           "podobne produkty", "keyforge", "ultimate guard", "vampire"]
 
 EXTRACT_JS = """
 JSON.stringify((function(){
@@ -23,14 +24,19 @@ JSON.stringify((function(){
             if (!nameEl) continue;
             const name = nameEl.textContent.trim();
             if (!name || name.length < 5) continue;
+            if (!name.toLowerCase().includes('pokemon') && !name.toLowerCase().includes('pokémon')) continue;
             const link = item.querySelector('a[href*="/product/"], a.woocommerce-LoopProduct-link');
             const href = link ? link.getAttribute('href') || '' : '';
             const priceEl = item.querySelector('.price ins .amount, .price .amount, .price');
             let price = '';
             if (priceEl) {
                 const raw = priceEl.textContent.replace(/\\s/g, '').replace(/\\u00a0/g, '');
-                const m = raw.match(/([\\d.,]+)/);
-                if (m) price = m[1].replace('.', '').replace(',', '.');
+                const m = raw.match(/(\\d+)[,\\.](\\d{2})/);
+                if (m) price = m[1] + '.' + m[2];
+                else {
+                    const m2 = raw.match(/(\\d+)/);
+                    if (m2) price = m2[1];
+                }
             }
             const imgEl = item.querySelector('img');
             const img = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
