@@ -240,15 +240,25 @@ async def login(page, email, password):
 
 async def clear_cart(page):
     """Go to /koszyk and click remove buttons for all items."""
-    await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(4)
+    await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=45000)
+    await asyncio.sleep(5)
+
+    # Wait for PoW if needed
+    for _ in range(10):
+        has_pow = await page.evaluate("""() => {
+            const text = document.body ? (document.body.innerText || '') : '';
+            return text.includes('Weryfikacja') || text.includes('nodea');
+        }""")
+        if not has_pow:
+            break
+        await asyncio.sleep(2)
 
     # Remove items one by one (Sellingo: div.js-cart-product-delete)
     for attempt in range(10):
-        # Check if cart is empty
+        # Check if cart is empty (null-safe)
         is_empty = await page.evaluate("""() => {
-            const text = document.body.innerText.toLowerCase();
-            return text.includes('koszyk jest pusty') || text.includes('brak produktów');
+            const text = document.body ? (document.body.innerText || '').toLowerCase() : '';
+            return text.includes('koszyk jest pusty') || text.includes('brak produktów') || !text.includes('PLN');
         }""")
         if is_empty:
             log.info("Cart is empty")
@@ -269,8 +279,18 @@ async def clear_cart(page):
         await asyncio.sleep(2)
 
         # Reload to see updated cart
-        await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(3)
+        await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=45000)
+        await asyncio.sleep(4)
+
+        # Wait for PoW again after reload
+        for _ in range(10):
+            has_pow = await page.evaluate("""() => {
+                const text = document.body ? (document.body.innerText || '') : '';
+                return text.includes('Weryfikacja') || text.includes('nodea');
+            }""")
+            if not has_pow:
+                break
+            await asyncio.sleep(2)
 
 
 async def add_to_cart(page, product_url, qty=1):
@@ -374,7 +394,7 @@ async def checkout(page, account, test_mode=False):
 
     # Check cart has items — look for product names, prices, or quantity inputs
     has_items = await page.evaluate("""() => {
-        const text = document.body.innerText;
+        const text = document.body ? (document.body.innerText || '') : '';
         // Sellingo cart shows "Metoda dostawy" only when there are items
         // Empty cart says "Twój koszyk jest pusty" or similar
         if (text.includes('koszyk jest pusty') || text.includes('Brak produktów')) return false;
@@ -386,13 +406,13 @@ async def checkout(page, account, test_mode=False):
         # Second check - maybe page loaded slowly
         await asyncio.sleep(3)
         has_items = await page.evaluate("""() => {
-            const text = document.body.innerText;
+            const text = document.body ? (document.body.innerText || '') : '';
             if (text.includes('koszyk jest pusty') || text.includes('Brak produktów')) return false;
             return text.includes('Metoda dostawy') || text.includes('Ilość') || 
                    (text.includes('PLN') && text.includes('Dalej'));
         }""")
     if not has_items:
-        body = await page.evaluate("() => document.body.innerText.substring(0, 300)")
+        body = await page.evaluate("() => document.body ? (document.body.innerText || '').substring(0, 300) : ''")
         log.error(f"Cart appears empty! Page text: {body[:200]}")
         return False
 
@@ -501,7 +521,7 @@ async def checkout(page, account, test_mode=False):
 
     # Verify paczkomat was selected (check if widget closed or confirmation text appeared)
     paczkomat_ok = await page.evaluate(f"""() => {{
-        const body = document.body.innerText.toUpperCase();
+        const body = document.body ? (document.body.innerText || '').toUpperCase() : '';
         return body.includes('{PACZKOMAT}');
     }}""")
     if paczkomat_ok:
@@ -628,7 +648,7 @@ async def checkout(page, account, test_mode=False):
 
     # Verify we're on payment tab
     on_payment = await page.evaluate("""() => {
-        const text = document.body.innerText.toLowerCase();
+        const text = document.body ? (document.body.innerText || '').toLowerCase() : '';
         return text.includes('zamawiam i płacę') || text.includes('zamawiam') || text.includes('podsumowanie');
     }""")
     if not on_payment:
@@ -644,7 +664,7 @@ async def checkout(page, account, test_mode=False):
         }""")
         log.info(f"[TEST MODE] 'Zamawiam i płacę' button found: {submit_found}")
         if not submit_found:
-            body = await page.evaluate("() => document.body.innerText.substring(0, 500)")
+            body = await page.evaluate("() => document.body ? (document.body.innerText || '').substring(0, 500) : ''")
             log.error(f"[TEST MODE] Submit button not found! Page text: {body[:200]}")
             return False
         # TEST MODE: click submit to verify full flow (real order on test account!)
@@ -680,7 +700,7 @@ async def checkout(page, account, test_mode=False):
         return True
 
     # Check if order was placed (sometimes no redirect, just confirmation page)
-    body = await page.evaluate("() => document.body.innerText.substring(0, 500)")
+    body = await page.evaluate("() => document.body ? (document.body.innerText || '').substring(0, 500) : ''")
     if "dziękujemy" in body.lower() or "zamówienie" in body.lower() or "potwierdzenie" in body.lower():
         log.info(f"Order confirmed (no redirect)! Page: {body[:100]}")
         return True
