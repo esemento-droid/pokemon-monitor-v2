@@ -168,11 +168,11 @@ async def checkout(page):
     search = page.locator('input[name="easypack-search"]').first
     try:
         await search.click(timeout=5000)
-        await search.fill(PACZKOMAT)
-        await asyncio.sleep(3)
+        await search.fill('')  # Clear first
+        await search.type(PACZKOMAT, delay=100)  # Type char by char to trigger search
+        await asyncio.sleep(4)
     except Exception as e:
         print(f"  Search input error: {e}")
-        # Fallback
         await page.evaluate(f"""() => {{
             const inp = document.querySelector('input[name="easypack-search"], input.search-input');
             if (inp) {{
@@ -181,7 +181,7 @@ async def checkout(page):
                 inp.dispatchEvent(new Event('keyup', {{bubbles:true}}));
             }}
         }}""")
-        await asyncio.sleep(3)
+        await asyncio.sleep(4)
 
     # Debug: check if dropdown appeared
     dropdown = await page.evaluate(f"""() => {{
