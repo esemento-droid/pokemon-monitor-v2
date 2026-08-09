@@ -27,6 +27,12 @@ def parse_page(html):
         price = tile.get("price", "")
         if not pid or not name or len(name) < 5:
             continue
+        if price:
+            try:
+                if float(price) < 30:
+                    continue
+            except (ValueError, TypeError):
+                pass
         if any(ex in name.lower() for ex in EXCLUDE):
             continue
         text = tile.get_text(" ", strip=True).lower()

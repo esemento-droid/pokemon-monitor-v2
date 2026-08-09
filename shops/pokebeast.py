@@ -16,7 +16,6 @@ CATEGORIES = [
     "/pl/c/Pokemon-JPN/49",
 ]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "energia", "energy"]
 
 
 async def get_products():
@@ -55,8 +54,6 @@ async def get_products():
                         seen_ids.add(pid)
                         name = tile.get("name", "")
                         if not name or len(name) < 5:
-                            continue
-                        if any(ex in name.lower() for ex in EXCLUDE):
                             continue
                         price_val = tile.get("price", "0")
                         try:
