@@ -12,7 +12,7 @@ URL = "https://www.proshop.pl/Pokemon/Pokemon?f~pokmon_tcg=bokse~booster-tin-og-
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
 EXCLUDE = ["portfolio", "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro",
            "ultrapro", "plush", "figure", "figurk", "playset", "carry case", "clip", "play 'n",
-           "playmat", "mata ", "puzzle", "lego"]
+           "playmat", "mata ", "puzzle", "lego", "deck", "battle deck", "league battle"]
 
 EXTRACT_JS = """
 JSON.stringify((function(){
