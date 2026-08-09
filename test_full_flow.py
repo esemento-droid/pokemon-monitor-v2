@@ -94,13 +94,10 @@ async def checkout(page):
     await page.goto(f"{BASE_URL}/koszyk", wait_until='domcontentloaded', timeout=30000)
     await asyncio.sleep(4)
 
-    # Tab 1: Select InPost Paczkomat
-    await page.evaluate("""() => {
-        const labels = Array.from(document.querySelectorAll('label, div, span, li'));
-        const inpost = labels.find(el => (el.innerText || '').toLowerCase().includes('inpost'));
-        if (inpost) { const r = inpost.querySelector('input[type="radio"]') || inpost; r.click(); }
-    }""")
-    await asyncio.sleep(2)
+    # Tab 1: Select InPost Paczkomat (radio shipment=15)
+    inpost = page.locator('input[name="shipment"][value="15"]')
+    await inpost.click(force=True, timeout=5000)
+    await asyncio.sleep(3)
 
     # Click Wyszukaj
     await page.evaluate("""() => {
@@ -143,44 +140,29 @@ async def checkout(page):
         const w = btns.find(el => (el.innerText || '').toLowerCase().includes('wybierz') && el.offsetParent !== null);
         if (w) w.click();
     }""")
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
 
-    # Select tpay
-    await page.evaluate("""() => {
-        const labels = Array.from(document.querySelectorAll('label, div, span, li'));
-        const t = labels.find(el => (el.innerText || '').toLowerCase().includes('tpay') || (el.innerText || '').toLowerCase().includes('blik'));
-        if (t) { const r = t.querySelector('input[type="radio"]') || t; r.click(); }
-    }""")
+    # Select Blik/Karta (radio payment=25, force because may be hidden)
+    blik = page.locator('input[name="payment"][value="25"]')
+    await blik.click(force=True, timeout=5000)
     await asyncio.sleep(2)
 
     # Click Dalej
-    await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, a, input[type="submit"]'));
-        const d = btns.find(el => (el.innerText || el.value || '').toLowerCase().trim().includes('dalej'));
-        if (d) d.click();
-    }""")
+    await page.locator('.js-cart-next').click(timeout=5000)
     await asyncio.sleep(4)
-    print("  Tab 1 done (InPost + tpay + Dalej)")
+    print("  Tab 1 done (InPost + Blik + Dalej)")
 
-    # Tab 2: Check regulamin
-    await page.evaluate("""() => {
-        const cbs = document.querySelectorAll('input[type="checkbox"]');
-        for (const cb of cbs) {
-            const label = cb.closest('label') || cb.parentElement;
-            const text = label ? label.innerText.toLowerCase() : '';
-            if (text.includes('regulamin') || text.includes('oświadczam') || text.includes('akceptuj')) {
-                if (!cb.checked) cb.click();
-            }
-        }
-    }""")
+    # Tab 2: Check regulamin (input[name="rules"])
+    rules = page.locator('input[name="rules"]')
+    try:
+        if await rules.count() > 0 and not await rules.is_checked():
+            await rules.click(force=True, timeout=5000)
+    except:
+        pass
     await asyncio.sleep(1)
 
-    # Click Przejdź dalej
-    await page.evaluate("""() => {
-        const btns = Array.from(document.querySelectorAll('button, a, input[type="submit"]'));
-        const d = btns.find(el => (el.innerText || el.value || '').toLowerCase().includes('przejdź dalej'));
-        if (d) d.click();
-    }""")
+    # Click Przejdź dalej (.js-cart-next)
+    await page.locator('.js-cart-next').click(timeout=5000)
     await asyncio.sleep(4)
     print("  Tab 2 done (regulamin + Przejdź dalej)")
 
