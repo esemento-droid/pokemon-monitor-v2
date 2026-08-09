@@ -39,12 +39,19 @@ async def main():
         await pass_input.fill('mt!cSsphud4Zhnz')
         await asyncio.sleep(0.5)
 
-        # Listen for network requests
+        # Listen for network requests AND responses
         requests_log = []
         def on_request(req):
             if 'login' in req.url.lower() or 'auth' in req.url.lower() or req.method == 'POST':
                 requests_log.append(f'{req.method} {req.url}')
+        
+        responses_log = []
+        def on_response(resp):
+            if 'login' in resp.url.lower() or 'account' in resp.url.lower():
+                responses_log.append(f'{resp.status} {resp.url}')
+        
         page.on('request', on_request)
+        page.on('response', on_response)
 
         # Click login button using Playwright click
         login_btn = page.locator('.js-submit-login')
@@ -54,6 +61,9 @@ async def main():
         # Show network requests
         print(f'Network requests after login click: {len(requests_log)}')
         for r in requests_log:
+            print(f'  {r}')
+        print(f'Responses: {len(responses_log)}')
+        for r in responses_log:
             print(f'  {r}')
 
         # Check cookies
