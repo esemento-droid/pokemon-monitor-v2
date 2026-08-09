@@ -120,14 +120,8 @@ async def shop_worker(name, module):
     Kazdy dziala w petli: scrape → detect → save → sleep.
     NIE czeka na inne sklepy. NIE uzywa lockow.
     """
-    # Stagger start — nodriver shops get extra spacing to avoid Chrome conflicts
-    if name in NODRIVER_SHOPS:
-        # Space nodriver shops 30s apart to avoid concurrent Chrome launches
-        nodriver_list = sorted(NODRIVER_SHOPS)
-        idx = nodriver_list.index(name) if name in nodriver_list else 0
-        await asyncio.sleep(30 + idx * 30)
-    else:
-        await asyncio.sleep(random.uniform(0, 30))
+    # Stagger start — spread HTTP shops over first 30s
+    await asyncio.sleep(random.uniform(0, 30))
 
     scan_stats[name] = {"ok": 0, "err": 0, "last": None, "last_scan_time": 0}
 
@@ -305,8 +299,75 @@ async def _send_alarm(name, error):
 
 
 # ============================================================
-# MAIN — entry point
+# NODRIVER SUBPROCESS WORKER — osobny proces per Chrome shop
+# Identyczna logika jak orchestrator: spawn runner.py, timeout 300s
 # ============================================================
+VENV_PYTHON = os.path.join(DIR, "venv", "bin", "python3")
+RUNNER = os.path.join(DIR, "runner.py")
+
+
+async def nodriver_worker(name):
+    """
+    Worker dla nodriver/Chrome shops — uruchamia runner.py jako subprocess.
+    Każdy Chrome to osobny process — nie blokuje event loop, nie crashuje innych.
+    """
+    await asyncio.sleep(random.uniform(5, 30))
+    scan_stats[name] = {"ok": 0, "err": 0, "last": None, "last_scan_time": 0}
+
+    while not _shutdown:
+        start = datetime.now()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                VENV_PYTHON, "-u", RUNNER, name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=DIR,
+                start_new_session=True,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT_NODRIVER)
+            except asyncio.TimeoutError:
+                logger.warning(f"[{name}] TIMEOUT {TIMEOUT_NODRIVER}s (subprocess)")
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                await proc.wait()
+                scan_stats[name]["err"] += 1
+                if scan_stats[name]["err"] == 5:
+                    await _send_alarm(name, "5x timeout subprocess")
+                await asyncio.sleep(_get_delay(name, error=True))
+                continue
+
+            output = stdout.decode().strip()
+            if output:
+                for line in output.split("\n"):
+                    if line.strip():
+                        logger.info(line.strip())
+
+            if proc.returncode != 0:
+                err_msg = stderr.decode().strip()[-200:] if stderr else "unknown"
+                logger.error(f"[{name}] EXIT {proc.returncode}: {err_msg}")
+                scan_stats[name]["err"] += 1
+                if scan_stats[name]["err"] == 5:
+                    await _send_alarm(name, err_msg)
+            else:
+                scan_time = (datetime.now() - start).total_seconds()
+                scan_stats[name]["ok"] += 1
+                scan_stats[name]["err"] = 0
+                scan_stats[name]["last"] = datetime.now().isoformat()
+                scan_stats[name]["last_scan_time"] = scan_time
+
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            logger.error(f"[{name}] SUBPROCESS ERROR: {e}")
+            scan_stats[name]["err"] += 1
+
+        delay = _get_delay(name, error=(scan_stats[name]["err"] > 0))
+        await asyncio.sleep(delay)
+
+
 async def main():
     global _shutdown
 
@@ -329,19 +390,24 @@ async def main():
     slow_count = sum(1 for n, _ in shops if n in SLOW_SHOPS or n in VERY_SLOW_SHOPS)
     fast_count = len(shops) - nodriver_count - slow_count
 
-    logger.info(f"Sklepy: {len(shops)} total ({fast_count} fast, {slow_count} slow, {nodriver_count} nodriver)")
-    logger.info(f"Architektura: 1 proces, {len(shops)} niezaleznych async tasks")
+    logger.info(f"Sklepy: {len(shops)} total ({fast_count} fast, {slow_count} slow, {nodriver_count} nodriver/subprocess)")
+    logger.info(f"Architektura: HYBRID — HTTP shops in-process, Chrome shops subprocess")
     logger.info(f"Zero lockow, zero kolejek — kazdy sklep osobno")
-    logger.info(f"Timeouts: default={TIMEOUT_DEFAULT}s, slow={TIMEOUT_SLOW}s, nodriver={TIMEOUT_NODRIVER}s")
+    logger.info(f"Timeouts: default={TIMEOUT_DEFAULT}s, slow={TIMEOUT_SLOW}s, nodriver={TIMEOUT_NODRIVER}s (subprocess)")
     logger.info(f"Discord: fire-and-forget queue (max 500, {25}/min)")
 
-    # Create independent worker per shop
+    # Create workers — route by type
     tasks = []
     for name, module in shops:
-        tasks.append(asyncio.create_task(shop_worker(name, module), name=f"shop_{name}"))
+        if name in NODRIVER_SHOPS:
+            # Chrome shops → subprocess (osobny process, nie blokuje event loop)
+            tasks.append(asyncio.create_task(nodriver_worker(name), name=f"pw_{name}"))
+        else:
+            # HTTP shops → in-process async (szybkie, lekkie)
+            tasks.append(asyncio.create_task(shop_worker(name, module), name=f"shop_{name}"))
     tasks.append(asyncio.create_task(heartbeat_worker(), name="heartbeat"))
 
-    logger.info(f"Uruchomiono {len(shops)} workerow + heartbeat")
+    logger.info(f"Uruchomiono {fast_count + slow_count} async workerow + {nodriver_count} subprocess workerow + heartbeat")
 
     # Graceful shutdown on SIGTERM/SIGINT
     def signal_handler():
