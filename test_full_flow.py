@@ -11,7 +11,7 @@ from patchright.async_api import async_playwright
 BASE_URL = "https://tcgumisia.pl"
 PROXY = "http://127.0.0.1:8888"
 PRODUCT_URL = "https://tcgumisia.pl/pokemon-tcg-ionos-bellibolt-ex-premium-collection"
-PACZKOMAT = "PAD04M"
+PACZKOMAT = "WAW65N"
 
 TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "name": "Marian Wasilewski"}
 ACCOUNT_2 = {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"}
