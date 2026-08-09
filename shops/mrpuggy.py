@@ -14,7 +14,7 @@ CATEGORIES = [
 
 async def fetch_page(session, url):
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15), allow_redirects=True, max_redirects=5) as resp:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15), allow_redirects=True, max_redirects=5, proxy="http://127.0.0.1:8888") as resp:
             if resp.status != 200:
                 return None
             return await resp.text()

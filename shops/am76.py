@@ -13,8 +13,10 @@ PREORDER_URL = BASE + "/przedsprzedaz"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 EXCLUDE = ["album", "sleeve", "koszulk", "toploader", "binder", "ultra pro", "playmat"]
 
+PROXY = "http://127.0.0.1:8888"
+
 async def fetch_page(session, url):
-    async with session.get(url, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+    async with session.get(url, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=30), proxy=PROXY) as resp:
         if resp.status != 200:
             return ""
         raw = await resp.read()

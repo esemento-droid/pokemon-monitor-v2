@@ -23,7 +23,7 @@ async def get_products():
         async with aiohttp.ClientSession() as session:
             for page in range(1, MAX_PAGES + 1):
                 url = f"{API_URL}?category={CATEGORY_ID}&per_page={PER_PAGE}&page={page}"
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), proxy="http://127.0.0.1:8888") as resp:
                     if resp.status != 200:
                         logger.error(f"[battlestash] HTTP {resp.status}")
                         break
