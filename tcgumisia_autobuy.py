@@ -131,32 +131,16 @@ async def login(page, email, password):
                 }""")
             await asyncio.sleep(2)
 
-            # Fill email in login form
-            escaped_email = email.replace("'", "\\'")
-            escaped_pass = password.replace("\\", "\\\\").replace("'", "\\'")
-
-            await page.evaluate(f"""() => {{
-                const form = document.querySelector('.js-login-form');
-                if (!form) return;
-                const inputs = form.querySelectorAll('input');
-                for (const inp of inputs) {{
-                    const type = (inp.type || '').toLowerCase();
-                    const placeholder = (inp.placeholder || '').toLowerCase();
-                    if (type === 'email' || placeholder.includes('e-mail') || placeholder.includes('email')) {{
-                        inp.focus();
-                        inp.value = '{escaped_email}';
-                        inp.dispatchEvent(new Event('input', {{bubbles:true}}));
-                        inp.dispatchEvent(new Event('change', {{bubbles:true}}));
-                    }}
-                    if (type === 'password' || placeholder.includes('has')) {{
-                        inp.focus();
-                        inp.value = '{escaped_pass}';
-                        inp.dispatchEvent(new Event('input', {{bubbles:true}}));
-                        inp.dispatchEvent(new Event('change', {{bubbles:true}}));
-                    }}
-                }}
-            }}""")
-            await asyncio.sleep(1)
+            # Fill email in login form using PW fill() (triggers proper key events)
+            email_input = page.locator('.js-login-form input[type="email"], .js-login-form input[placeholder*="E-mail"]').first
+            pass_input = page.locator('.js-login-form input[type="password"]').first
+            
+            await email_input.click(timeout=5000)
+            await email_input.fill(email)
+            await asyncio.sleep(0.5)
+            await pass_input.click(timeout=5000)
+            await pass_input.fill(password)
+            await asyncio.sleep(0.5)
 
             # Click "Zaloguj się" button (class: js-submit-login)
             try:
@@ -167,21 +151,34 @@ async def login(page, email, password):
                     const btn = document.querySelector('.js-submit-login');
                     if (btn) btn.click();
                 }""")
-            await asyncio.sleep(5)
+            await asyncio.sleep(6)
 
-            # Verify login — page should reload/redirect, check for account content
-            content = await page.content()
-            page_text = await page.evaluate("() => document.body.innerText.toLowerCase()")
-            if "wyloguj" in page_text or "moje zamówienia" in page_text or "historia zamówień" in page_text:
-                return True
-
-            # Also check if the cart header now shows user info
+            # Verify login — check if cart shows a value or account CSS loaded
+            # Sellingo doesn't show "wyloguj" on main page, but loads account styles
+            page_text = await page.evaluate("() => document.body.innerText")
+            
+            # Check if cart header shows non-zero value (means session is active with items)
+            # OR check if account-aside CSS loaded (sign of successful login)
             logged = await page.evaluate("""() => {
-                // After login modal closes, check if "Konto" changed or wyloguj appeared
-                const text = document.body.innerText.toLowerCase();
-                return text.includes('wyloguj') || text.includes('moje konto') || text.includes('zamówienia');
+                // Check if account module loaded
+                const accountStyle = document.querySelector('link[href*="aside-account"]');
+                if (accountStyle) return true;
+                // Check response by looking for login error message
+                const errorEl = document.querySelector('.js-login-form .error, .js-login-form [class*="error"]');
+                if (errorEl && errorEl.innerText.includes('nieprawidłowe')) return false;
+                // If modal closed, likely success
+                const modal = document.querySelector('.js-login-form');
+                if (modal && !modal.closest('.is-active, .is-open, [class*="active"]')) return true;
+                return false;
             }""")
             if logged:
+                return True
+
+            # Fallback: navigate to /koszyk and see if it shows products or "kup bez rejestracji"
+            await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(3)
+            cart_text = await page.evaluate("() => document.body.innerText.toLowerCase()")
+            if "kup bez rejestracji" not in cart_text and "koszyk jest pusty" not in cart_text:
                 return True
 
             log.warning(f"Login attempt {attempt+1} failed for {email}, page_url={page.url}")
