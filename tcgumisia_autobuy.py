@@ -239,52 +239,101 @@ async def add_to_cart(page, product_url, qty=1):
             }}""")
             await asyncio.sleep(1)
 
-    # Click "Dodaj do koszyka" using Playwright locator (triggers proper event handlers)
+    # Click "Dodaj do koszyka" — Sellingo uses a form POST to add items
+    # First try to find and submit the ATC form directly
     clicked = False
-    try:
-        atc_btn = page.locator('button:has-text("Dodaj do koszyka"), a:has-text("Dodaj do koszyka"), input[value*="Dodaj do koszyka"]').first
-        await atc_btn.click(timeout=5000)
-        clicked = True
-    except Exception:
-        # Fallback: JS click
-        clicked = await page.evaluate("""() => {
-            const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
-            const atcBtn = btns.find(el => {
-                const text = (el.innerText || el.value || '').toLowerCase();
-                return text.includes('dodaj do koszyka') || text.includes('do koszyka');
-            });
-            if (atcBtn && !atcBtn.disabled) {
-                atcBtn.click();
-                return true;
+    
+    # Method 1: Find the form containing ATC button and submit it via native form submission
+    form_submitted = await page.evaluate("""() => {
+        // Look for form with action containing 'koszyk' or 'cart' or 'basket'
+        const forms = document.querySelectorAll('form');
+        for (const form of forms) {
+            const action = (form.action || '').toLowerCase();
+            const html = form.innerHTML.toLowerCase();
+            if (action.includes('koszyk') || action.includes('cart') || action.includes('basket') || 
+                html.includes('dodaj do koszyka') || html.includes('do koszyka')) {
+                // Found the ATC form - try clicking its submit button
+                const btn = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+                if (btn) { btn.click(); return 'btn_click'; }
+                // Or submit directly
+                form.submit();
+                return 'form_submit';
             }
-            return false;
-        }""")
+        }
+        return null;
+    }""")
+    
+    if form_submitted:
+        clicked = True
+        log.info(f"ATC via form: {form_submitted}")
+    else:
+        # Method 2: PW locator click (real mouse event)
+        try:
+            atc_btn = page.locator('button:has-text("Dodaj do koszyka")').first
+            await atc_btn.click(force=True, timeout=5000)
+            clicked = True
+            log.info("ATC via PW locator force click")
+        except Exception:
+            # Method 3: Try submitting via URL directly (Sellingo pattern: /koszyk/dodaj/PRODUCT_ID)
+            pid_match = re.search(r'/(\d+)$', product_url.rstrip('/'))
+            if not pid_match:
+                # Try to find product ID in page source
+                pid_from_page = await page.evaluate("""() => {
+                    const form = document.querySelector('form[action*="koszyk"], form[action*="cart"]');
+                    if (form) return form.action;
+                    const input = document.querySelector('input[name="product_id"], input[name="id"]');
+                    if (input) return input.value;
+                    return null;
+                }""")
+                log.info(f"ATC form/id found in page: {pid_from_page}")
+            
+            # Fallback JS click
+            clicked = await page.evaluate("""() => {
+                const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
+                const atcBtn = btns.find(el => {
+                    const text = (el.innerText || el.value || '').toLowerCase();
+                    return text.includes('dodaj do koszyka') || text.includes('do koszyka');
+                });
+                if (atcBtn && !atcBtn.disabled) {
+                    atcBtn.click();
+                    return true;
+                }
+                return false;
+            }""")
+            if clicked:
+                log.info("ATC via JS click fallback")
 
     if not clicked:
         log.warning(f"ATC button not found or disabled for {product_url}")
         return False
 
-    # Wait for cart popup / confirmation
-    await asyncio.sleep(4)
+    # Wait for response
+    await asyncio.sleep(5)
+    
+    # Debug: log current page state after ATC
+    post_atc_info = await page.evaluate("""() => {
+        const text = document.body.innerText.substring(0, 300);
+        const url = window.location.href;
+        const cartBadge = document.querySelector('[class*="cart"] [class*="count"], [class*="basket"] [class*="count"], .cart-count');
+        const badge = cartBadge ? cartBadge.innerText : 'no badge';
+        return {text: text, url: url, badge: badge};
+    }""")
+    log.info(f"Post-ATC state: url={post_atc_info.get('url','?')}, badge={post_atc_info.get('badge','?')}, text={post_atc_info.get('text','')[:100]}")
 
-    # Verify product was added — check for popup with "Przejdź do koszyka" or cart count badge
-    added = await page.evaluate("""() => {
+    # Check if redirected to cart page already
+    if '/koszyk' in page.url:
+        log.info("Redirected to cart page after ATC — product in cart!")
+        return True
+
+    # Check for popup "Przejdź do koszyka"
+    has_popup = await page.evaluate("""() => {
         const text = document.body.innerText.toLowerCase();
-        // Sellingo shows popup with "Przejdź do koszyka" or button changes to "Dodano do koszyka"
-        return text.includes('przejdź do koszyka') || text.includes('dodano do koszyka') || 
-               text.includes('produkt został dodany') || text.includes('koszyk');
+        return text.includes('przejdź do koszyka') || text.includes('dodano do koszyka') || text.includes('produkt dodany');
     }""")
-    if not added:
-        log.warning(f"Product may not have been added to cart: {product_url}")
-
-    # Close popup if visible (click X or outside)
-    await page.evaluate("""() => {
-        const closeBtn = document.querySelector('.cart-popup-close, .popup-close, [class*="close"], button[aria-label="Close"]');
-        if (closeBtn) { closeBtn.click(); return; }
-        const overlay = document.querySelector('.popup-overlay, .modal-overlay, [class*="overlay"]');
-        if (overlay) overlay.click();
-    }""")
-    await asyncio.sleep(1)
+    if has_popup:
+        log.info("Cart popup detected after ATC")
+    else:
+        log.warning("No cart popup detected — ATC may have failed silently")
 
     log.info(f"Added to cart: {product_url.split('/')[-1][:50]}")
     return True
