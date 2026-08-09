@@ -30,8 +30,9 @@ JSON.stringify((function(){
             const priceEl = item.querySelector('.site-currency-lg, [class*="price"], .product-price');
             let price = '';
             if (priceEl) {
-                const m = priceEl.textContent.match(/([\d.,]+)/);
-                if (m) price = m[1].replace(/\\.(?=\\d{3})/g, '').replace(',', '.');
+                let raw = priceEl.textContent.replace(/\\s/g, '').replace(/\\u00a0/g, '');
+                const m = raw.match(/([\d.,]+)/);
+                if (m) price = m[1].replace(/\\.(?=\\d{3})/g, '').replace(/,/g, '.');
             }
             const linkEl = item.querySelector('a.site-product-link, a[href*="/"]');
             let href = linkEl ? linkEl.getAttribute('href') || '' : '';
