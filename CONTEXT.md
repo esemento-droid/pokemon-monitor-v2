@@ -10,22 +10,32 @@
 - Restart: sudo systemctl restart pokemon-monitor-v2
 - Kernel tuning: somaxconn=4096, tcp_tw_reuse=1, tcp_fin_timeout=15
 
-## Architecture (Asyncio Tasks - NOT subprocess)
-- orchestrator.py: asyncio tasks per shop (shop_worker coroutines)
-- runner.py: runs ONE scraper (import -> get_products -> detect -> save)
-- orchestrator spawns: asyncio.create_subprocess_exec(venv/python, runner.py, name)
-- discord_sender.py: fire-and-forget queue (send_nowait)
-- detector.py: SNAPSHOT/NEW_PRODUCT/PRICE_CHANGE/RESTOCK/SOLD_OUT
-- Shops auto-discovered from shops/ folder (.py files)
+## Architecture (BLITZ Engine — in-process asyncio, Aug 9 2026)
+- main.py: SINGLE Python process, asyncio tasks per shop
+- Each shop = independent asyncio.Task (shop_worker coroutine)
+- ZERO locks, ZERO queues, ZERO waiting — each shop runs alone
+- Shared: 1x DB pool (asyncpg, max=10), 1x Discord sender (fire-and-forget)
+- Per-shop timeout: 60s (HTTP), 180s (slow), 300s (nodriver/Chrome)
+- Per-shop delay: NODRIVER 90-180s, SHOPIFY 180-300s, SLOW 45-90s, VERY_SLOW 60-120s, FAST 5-15s
+- Adaptive delay: if scan_time > base_delay → delay = scan_time * 1.2
+- Error backoff: 30-60s (3 errors), 60-120s (5+ errors), alarm at 5 consecutive
+- Graceful shutdown: SIGTERM/SIGINT → _shutdown flag → workers exit cleanly
+- Memory: ~300MB base + Chrome instances (~350MB each) = ~2GB total (vs 7GB orchestrator)
+- Scales to 300+ shops on 8GB RAM
+- Entry: sudo systemctl restart pokemon-monitor-v2 (ExecStart=...main.py)
 
-## Orchestrator Config
-- CHECK_MIN=5, CHECK_MAX=20 (normal shops: 5-20s between scans)
-- SLOW_SHOPS={"am76","proshop","rgfk","blindbox","flamberg"} -> 45-90s
-- SHOPIFY_SHOPS={"pokeloot","skladgier"} -> 180-300s
-- PW_SHOPS={"strefakart","strefamtg"} -> 90-180s
-- TIMEOUT=300s per scraper
-- Error backoff: min(60*(2**min(errors//3,3)),300)
-- Delay logic: SHOPIFY > PW > SLOW > normal (chained if/else)
+### Previous architecture (backup_orchestrator/):
+- orchestrator.py: spawned runner.py as subprocess per shop (14.7s startup overhead per scan)
+- Each subprocess: separate Python process (50-80MB RAM each)
+- Peak: ~80 processes = 6-7GB RAM (near OOM on 8GB VPS)
+- Preserved in backup_orchestrator/ for rollback
+
+## Orchestrator Config (LEGACY — now in main.py categories)
+- NODRIVER_SHOPS: empik, proshop, boosterpoint, dragonus, piwniczaki, rgfk, strefamarzen, wilczek, tantis → 90-180s delay, 300s timeout
+- SHOPIFY_SHOPS: pokeloot, skladgier → 180-300s delay
+- SLOW_SHOPS: am76, blindbox, flamberg, mrpuggy, pikashop, paladynat, czytam, swiatkart → 45-90s delay
+- VERY_SLOW_SHOPS: efantasy, twojekarty, canislupus, tcgtrener, mangiusmoczejciotki, vanaheim, kartomaniak → 60-120s delay, 180s timeout
+- FAST (everything else): 5-15s delay, 60s timeout
 
 ## Detector Logic
 - First scan (no DB + snapshot_done=False) = SNAPSHOT (available only)
@@ -155,6 +165,9 @@ efantasy (Greek, efantasy.gr, 23p, EUR)
 10. Scraper returns: [{id, name, price, shop, url, image, stock, available}]
 11. After new scraper: sudo systemctl restart pokemon-monitor-v2
 12. Discord silently drops embeds with spaces in image URL - always %20
+13. ONLY sealed English products — NIE single, NIE japońskie, NIE akcesoria
+14. Przy budowie nowego scrapera: ZAWSZE raport co znalazł, potem ustalamy EXCLUDE
+15. NIGDY nie usuwać/zmieniać istniejących filtrów EXCLUDE bez potwierdzenia
 
 ## Commands for Termius (quick reference)
 - Status: sudo systemctl status pokemon-monitor-v2
