@@ -198,6 +198,26 @@ async def add_to_cart(page, product_url):
     
     if clicked:
         await asyncio.sleep(2)
+        # Verify product was actually added (check cart badge or popup)
+        try:
+            # Wait for cart confirmation (Shoper shows popup or updates cart count)
+            await page.wait_for_selector('.basket-popup, .cart-popup, [class*="basket-count"]:not(:empty), .added-to-cart', timeout=5000)
+        except:
+            pass
+        # Double-check: verify basket count > 0
+        count = await page.evaluate("""
+            () => {
+                const badge = document.querySelector('.basket-count, .cart-count, [class*="basket"] .count, .topbasket .count');
+                if (badge) return parseInt(badge.textContent) || 0;
+                // Check if any "added" confirmation visible
+                const popup = document.querySelector('.basket-popup, .added-to-cart, [class*="added"]');
+                if (popup) return 1;
+                return -1;
+            }
+        """)
+        if count == 0:
+            log.warning("ATC clicked but basket count still 0")
+            return False
         return True
     return False
 
