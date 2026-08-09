@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-Pokemon Monitor v2 — BLITZ Engine (Optimized)
+Pokemon Monitor v2 — MULTI-PROCESS Engine
 
-Architektura:
-- 1 proces Python, 1 event loop asyncio
-- Kazdy sklep = osobny asyncio.Task (niezalezny worker)
-- ZERO lockow, ZERO kolejek, ZERO czekania na inne sklepy
-- Shared DB pool (asyncpg) + shared Discord sender (fire-and-forget)
-- Per-shop timeout: 60s (HTTP), 300s (nodriver/Chrome)
-- Per-shop delay: adaptive na podstawie kategorii + czasu skanu
-- Graceful error handling: backoff po errorach, alarm po 5 z rzedu
+Architektura: 3 niezalezne procesy (fork) + nodriver subprocess
+- FAST process: ~100 HTTP shops (scan 1-15s, delay 5-15s)
+- SLOW process: ~20+ shops (scan 30-120s, delay 45-120s)
+- NODRIVER: subprocess via runner.py per Chrome shop (9 shops)
 
-Docelowo: skaluje sie do 300+ sklepow na 8GB RAM (vs orchestrator max ~130)
+Kazdy proces ma SWOJ event loop — nie przeszkadzaja sobie.
+Zero lockow, zero kolejek, zero czekania.
+Skaluje do 300+ shops (dodaj kolejny FAST process).
 """
 
 import asyncio
@@ -21,10 +19,10 @@ import importlib
 import random
 import logging
 import signal
+import multiprocessing
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
-# Ensure project root on path
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, DIR)
 
@@ -35,85 +33,56 @@ from discord_sender import discord
 from sanitize import sanitize_batch
 
 # ============================================================
-# GLOBAL: Increase asyncio DNS resolver capacity
-# Prevents "Cannot connect" under load (130 concurrent scrapers doing DNS)
-# ============================================================
-import aiohttp
-import aiohttp.resolver
-
-# Use threaded resolver with more workers (default=5, we need more for 130 shops)
-aiohttp.resolver.DefaultResolver = lambda: aiohttp.resolver.ThreadedResolver()
-
-# Patch: ensure minimum connect timeout of 30s even if scraper sets total=30
-_OrigTimeout = aiohttp.ClientTimeout
-
-def _patched_timeout(total=None, connect=None, sock_connect=None, sock_read=None, **kw):
-    # Ensure sock_connect is at least 30s (scrapers often set only total=30)
-    if sock_connect is None and connect is None:
-        connect = 30
-    return _OrigTimeout(total=total, connect=connect, sock_connect=sock_connect, sock_read=sock_read)
-
-aiohttp.ClientTimeout = _patched_timeout
-
-# ============================================================
-# LOGGING
-# ============================================================
-logger = logging.getLogger("monitor")
-logger.setLevel(logging.INFO)
-fh = RotatingFileHandler(LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=3)
-fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.addHandler(fh)
-ch = logging.StreamHandler()
-ch.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.addHandler(ch)
-
-# ============================================================
-# SHOP CATEGORIES — delay i timeout per typ sklepu
-# Identyczne z orchestrator.py — zachowuje pelna kompatybilnosc
+# SHOP CATEGORIES
 # ============================================================
 
-# Nodriver/Chrome shops — dlugi timeout (300s), dlugi delay (90-180s)
 NODRIVER_SHOPS = {
     "empik", "proshop", "boosterpoint",
     "dragonus", "piwniczaki", "rgfk", "strefamarzen", "wilczek", "tantis",
 }
 
-# Shopify shops — rate limited, delay 180-300s
 SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
 
-# Slow shops — wolne serwery/paginacja, delay 45-90s
 SLOW_SHOPS = {
     "am76", "blindbox", "flamberg", "mrpuggy", "pikashop",
     "paladynat", "czytam", "swiatkart",
 }
 
-# Bardzo wolne (>120s avg scan) — adaptive delay
 VERY_SLOW_SHOPS = {
     "efantasy", "twojekarty", "canislupus", "tcgtrener",
     "mangiusmoczejciotki", "vanaheim", "kartomaniak",
 }
 
-# Reszta: fast shops — delay 5-15s (CHECK_MIN - CHECK_MAX)
+# All non-fast shops (go to SLOW process)
+ALL_SLOW = SLOW_SHOPS | VERY_SLOW_SHOPS | SHOPIFY_SHOPS
+
+TIMEOUT_NODRIVER = 300
+TIMEOUT_SLOW = 180
+TIMEOUT_DEFAULT = 60
 
 # ============================================================
-# TIMEOUT per kategoria
+# LOGGING (per-process)
 # ============================================================
-TIMEOUT_NODRIVER = 300   # Chrome shops need time to start + CF bypass
-TIMEOUT_SLOW = 180       # Slow paginacja
-TIMEOUT_DEFAULT = 60     # Standard HTTP scrapers
 
-# ============================================================
-# STATS
-# ============================================================
-scan_stats = {}
-_shutdown = False
+def setup_logger(process_name):
+    logger = logging.getLogger("monitor")
+    logger.setLevel(logging.INFO)
+    # Clear existing handlers (important after fork)
+    logger.handlers.clear()
+    fh = RotatingFileHandler(LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=3)
+    fh.setFormatter(logging.Formatter(f"%(asctime)s [%(levelname)s] %(message)s"))
+    logger.addHandler(fh)
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter(f"%(asctime)s [{process_name}] [%(levelname)s] %(message)s"))
+    logger.addHandler(ch)
+    return logger
 
 
 # ============================================================
 # LOAD SHOPS
 # ============================================================
+
 def load_shops():
-    """Import all shop modules from shops/ directory."""
     shops = []
     shops_dir = os.path.join(DIR, "shops")
     for filename in sorted(os.listdir(shops_dir)):
@@ -127,33 +96,33 @@ def load_shops():
             if hasattr(module, "get_products"):
                 shops.append((name, module))
         except Exception as e:
-            logger.error(f"[LOAD] X {name}: {e}")
-    logger.info(f"[LOAD] Aktywne sklepy: {len(shops)}")
+            logging.getLogger("monitor").error(f"[LOAD] X {name}: {e}")
     return shops
 
 
 # ============================================================
-# SHOP WORKER — jeden niezalezny task per sklep
+# SHOP WORKER (async, in-process)
 # ============================================================
-async def shop_worker(name, module):
-    """
-    Niezalezny worker dla jednego sklepu.
-    Kazdy dziala w petli: scrape → detect → save → sleep.
-    NIE czeka na inne sklepy. NIE uzywa lockow.
-    """
-    # Stagger start — spread HTTP shops over first 120s to avoid connection storm
-    await asyncio.sleep(random.uniform(0, 120))
 
-    scan_stats[name] = {"ok": 0, "err": 0, "last": None, "last_scan_time": 0}
+async def shop_worker(name, module, logger, process_type):
+    """Independent async worker for one shop."""
+    await asyncio.sleep(random.uniform(0, 30))
+
+    stats = {"ok": 0, "err": 0}
+    _shutdown = False
 
     while not _shutdown:
         scan_time = 0.0
         try:
             start = datetime.now()
-            products = None
 
-            # --- SCRAPE ---
-            timeout = _get_timeout(name)
+            # Timeout based on category
+            if name in VERY_SLOW_SHOPS or name in SLOW_SHOPS:
+                timeout = TIMEOUT_SLOW
+            else:
+                timeout = TIMEOUT_DEFAULT
+
+            # Scrape
             try:
                 get_fn = module.get_products
                 if asyncio.iscoroutinefunction(get_fn):
@@ -161,37 +130,32 @@ async def shop_worker(name, module):
                 else:
                     loop = asyncio.get_running_loop()
                     products = await asyncio.wait_for(
-                        loop.run_in_executor(None, get_fn),
-                        timeout=timeout
+                        loop.run_in_executor(None, get_fn), timeout=timeout
                     )
             except asyncio.TimeoutError:
                 logger.warning(f"[{name}] Timeout {timeout}s")
-                scan_stats[name]["err"] += 1
-                await asyncio.sleep(_get_delay(name, error=True))
+                stats["err"] += 1
+                await asyncio.sleep(_get_delay(name, stats, error=True))
                 continue
             except asyncio.CancelledError:
                 return
             except Exception as e:
-                raise  # Let outer handler catch
+                raise
 
-            # --- VALIDATE ---
             if not products:
-                scan_stats[name]["err"] += 1
-                await asyncio.sleep(_get_delay(name, error=True))
+                stats["err"] += 1
+                await asyncio.sleep(_get_delay(name, stats, error=True))
                 continue
 
             products = sanitize_batch(products)
             if not products:
-                scan_stats[name]["err"] += 1
-                await asyncio.sleep(_get_delay(name, error=True))
+                stats["err"] += 1
+                await asyncio.sleep(_get_delay(name, stats, error=True))
                 continue
 
-            # --- DETECT CHANGES ---
+            # Detect changes
             shop_field = products[0].get("shop", name)
             old = await get_shop_products(shop_field)
-
-            # Ochrona: jesli scraper zwrocil 0 ale DB ma dane — pomijamy
-            # (już po sanitize, wiec products nie jest puste tutaj)
 
             snapshot = await is_snapshot_done(name)
             was_first = await detect_and_send(name, old, products, snapshot)
@@ -199,145 +163,74 @@ async def shop_worker(name, module):
             if was_first or not snapshot:
                 await mark_snapshot_done(name)
 
-            # --- SAVE ---
             await save_products_batch(products)
 
-            # --- STATS ---
             scan_time = (datetime.now() - start).total_seconds()
-            scan_stats[name]["ok"] += 1
-            scan_stats[name]["err"] = 0
-            scan_stats[name]["last"] = datetime.now().isoformat()
-            scan_stats[name]["last_scan_time"] = scan_time
-
+            stats["ok"] += 1
+            stats["err"] = 0
             logger.info(f"[{name}] {len(products)} produktow w {scan_time:.1f}s")
 
         except asyncio.CancelledError:
             return
         except Exception as e:
             logger.error(f"[{name}] ERROR: {e}")
-            scan_stats[name]["err"] += 1
+            stats["err"] += 1
 
-            # Alarm po 5 errorach z rzedu
-            if scan_stats[name]["err"] == 5:
-                await _send_alarm(name, e)
+            if stats["err"] == 5:
+                await _send_alarm(name, e, logger)
 
-        # --- DELAY ---
-        delay = _get_delay(name, error=(scan_stats[name]["err"] > 0), scan_time=scan_time)
-        # Add random jitter (0-3s) to prevent burst synchronization
+        # Delay with jitter
+        delay = _get_delay(name, stats, error=(stats["err"] > 0), scan_time=scan_time)
         delay += random.uniform(0, 3)
         await asyncio.sleep(delay)
 
 
-# ============================================================
-# DELAY LOGIC — per-category + adaptive
-# ============================================================
-def _get_delay(name, error=False, scan_time=0.0):
-    """
-    Oblicz delay miedzy skanami.
-    - Per-category base delay (jak orchestrator)
-    - Adaptive: jesli skan trwal dluzej niz delay, czekaj przynajmniej 1x scan_time
-    - Error backoff: 60-120s po bledach, eskalacja po wiekszej liczbie
-    """
-    errs = scan_stats.get(name, {}).get("err", 0)
-
-    # Error backoff
+def _get_delay(name, stats, error=False, scan_time=0.0):
+    errs = stats.get("err", 0)
     if error or errs >= 5:
         return random.randint(60, 120)
     elif errs >= 3:
         return random.randint(30, 60)
 
-    # Category-based delay
-    if name in NODRIVER_SHOPS:
-        base_delay = random.randint(90, 180)
-    elif name in SHOPIFY_SHOPS:
-        base_delay = random.randint(180, 300)
-    elif name in VERY_SLOW_SHOPS:
-        base_delay = random.randint(60, 120)
+    if name in VERY_SLOW_SHOPS:
+        base = random.randint(60, 120)
     elif name in SLOW_SHOPS:
-        base_delay = random.randint(45, 90)
+        base = random.randint(45, 90)
+    elif name in SHOPIFY_SHOPS:
+        base = random.randint(180, 300)
     else:
-        base_delay = random.randint(CHECK_MIN, CHECK_MAX)
+        base = random.randint(CHECK_MIN, CHECK_MAX)
 
-    # Adaptive: nie skanuj szybciej niz trwal ostatni skan
-    if scan_time > base_delay:
+    if scan_time > base:
         return int(scan_time * 1.2)
-
-    return base_delay
-
-
-def _get_timeout(name):
-    """Timeout per shop category."""
-    if name in NODRIVER_SHOPS:
-        return TIMEOUT_NODRIVER
-    elif name in VERY_SLOW_SHOPS or name in SLOW_SHOPS:
-        return TIMEOUT_SLOW
-    return TIMEOUT_DEFAULT
+    return base
 
 
-# ============================================================
-# HEARTBEAT — status co 6h
-# ============================================================
-async def heartbeat_worker():
-    """Heartbeat co 6 godzin — ile sklepow OK, ile errorow."""
-    await asyncio.sleep(120)  # Daj systemowi 2min na rozgrzanie
-    while not _shutdown:
-        try:
-            import aiohttp
-            shops_ok = sum(1 for s in scan_stats.values() if s["ok"] > 0)
-            total_scans = sum(s["ok"] + s["err"] for s in scan_stats.values())
-            errors_active = sum(1 for s in scan_stats.values() if s["err"] >= 3)
-            top_errors = sorted(
-                [(k, v["err"]) for k, v in scan_stats.items() if v["err"] >= 3],
-                key=lambda x: -x[1]
-            )[:5]
-            err_list = ", ".join(f"{k}({v})" for k, v in top_errors) if top_errors else "brak"
-
-            msg = (
-                f"\u2764\ufe0f **Heartbeat** | "
-                f"{shops_ok} sklepow OK | "
-                f"{total_scans} skanow | "
-                f"{errors_active} z problemami\n"
-                f"Errors: {err_list}"
-            )
-            async with aiohttp.ClientSession() as session:
-                await session.post(DISCORD_WEBHOOK, json={"content": msg})
-        except Exception:
-            pass
-        await asyncio.sleep(21600)  # 6h
-
-
-# ============================================================
-# ALARM — po 5 errorach z rzedu
-# ============================================================
-async def _send_alarm(name, error):
-    """Wyslij alarm na Discord po 5 errorach z rzedu."""
+async def _send_alarm(name, error, logger):
     try:
         import aiohttp
         async with aiohttp.ClientSession() as s:
             await s.post(DISCORD_WEBHOOK, json={
                 "content": f"\u26a0\ufe0f ALARM [{name}] 5 errorow z rzedu: {error}"
             })
-    except Exception:
+    except:
         pass
 
 
 # ============================================================
-# NODRIVER SUBPROCESS WORKER — osobny proces per Chrome shop
-# Identyczna logika jak orchestrator: spawn runner.py, timeout 300s
+# NODRIVER SUBPROCESS WORKER
 # ============================================================
+
 VENV_PYTHON = os.path.join(DIR, "venv", "bin", "python3")
 RUNNER = os.path.join(DIR, "runner.py")
 
 
-async def nodriver_worker(name):
-    """
-    Worker dla nodriver/Chrome shops — uruchamia runner.py jako subprocess.
-    Każdy Chrome to osobny process — nie blokuje event loop, nie crashuje innych.
-    """
+async def nodriver_worker(name, logger):
+    """Subprocess worker for Chrome shops."""
     await asyncio.sleep(random.uniform(5, 30))
-    scan_stats[name] = {"ok": 0, "err": 0, "last": None, "last_scan_time": 0}
+    stats = {"ok": 0, "err": 0}
 
-    while not _shutdown:
+    while True:
         start = datetime.now()
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -356,10 +249,8 @@ async def nodriver_worker(name):
                 except ProcessLookupError:
                     pass
                 await proc.wait()
-                scan_stats[name]["err"] += 1
-                if scan_stats[name]["err"] == 5:
-                    await _send_alarm(name, "5x timeout subprocess")
-                await asyncio.sleep(_get_delay(name, error=True))
+                stats["err"] += 1
+                await asyncio.sleep(_get_delay(name, stats, error=True))
                 continue
 
             output = stdout.decode().strip()
@@ -371,88 +262,179 @@ async def nodriver_worker(name):
             if proc.returncode != 0:
                 err_msg = stderr.decode().strip()[-200:] if stderr else "unknown"
                 logger.error(f"[{name}] EXIT {proc.returncode}: {err_msg}")
-                scan_stats[name]["err"] += 1
-                if scan_stats[name]["err"] == 5:
-                    await _send_alarm(name, err_msg)
+                stats["err"] += 1
             else:
-                scan_time = (datetime.now() - start).total_seconds()
-                scan_stats[name]["ok"] += 1
-                scan_stats[name]["err"] = 0
-                scan_stats[name]["last"] = datetime.now().isoformat()
-                scan_stats[name]["last_scan_time"] = scan_time
+                stats["ok"] += 1
+                stats["err"] = 0
 
         except asyncio.CancelledError:
             return
         except Exception as e:
             logger.error(f"[{name}] SUBPROCESS ERROR: {e}")
-            scan_stats[name]["err"] += 1
+            stats["err"] += 1
 
-        delay = _get_delay(name, error=(scan_stats[name]["err"] > 0))
+        delay = random.randint(90, 180) if stats["err"] == 0 else random.randint(60, 120)
         await asyncio.sleep(delay)
 
 
-async def main():
-    global _shutdown
+# ============================================================
+# HEARTBEAT
+# ============================================================
 
-    logger.info("=" * 60)
-    logger.info("Pokemon Monitor v2 — BLITZ Engine (Optimized)")
-    logger.info("=" * 60)
+async def heartbeat_worker(logger, process_name, shop_count):
+    await asyncio.sleep(120)
+    while True:
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                await session.post(DISCORD_WEBHOOK, json={
+                    "content": f"\u2764\ufe0f **{process_name}** | {shop_count} shops active"
+                })
+        except:
+            pass
+        await asyncio.sleep(21600)
 
-    # Init shared resources (ONCE)
+
+# ============================================================
+# PROCESS RUNNERS
+# ============================================================
+
+def run_fast_process(shop_names_modules):
+    """Run FAST shops in own asyncio event loop."""
+    asyncio.run(_async_process("FAST", shop_names_modules))
+
+
+def run_slow_process(shop_names_modules):
+    """Run SLOW shops in own asyncio event loop."""
+    asyncio.run(_async_process("SLOW", shop_names_modules))
+
+
+def run_nodriver_process(shop_names):
+    """Run NODRIVER shops as subprocesses in own event loop."""
+    asyncio.run(_async_nodriver("NODRIVER", shop_names))
+
+
+async def _async_process(process_name, shop_names_modules):
+    """Async entry for FAST/SLOW process."""
+    logger = setup_logger(process_name)
+    logger.info(f"=== {process_name} process starting ({len(shop_names_modules)} shops) ===")
+
     await init_db()
     discord.start()
 
+    tasks = []
+    for name, module in shop_names_modules:
+        tasks.append(asyncio.create_task(shop_worker(name, module, logger, process_name)))
+    tasks.append(asyncio.create_task(heartbeat_worker(logger, process_name, len(shop_names_modules))))
+
+    logger.info(f"[{process_name}] {len(shop_names_modules)} async workers started")
+
+    try:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        await discord.close()
+
+
+async def _async_nodriver(process_name, shop_names):
+    """Async entry for NODRIVER process (subprocesses)."""
+    logger = setup_logger(process_name)
+    logger.info(f"=== {process_name} process starting ({len(shop_names)} shops via subprocess) ===")
+
+    tasks = []
+    for name in shop_names:
+        tasks.append(asyncio.create_task(nodriver_worker(name, logger)))
+
+    logger.info(f"[{process_name}] {len(shop_names)} subprocess workers started")
+
+    try:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    except KeyboardInterrupt:
+        pass
+
+
+# ============================================================
+# MAIN — forks 3 processes
+# ============================================================
+
+def main():
+    logger = setup_logger("MAIN")
+    logger.info("=" * 60)
+    logger.info("Pokemon Monitor v2 — MULTI-PROCESS Engine")
+    logger.info("=" * 60)
+
     # Load all shops
-    shops = load_shops()
-    if not shops:
+    all_shops = load_shops()
+    if not all_shops:
         logger.error("Brak sklepow!")
         return
 
-    # Categorize shops for logging
-    nodriver_count = sum(1 for n, _ in shops if n in NODRIVER_SHOPS)
-    slow_count = sum(1 for n, _ in shops if n in SLOW_SHOPS or n in VERY_SLOW_SHOPS)
-    fast_count = len(shops) - nodriver_count - slow_count
+    # Split into categories
+    fast_shops = []
+    slow_shops = []
+    nodriver_names = []
 
-    logger.info(f"Sklepy: {len(shops)} total ({fast_count} fast, {slow_count} slow, {nodriver_count} nodriver/subprocess)")
-    logger.info(f"Architektura: HYBRID — HTTP shops in-process, Chrome shops subprocess")
-    logger.info(f"Zero lockow, zero kolejek — kazdy sklep osobno")
-    logger.info(f"Timeouts: default={TIMEOUT_DEFAULT}s, slow={TIMEOUT_SLOW}s, nodriver={TIMEOUT_NODRIVER}s (subprocess)")
-    logger.info(f"Discord: fire-and-forget queue (max 500, {25}/min)")
-
-    # Create workers — route by type
-    tasks = []
-    for name, module in shops:
+    for name, module in all_shops:
         if name in NODRIVER_SHOPS:
-            # Chrome shops → subprocess (osobny process, nie blokuje event loop)
-            tasks.append(asyncio.create_task(nodriver_worker(name), name=f"pw_{name}"))
+            nodriver_names.append(name)
+        elif name in ALL_SLOW:
+            slow_shops.append((name, module))
         else:
-            # HTTP shops → in-process async (szybkie, lekkie)
-            tasks.append(asyncio.create_task(shop_worker(name, module), name=f"shop_{name}"))
-    tasks.append(asyncio.create_task(heartbeat_worker(), name="heartbeat"))
+            fast_shops.append((name, module))
 
-    logger.info(f"Uruchomiono {fast_count + slow_count} async workerow + {nodriver_count} subprocess workerow + heartbeat")
+    logger.info(f"FAST: {len(fast_shops)} shops (in-process async)")
+    logger.info(f"SLOW: {len(slow_shops)} shops (in-process async)")
+    logger.info(f"NODRIVER: {len(nodriver_names)} shops (subprocess/Chrome)")
+    logger.info(f"Total: {len(all_shops)} shops in 3 independent processes")
+    logger.info("Architecture: each process has OWN event loop, ZERO interference")
 
-    # Graceful shutdown on SIGTERM/SIGINT
-    def signal_handler():
-        global _shutdown
-        _shutdown = True
-        logger.info("Otrzymano SIGTERM/SIGINT — zamykanie...")
+    # Fork 3 processes
+    processes = []
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, signal_handler)
+    p_fast = multiprocessing.Process(target=run_fast_process, args=(fast_shops,), name="monitor-fast")
+    p_fast.start()
+    processes.append(p_fast)
+    logger.info(f"Started FAST process (PID {p_fast.pid})")
 
-    # Run until shutdown
-    try:
-        # Wait for all tasks (they run forever until _shutdown)
-        await asyncio.gather(*tasks, return_exceptions=True)
-    except KeyboardInterrupt:
-        _shutdown = True
-    finally:
-        logger.info("Zamykanie Discord sender...")
-        await discord.close()
-        logger.info("Pokemon Monitor v2 — STOP")
+    p_slow = multiprocessing.Process(target=run_slow_process, args=(slow_shops,), name="monitor-slow")
+    p_slow.start()
+    processes.append(p_slow)
+    logger.info(f"Started SLOW process (PID {p_slow.pid})")
+
+    p_nodriver = multiprocessing.Process(target=run_nodriver_process, args=(nodriver_names,), name="monitor-nodriver")
+    p_nodriver.start()
+    processes.append(p_nodriver)
+    logger.info(f"Started NODRIVER process (PID {p_nodriver.pid})")
+
+    # Wait for all (restart on crash)
+    def signal_handler(sig, frame):
+        logger.info("SIGTERM received — stopping all processes")
+        for p in processes:
+            p.terminate()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Monitor and restart crashed processes
+    while True:
+        for i, p in enumerate(processes):
+            if not p.is_alive():
+                logger.error(f"Process {p.name} (PID {p.pid}) CRASHED! Restarting...")
+                if p.name == "monitor-fast":
+                    p_new = multiprocessing.Process(target=run_fast_process, args=(fast_shops,), name="monitor-fast")
+                elif p.name == "monitor-slow":
+                    p_new = multiprocessing.Process(target=run_slow_process, args=(slow_shops,), name="monitor-slow")
+                else:
+                    p_new = multiprocessing.Process(target=run_nodriver_process, args=(nodriver_names,), name="monitor-nodriver")
+                p_new.start()
+                processes[i] = p_new
+                logger.info(f"Restarted {p_new.name} (PID {p_new.pid})")
+
+        import time
+        time.sleep(5)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
