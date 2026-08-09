@@ -218,19 +218,24 @@ async def add_to_cart(page, product_url, qty=1):
     except Exception as e:
         log.warning(f"Failed to load product page {product_url}: {e}")
         return False
-    await asyncio.sleep(3)
+    await asyncio.sleep(5)
+
+    # Check for 404
+    title = await page.evaluate("() => document.title")
+    if "404" in title:
+        log.warning(f"Product page 404: {product_url}")
+        return False
 
     # Set quantity if > 1
     if qty > 1:
-        # Clear existing value and type new one
-        qty_input = page.locator('input[type="number"], input[name="quantity"], input[class*="qty"]').first
         try:
+            qty_input = page.locator('input[type="number"]').first
             await qty_input.triple_click(timeout=3000)
             await qty_input.fill(str(qty))
             await asyncio.sleep(1)
         except Exception:
             await page.evaluate(f"""() => {{
-                const qtyInput = document.querySelector('input[type="number"], input[name="quantity"], input[class*="qty"]');
+                const qtyInput = document.querySelector('input[type="number"]');
                 if (qtyInput) {{
                     qtyInput.value = '{qty}';
                     qtyInput.dispatchEvent(new Event('input', {{bubbles:true}}));
@@ -239,101 +244,55 @@ async def add_to_cart(page, product_url, qty=1):
             }}""")
             await asyncio.sleep(1)
 
-    # Click "Dodaj do koszyka" — Sellingo uses a form POST to add items
-    # First try to find and submit the ATC form directly
+    # Click "Dodaj do koszyka" — Sellingo: button#product-card-add-to-card
     clicked = False
-    
-    # Method 1: Find the form containing ATC button and submit it via native form submission
-    form_submitted = await page.evaluate("""() => {
-        // Look for form with action containing 'koszyk' or 'cart' or 'basket'
-        const forms = document.querySelectorAll('form');
-        for (const form of forms) {
-            const action = (form.action || '').toLowerCase();
-            const html = form.innerHTML.toLowerCase();
-            if (action.includes('koszyk') || action.includes('cart') || action.includes('basket') || 
-                html.includes('dodaj do koszyka') || html.includes('do koszyka')) {
-                // Found the ATC form - try clicking its submit button
-                const btn = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
-                if (btn) { btn.click(); return 'btn_click'; }
-                // Or submit directly
-                form.submit();
-                return 'form_submit';
-            }
-        }
-        return null;
-    }""")
-    
-    if form_submitted:
-        clicked = True
-        log.info(f"ATC via form: {form_submitted}")
-    else:
-        # Method 2: PW locator click (real mouse event)
-        try:
-            atc_btn = page.locator('button:has-text("Dodaj do koszyka")').first
-            await atc_btn.click(force=True, timeout=5000)
+
+    # Method 1: Click by ID (most reliable for Sellingo)
+    try:
+        atc_btn = page.locator('#product-card-add-to-card')
+        if await atc_btn.count() > 0:
+            await atc_btn.click(timeout=5000)
             clicked = True
-            log.info("ATC via PW locator force click")
-        except Exception:
-            # Method 3: Try submitting via URL directly (Sellingo pattern: /koszyk/dodaj/PRODUCT_ID)
-            pid_match = re.search(r'/(\d+)$', product_url.rstrip('/'))
-            if not pid_match:
-                # Try to find product ID in page source
-                pid_from_page = await page.evaluate("""() => {
-                    const form = document.querySelector('form[action*="koszyk"], form[action*="cart"]');
-                    if (form) return form.action;
-                    const input = document.querySelector('input[name="product_id"], input[name="id"]');
-                    if (input) return input.value;
-                    return null;
-                }""")
-                log.info(f"ATC form/id found in page: {pid_from_page}")
-            
-            # Fallback JS click
-            clicked = await page.evaluate("""() => {
-                const btns = Array.from(document.querySelectorAll('button, input[type="submit"], a'));
-                const atcBtn = btns.find(el => {
-                    const text = (el.innerText || el.value || '').toLowerCase();
-                    return text.includes('dodaj do koszyka') || text.includes('do koszyka');
-                });
-                if (atcBtn && !atcBtn.disabled) {
-                    atcBtn.click();
-                    return true;
-                }
-                return false;
-            }""")
-            if clicked:
-                log.info("ATC via JS click fallback")
+            log.info("ATC clicked via #product-card-add-to-card")
+    except Exception as e:
+        log.warning(f"ATC by ID failed: {e}")
+
+    # Method 2: Click by JS class
+    if not clicked:
+        try:
+            atc_btn = page.locator('.js-product-card-cart-button')
+            if await atc_btn.count() > 0:
+                await atc_btn.first.click(timeout=5000)
+                clicked = True
+                log.info("ATC clicked via .js-product-card-cart-button")
+        except Exception as e:
+            log.warning(f"ATC by class failed: {e}")
+
+    # Method 3: JS click
+    if not clicked:
+        clicked = await page.evaluate("""() => {
+            const btn = document.getElementById('product-card-add-to-card') ||
+                        document.querySelector('.js-product-card-cart-button') ||
+                        document.querySelector('.js-add-product-to-card:not(.u-hide)');
+            if (btn) { btn.click(); return true; }
+            return false;
+        }""")
+        if clicked:
+            log.info("ATC clicked via JS fallback")
 
     if not clicked:
-        log.warning(f"ATC button not found or disabled for {product_url}")
+        log.warning(f"ATC button not found for {product_url}")
         return False
 
-    # Wait for response
-    await asyncio.sleep(5)
-    
-    # Debug: log current page state after ATC
-    post_atc_info = await page.evaluate("""() => {
-        const text = document.body.innerText.substring(0, 300);
-        const url = window.location.href;
-        const cartBadge = document.querySelector('[class*="cart"] [class*="count"], [class*="basket"] [class*="count"], .cart-count');
-        const badge = cartBadge ? cartBadge.innerText : 'no badge';
-        return {text: text, url: url, badge: badge};
-    }""")
-    log.info(f"Post-ATC state: url={post_atc_info.get('url','?')}, badge={post_atc_info.get('badge','?')}, text={post_atc_info.get('text','')[:100]}")
+    # Wait for cart popup
+    await asyncio.sleep(4)
 
-    # Check if redirected to cart page already
-    if '/koszyk' in page.url:
-        log.info("Redirected to cart page after ATC — product in cart!")
-        return True
-
-    # Check for popup "Przejdź do koszyka"
-    has_popup = await page.evaluate("""() => {
-        const text = document.body.innerText.toLowerCase();
-        return text.includes('przejdź do koszyka') || text.includes('dodano do koszyka') || text.includes('produkt dodany');
+    # Verify: check cart value changed
+    cart_val = await page.evaluate("""() => {
+        const el = document.querySelector('.js-cart-value');
+        return el ? el.innerText.trim() : '?';
     }""")
-    if has_popup:
-        log.info("Cart popup detected after ATC")
-    else:
-        log.warning("No cart popup detected — ATC may have failed silently")
+    log.info(f"Post-ATC cart value: {cart_val}")
 
     log.info(f"Added to cart: {product_url.split('/')[-1][:50]}")
     return True
@@ -637,12 +596,6 @@ async def run_for_account(page, account, product_urls, qty, test_mode=False):
         return "atc_failed"
 
     log.info(f"[{name}] {added}/{len(urls_to_buy)} products in cart")
-
-    # Debug: check what /koszyk shows before checkout
-    await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(3)
-    cart_text = await page.evaluate("() => document.body.innerText.substring(0, 500)")
-    log.info(f"[{name}] Cart page content: {cart_text[:200]}")
 
     # Checkout
     ok = await checkout(page, test_mode=test_mode)
