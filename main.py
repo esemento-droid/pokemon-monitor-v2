@@ -122,25 +122,29 @@ async def shop_worker(name, module, logger, process_type):
             else:
                 timeout = TIMEOUT_DEFAULT
 
-            # Scrape
-            try:
-                get_fn = module.get_products
-                if asyncio.iscoroutinefunction(get_fn):
-                    products = await asyncio.wait_for(get_fn(), timeout=timeout)
-                else:
-                    loop = asyncio.get_running_loop()
-                    products = await asyncio.wait_for(
-                        loop.run_in_executor(None, get_fn), timeout=timeout
-                    )
-            except asyncio.TimeoutError:
-                logger.warning(f"[{name}] Timeout {timeout}s")
-                stats["err"] += 1
-                await asyncio.sleep(_get_delay(name, stats, error=True))
-                continue
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                raise
+            # Scrape (with 1 retry on connection error)
+            products = None
+            for attempt in range(2):
+                try:
+                    get_fn = module.get_products
+                    if asyncio.iscoroutinefunction(get_fn):
+                        products = await asyncio.wait_for(get_fn(), timeout=timeout)
+                    else:
+                        loop = asyncio.get_running_loop()
+                        products = await asyncio.wait_for(
+                            loop.run_in_executor(None, get_fn), timeout=timeout
+                        )
+                    break  # Success
+                except asyncio.TimeoutError:
+                    logger.warning(f"[{name}] Timeout {timeout}s")
+                    break  # Don't retry timeouts
+                except asyncio.CancelledError:
+                    return
+                except Exception as e:
+                    if attempt == 0 and "Cannot connect" in str(e):
+                        await asyncio.sleep(random.uniform(2, 5))
+                        continue  # Retry once
+                    raise
 
             if not products:
                 stats["err"] += 1
