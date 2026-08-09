@@ -1,4 +1,4 @@
-# Pokemon Monitor v2 — FULL STATE August 9, 2026 (11:00)
+# Pokemon Monitor v2 — FULL STATE August 9, 2026 (13:45)
 
 ## Location & Infrastructure
 - Path: /opt/pokemon-monitor-v2/ on OVHcloud VPS (8GB RAM, 4 cores, Debian)
@@ -37,11 +37,19 @@
 - Auto-restart on crash (main.py monitors child processes)
 
 ### Performance (measured):
-- RAM: 1.0 GB (6.6 GB free)
-- Throughput: 1164 scans / 10 min
-- Success rate: 97%+ (7-18 "Cannot connect" per 10 min)
-- 133 shops active
+- RAM: 1.2 GB (3.9 GB free)
+- Throughput: 1270 scans / 10 min (635 OK / 5 min)
+- Success rate: 97%+ (22 ERR / 5 min)
+- 135 shops active
 - Scales to 300+: add FAST_B process when FAST exceeds 150
+
+### Baseline (Aug 9, 13:45):
+- OK: 635 / 5 min
+- ERR: 22 / 5 min
+- Shops: 135
+- RAM: 1.2 GB
+- Nodriver: 9 shops, all OK
+- Top ERR: zarc(2), pokebeast(2), lukillo(2), bastacentershop(2), alpakagra(2)
 
 ### OS tuning (applied):
 - LimitNOFILE=65535 (was 1024!)
@@ -126,4 +134,4 @@
 - Added proxy to smyk, strefatcg, japancollectibles bots
 - OS tuning: ulimit 1024→65535, TCP params optimized
 - Auto-retry on "Cannot connect" — reduced errors from 55 to 7-18
-- Final: 133 shops, 1GB RAM, 97% success rate, all bots ready
+- Final: 135 shops, 1.2GB RAM, 97% success rate, all bots ready
