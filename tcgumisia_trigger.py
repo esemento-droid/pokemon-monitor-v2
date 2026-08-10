@@ -26,18 +26,24 @@ WEBHOOK_FILE = Path("/opt/pokemon-monitor-v2/discord_webhook_strefatcg.txt")
 # Keywords that trigger the bot (any 30th product)
 KEYWORDS_30TH = ["30th", "30 celebration", "30-lecie", "30 lecie", "30 rocznica"]
 
-# Specific products with qty ranges (min, max) — random per account
+# Specific products with (qty_min, qty_max, max_price) — random qty per account
 # Key: substring in product name (lowercase)
-PRODUCT_QTY = {
-    "elite trainer box": (1, 1),
-    "tin - sylveon": (1, 3),
-    "tin - greninja": (1, 3),
-    "sticker collection - alolan": (1, 6),
-    "sticker collection - lucario": (1, 6),
+PRODUCT_CONFIG = {
+    "elite trainer box": (2, 3, 375),
+    "tin - sylveon": (2, 3, 145),
+    "tin - greninja": (2, 3, 145),
+    "sticker collection - alolan": (2, 6, 120),
+    "sticker collection - lucario": (2, 6, 120),
+    "booster bundle": (1, 4, 249),
+    "ex box - greninja": (1, 4, 162),
+    "ex box - sylveon": (1, 4, 162),
+    "poster collection": (1, 3, 121),
+    "2-pack": (1, 5, 81),
+    "binder collection": (1, 1, 251),
 }
 
 # Products to SKIP (not interested)
-SKIP_KEYWORDS = ["binder", "2-pack", "poster", "ex box", "booster bundle"]
+SKIP_KEYWORDS = []
 
 # All 4 accounts
 ALL_ACCOUNTS = [
@@ -66,21 +72,29 @@ def _is_all_completed(product_id):
     return all(acc in bought for acc in ALL_ACCOUNTS)
 
 
-def _get_qty_for_product(name):
-    """Get random qty for product based on PRODUCT_QTY config. Returns 0 if should skip."""
+def _get_qty_for_product(name, price_str):
+    """Get random qty for product based on PRODUCT_CONFIG. Returns 0 if should skip (price too high)."""
     name_lower = name.lower()
 
-    # Skip unwanted products
-    if any(skip in name_lower for skip in SKIP_KEYWORDS):
-        return 0
+    # Parse price from string like "140.00 PLN" or "400,00"
+    try:
+        price_clean = price_str.replace("PLN", "").replace("zł", "").replace(",", ".").replace(" ", "").strip()
+        price = float(price_clean)
+    except (ValueError, TypeError):
+        price = 9999  # If can't parse, skip (safety)
 
     # Check specific products
-    for keyword, (qty_min, qty_max) in PRODUCT_QTY.items():
+    for keyword, (qty_min, qty_max, max_price) in PRODUCT_CONFIG.items():
         if keyword in name_lower:
-            return random.randint(qty_min, qty_max)
+            if price < max_price:
+                return random.randint(qty_min, qty_max)
+            else:
+                return 0  # Too expensive, skip
 
-    # Catch-all: any other 30th product (new/unknown) — buy 1
-    return 1
+    # Catch-all: any other 30th product (new/unknown) — buy 1 if price < 500
+    if price < 500:
+        return 1
+    return 0
 
 
 def _matches_keywords(name):
@@ -120,10 +134,11 @@ def check_tcgumisia_trigger(event_type, product):
     if not _matches_keywords(name):
         return
 
-    # Check if we want this product
-    qty = _get_qty_for_product(name)
+    # Check if we want this product (based on name + price)
+    price_str = product.get("price", "9999")
+    qty = _get_qty_for_product(name, price_str)
     if qty == 0:
-        log.info(f"[TCGU-TRIGGER] SKIP (unwanted): '{name}'")
+        log.info(f"[TCGU-TRIGGER] SKIP (price/unwanted): '{name}' price={price_str}")
         return
 
     log.info(f"[TCGU-TRIGGER] MATCH! event={event_type} name='{name}' qty={qty}")
