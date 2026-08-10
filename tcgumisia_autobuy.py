@@ -196,11 +196,13 @@ async def login(page, email, password):
             if logged:
                 return True
 
-            # Fallback: navigate to /koszyk and see if it shows products or "kup bez rejestracji"
+            # Fallback: navigate to /koszyk and check if logged in
+            # If "kup bez rejestracji" appears = NOT logged in (guest checkout option)
+            # If NOT there = logged in (account checkout)
             await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(3)
             cart_text = await page.evaluate("() => (document.body ? document.body.innerText : '').toLowerCase()")
-            if "kup bez rejestracji" not in cart_text and "koszyk jest pusty" not in cart_text:
+            if "kup bez rejestracji" not in cart_text:
                 return True
 
             log.warning(f"Login attempt {attempt+1} failed for {email}, page_url={page.url}")
@@ -209,8 +211,6 @@ async def login(page, email, password):
 
         if attempt < 2:
             await asyncio.sleep(3)
-
-    return False
 
     return False
 
