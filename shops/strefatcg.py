@@ -83,17 +83,16 @@ async def get_products():
                     stock_input = item.select_one("input[name='quantity']")
                     stock = 1 if has_basket else 0
 
-                    if has_basket:
-                        products.append({
-                            "id": f"strefatcg_{product_id}",
-                            "name": name,
-                            "price": price,
-                            "shop": SHOP,
-                            "url": url_product,
-                            "image": image,
-                            "stock": stock,
-                            "available": True,
-                        })
+                    products.append({
+                        "id": f"strefatcg_{product_id}",
+                        "name": name,
+                        "price": price,
+                        "shop": SHOP,
+                        "url": url_product,
+                        "image": image,
+                        "stock": stock,
+                        "available": has_basket,
+                    })
 
                 logger.info(f"[strefa-tcg] {cat_url}: {len(items)} items found")
 

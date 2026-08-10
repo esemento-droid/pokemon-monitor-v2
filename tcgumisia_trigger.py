@@ -1,11 +1,11 @@
 """
 TCGumisia trigger for detector.py (BATCH MODE)
-Collects matching 30th products, launches bot ONCE with all URLs.
+Specific 30th products with individual qty ranges.
+Plus catch-all for any NEW 30th product not in the list.
+
 Usage in detector.py:
   from tcgumisia_trigger import check_tcgumisia_trigger, flush_tcgumisia_batch
-  # On each product event:
   check_tcgumisia_trigger(event_type, product)
-  # After all events processed:
   flush_tcgumisia_batch()
 """
 
@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import subprocess
 from pathlib import Path
 
@@ -22,8 +23,21 @@ BOT_PATH = Path("/opt/pokemon-monitor-v2/tcgumisia_autobuy.py")
 COMPLETED_FILE = Path("/opt/pokemon-monitor-v2/tcgumisia_completed.json")
 WEBHOOK_FILE = Path("/opt/pokemon-monitor-v2/discord_webhook_strefatcg.txt")
 
-# Keywords that trigger the bot
+# Keywords that trigger the bot (any 30th product)
 KEYWORDS_30TH = ["30th", "30 celebration", "30-lecie", "30 lecie", "30 rocznica"]
+
+# Specific products with qty ranges (min, max) — random per account
+# Key: substring in product name (lowercase)
+PRODUCT_QTY = {
+    "elite trainer box": (1, 1),
+    "tin - sylveon": (1, 3),
+    "tin - greninja": (1, 3),
+    "sticker collection - alolan": (1, 6),
+    "sticker collection - lucario": (1, 6),
+}
+
+# Products to SKIP (not interested)
+SKIP_KEYWORDS = ["binder", "2-pack", "poster", "ex box", "booster bundle"]
 
 # All 4 accounts
 ALL_ACCOUNTS = [
@@ -52,6 +66,22 @@ def _is_all_completed(product_id):
     return all(acc in bought for acc in ALL_ACCOUNTS)
 
 
+def _get_qty_for_product(name):
+    """Get random qty for product based on PRODUCT_QTY config. Returns 0 if should skip."""
+    name_lower = name.lower()
+
+    # Skip unwanted products
+    if any(skip in name_lower for skip in SKIP_KEYWORDS):
+        return 0
+
+    # Check specific products
+    for keyword, (qty_min, qty_max) in PRODUCT_QTY.items():
+        if keyword in name_lower:
+            return random.randint(qty_min, qty_max)
+
+    # Catch-all: any other 30th product (new/unknown) — buy 1
+    return 1
+
 
 def _matches_keywords(name):
     name_lower = name.lower()
@@ -78,7 +108,7 @@ def check_tcgumisia_trigger(event_type, product):
     if not url:
         return
 
-    # Extract product ID (slug without trailing numbers)
+    # Extract product ID
     import re
     slug = url.rstrip('/').split('/')[-1]
     slug = re.sub(r'/\d+$', '', slug)
@@ -90,14 +120,21 @@ def check_tcgumisia_trigger(event_type, product):
     if not _matches_keywords(name):
         return
 
-    log.info(f"[TCGU-TRIGGER] MATCH! event={event_type} name='{name}'")
+    # Check if we want this product
+    qty = _get_qty_for_product(name)
+    if qty == 0:
+        log.info(f"[TCGU-TRIGGER] SKIP (unwanted): '{name}'")
+        return
+
+    log.info(f"[TCGU-TRIGGER] MATCH! event={event_type} name='{name}' qty={qty}")
 
     if not any(p["url"] == url for p in _batch_products):
         _batch_products.append({
             "url": url,
             "name": name,
             "id": product_id,
-            "price": product.get("price", "?")
+            "price": product.get("price", "?"),
+            "qty": qty,
         })
 
 
@@ -118,7 +155,7 @@ def flush_tcgumisia_batch():
         import aiohttp
         wh_url = WEBHOOK_FILE.read_text().strip() if WEBHOOK_FILE.exists() else ""
         if wh_url:
-            product_lines = "\n".join([f"\u2022 {p['name']} ({p['price']})" for p in products])
+            product_lines = "\n".join([f"\u2022 {p['name']} (qty:{p['qty']}, {p['price']})" for p in products])
             async def _notify():
                 async with aiohttp.ClientSession() as s:
                     await s.post(wh_url, json={
@@ -135,22 +172,24 @@ def flush_tcgumisia_batch():
     except Exception as e:
         log.warning(f"[TCGU-TRIGGER] Discord notify failed: {e}")
 
-    # Launch bot
+    # Launch bot with --products-json
     if not BOT_PATH.exists():
         log.error(f"[TCGU-TRIGGER] Bot not found: {BOT_PATH}")
         return
 
-    urls = [p["url"] for p in products]
+    # Pass products as JSON (each with its own qty)
+    products_json = json.dumps([{"url": p["url"], "qty": p["qty"]} for p in products])
+
     cmd = [
         "/opt/pokemon-monitor-v2/venv/bin/python3", "-u",
         str(BOT_PATH),
+        "--products-json", products_json,
         "--accounts", "4",
-        "--qty", "1",
-    ] + urls
+    ]
 
     env = {**os.environ, "DISPLAY": ":99"}
 
-    log.info(f"[TCGU-TRIGGER] Launching bot with {len(urls)} products")
+    log.info(f"[TCGU-TRIGGER] Launching bot: {products_json}")
     try:
         subprocess.Popen(
             cmd,

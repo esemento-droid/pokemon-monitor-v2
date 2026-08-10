@@ -741,26 +741,27 @@ def extract_product_id(url):
 
 # === ACCOUNT PROCESSING ===
 
-async def run_for_account(page, account, product_urls, qty, test_mode=False):
+async def run_for_account(page, account, product_list, test_mode=False):
     """
     Run full buy flow for one account.
+    product_list: list of {"url": ..., "qty": ...}
     Returns: "success", "skipped", "login_failed", "atc_failed", "checkout_failed"
     """
     email = account["email"]
     name = account["name"]
 
     # Filter already completed
-    urls_to_buy = []
-    for url in product_urls:
-        pid = extract_product_id(url)
+    items_to_buy = []
+    for item in product_list:
+        pid = extract_product_id(item["url"])
         if not is_completed(pid, email):
-            urls_to_buy.append(url)
+            items_to_buy.append(item)
 
-    if not urls_to_buy:
+    if not items_to_buy:
         log.info(f"[{name}] All products already completed, skipping")
         return "skipped"
 
-    log.info(f"[{name}] Starting... ({email}) - {len(urls_to_buy)} products, qty={qty}")
+    log.info(f"[{name}] Starting... ({email}) - {len(items_to_buy)} products")
 
     # Login
     ok = await login(page, email, account["password"])
@@ -773,12 +774,15 @@ async def run_for_account(page, account, product_urls, qty, test_mode=False):
     await clear_cart(page)
     log.info(f"[{name}] Cart cleared")
 
-    # Add products to cart
+    # Add products to cart (each with its own qty)
     added = 0
-    for url in urls_to_buy:
+    for item in items_to_buy:
+        url = item["url"]
+        qty = item.get("qty", 1)
         ok = await add_to_cart(page, url, qty=qty)
         if ok:
             added += 1
+            log.info(f"[{name}] Added: {url.split('/')[-1][:40]} x{qty}")
         else:
             log.warning(f"[{name}] ATC failed: {url.split('/')[-1][:40]}")
 
@@ -786,15 +790,15 @@ async def run_for_account(page, account, product_urls, qty, test_mode=False):
         log.error(f"[{name}] No products added to cart!")
         return "atc_failed"
 
-    log.info(f"[{name}] {added}/{len(urls_to_buy)} products in cart")
+    log.info(f"[{name}] {added}/{len(items_to_buy)} products in cart")
 
     # Checkout
     ok = await checkout(page, account, test_mode=test_mode)
     if ok:
         log.info(f"[{name}] ORDER PLACED! ({added} products)")
         if not test_mode:
-            for url in urls_to_buy:
-                pid = extract_product_id(url)
+            for item in items_to_buy:
+                pid = extract_product_id(item["url"])
                 mark_completed(pid, email)
             await send_discord(f"✅ **{name}** - tcgumisia zamówienie złożone! ({added} produktów)\n💳 Zapłać na stronie płatności (tpay/BLIK)")
         return "success"
