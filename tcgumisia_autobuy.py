@@ -268,23 +268,28 @@ async def add_to_cart(page, product_url, qty=1):
         log.warning(f"Product page 404: {product_url}")
         return False
 
-    # Set quantity if > 1
+    # Set quantity if > 1 — click "+" button (qty-1) times
     if qty > 1:
-        try:
-            qty_input = page.locator('input[type="number"]').first
-            await qty_input.triple_click(timeout=3000)
-            await qty_input.fill(str(qty))
-            await asyncio.sleep(1)
-        except Exception:
-            await page.evaluate(f"""() => {{
-                const qtyInput = document.querySelector('input[type="number"]');
-                if (qtyInput) {{
-                    qtyInput.value = '{qty}';
-                    qtyInput.dispatchEvent(new Event('input', {{bubbles:true}}));
-                    qtyInput.dispatchEvent(new Event('change', {{bubbles:true}}));
-                }}
-            }}""")
-            await asyncio.sleep(1)
+        log.info(f"Setting qty={qty} (clicking '+' {qty-1} times)...")
+        for i in range(qty - 1):
+            try:
+                plus_btn = page.locator('button.js-quantity-more')
+                await plus_btn.click(timeout=3000)
+                await asyncio.sleep(0.3)
+            except Exception:
+                # JS fallback
+                await page.evaluate("""() => {
+                    const btn = document.querySelector('button.js-quantity-more, .c-quantity-field__button.js-quantity-more');
+                    if (btn) btn.click();
+                }""")
+                await asyncio.sleep(0.3)
+        await asyncio.sleep(1)
+        # Verify qty was set
+        actual_qty = await page.evaluate("""() => {
+            const inp = document.querySelector('.js-product-quantity, input[type="number"]');
+            return inp ? inp.value : '?';
+        }""")
+        log.info(f"Qty set to: {actual_qty} (wanted: {qty})")
 
     # Click "Dodaj do koszyka" — Sellingo: button#product-card-add-to-card
     clicked = False
