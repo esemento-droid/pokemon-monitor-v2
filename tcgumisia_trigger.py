@@ -29,7 +29,7 @@ KEYWORDS_30TH = ["30th", "30 celebration", "30-lecie", "30 lecie", "30 rocznica"
 # Specific products with (qty_min, qty_max, max_price) — random qty per account
 # Key: substring in product name (lowercase)
 PRODUCT_CONFIG = {
-    "elite trainer box": (2, 3, 375),
+    "elite trainer box": (2, 3, 401),
     "tin - sylveon": (2, 3, 145),
     "tin - greninja": (2, 3, 145),
     "sticker collection - alolan": (2, 6, 120),

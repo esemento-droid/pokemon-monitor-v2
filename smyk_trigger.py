@@ -33,7 +33,7 @@ def check_smyk_autobuy(shop, event_type, product):
             log.info(f"[SMYK-TRIGGER] 30th price {price} = 0, skip: {product.get('name','')}")
             return
         SMYK_30TH_LIMITS = {
-            "elite trainer box": 375,
+            "elite trainer box": 401,
             "tin": 145,
             "sticker": 120,
             "booster bundle": 249,
