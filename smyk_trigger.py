@@ -27,6 +27,29 @@ def check_smyk_autobuy(shop, event_type, product):
         if price > 160 or price <= 0:
             log.info(f"[SMYK-TRIGGER] Price {price} > 160 or 0, skip: {product.get('name','')}")
             return
+    else:
+        # 30th products — apply per-product price limits
+        if price <= 0:
+            log.info(f"[SMYK-TRIGGER] 30th price {price} = 0, skip: {product.get('name','')}")
+            return
+        SMYK_30TH_LIMITS = {
+            "elite trainer box": 375,
+            "tin": 145,
+            "sticker": 120,
+            "booster bundle": 249,
+            "ex box": 162,
+            "poster": 121,
+            "2-pack": 81,
+            "binder": 251,
+        }
+        max_price = 500  # default for unknown 30th
+        for keyword, limit in SMYK_30TH_LIMITS.items():
+            if keyword in name_lower:
+                max_price = limit
+                break
+        if price >= max_price:
+            log.info(f"[SMYK-TRIGGER] 30th price {price} >= {max_price}, skip: {product.get('name','')}")
+            return
     url = product.get("url", "")
     if is_smyk_completed(url):
         log.info(f"[SMYK-TRIGGER] Already bought: {product['name']}, skip")
