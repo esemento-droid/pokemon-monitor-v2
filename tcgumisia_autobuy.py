@@ -474,19 +474,27 @@ async def checkout(page, account, test_mode=False):
 
     # Check if detail popup appeared with "Wybierz" button and click it
     await page.evaluate(f"""() => {{
-        // Look for confirm/select button in detail popup
-        const btns = document.querySelectorAll('button, a, div');
+        // Click "Wybierz" button in the paczkomat detail popup (inside widget-modal)
+        const modal = document.querySelector('.widget-modal') || document;
+        const allEls = modal.querySelectorAll('*');
+        for (const el of allEls) {{
+            const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+            if (el.offsetHeight > 0 && el.childElementCount === 0 && text === 'wybierz') {{
+                el.click();
+                return;
+            }}
+        }}
+        // Fallback: any clickable with "wybierz" 
+        const btns = modal.querySelectorAll('button, a, div, span');
         for (const btn of btns) {{
-            const text = (btn.innerText || '').toLowerCase();
-            if (btn.offsetHeight > 0 && (text === 'wybierz' || text.includes('wybierz punkt') || text.includes('potwierdź'))) {{
+            const text = (btn.innerText || '').trim().toLowerCase();
+            if (btn.offsetHeight > 0 && text === 'wybierz') {{
                 btn.click();
                 return;
             }}
         }}
     }}""")
-    await asyncio.sleep(2)
-
-    # Verify paczkomat was selected — check hidden input #inpost_code
+    await asyncio.sleep(3)
     paczkomat_code = await page.evaluate("""() => {
         const inp = document.querySelector('#inpost_code');
         return inp ? inp.value : '';
