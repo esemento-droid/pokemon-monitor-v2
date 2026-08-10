@@ -477,23 +477,79 @@ async def checkout(page, account, test_mode=False):
             log.error("FAILED to click paczkomat dropdown item!")
     await asyncio.sleep(2)
 
-    # Verify paczkomat was selected (check if widget closed or confirmation text appeared)
-    paczkomat_ok = await page.evaluate(f"""() => {{
-        const body = document.body ? (document.body.innerText || '').toUpperCase() : '';
-        return body.includes('{PACZKOMAT}');
-    }}""")
-    if paczkomat_ok:
-        log.info(f"Paczkomat {PACZKOMAT} confirmed on page")
-    else:
-        log.warning(f"Paczkomat {PACZKOMAT} text NOT found on page after selection")
+    # After dropdown autocomplete click, must ALSO click the paczkomat on the map list
+    # The map shows LI elements with A.list-point-link inside
+    log.info("Tab 1: Clicking paczkomat on map list...")
+    try:
+        # Click first a.list-point-link that contains the paczkomat code
+        map_clicked = await page.evaluate(f"""() => {{
+            const links = document.querySelectorAll('a.list-point-link');
+            for (const link of links) {{
+                if ((link.textContent || '').toUpperCase().includes('{PACZKOMAT}')) {{
+                    link.click();
+                    return true;
+                }}
+            }}
+            // Fallback: click LI containing paczkomat
+            const lis = document.querySelectorAll('.list-widget li, .overview li');
+            for (const li of lis) {{
+                if ((li.textContent || '').toUpperCase().includes('{PACZKOMAT}')) {{
+                    li.click();
+                    return true;
+                }}
+            }}
+            return false;
+        }}""")
+        if map_clicked:
+            log.info(f"Paczkomat {PACZKOMAT} clicked on map list")
+        else:
+            log.warning(f"Paczkomat {PACZKOMAT} NOT found on map list!")
+    except Exception as e:
+        log.warning(f"Map list click failed: {e}")
+    await asyncio.sleep(3)
 
-    # Close InPost widget if still open (click outside or "X" button)
+    # Verify paczkomat was selected — check hidden input #inpost_code
+    paczkomat_code = await page.evaluate("""() => {
+        const inp = document.querySelector('#inpost_code');
+        return inp ? inp.value : '';
+    }""")
+    if paczkomat_code:
+        log.info(f"Paczkomat confirmed: #inpost_code = '{paczkomat_code}'")
+    else:
+        log.warning("Paczkomat #inpost_code still empty — trying to set manually...")
+        # Force set the hidden input as last resort
+        await page.evaluate(f"""() => {{
+            const inp = document.querySelector('#inpost_code');
+            if (inp) {{
+                inp.value = '{PACZKOMAT}';
+                inp.dispatchEvent(new Event('change', {{bubbles:true}}));
+            }}
+            const machine = document.querySelector('#inpost_machine');
+            if (machine) {{
+                const opt = document.createElement('option');
+                opt.value = '{PACZKOMAT}';
+                opt.selected = true;
+                machine.appendChild(opt);
+                machine.dispatchEvent(new Event('change', {{bubbles:true}}));
+            }}
+            const chosen = document.querySelector('.inpost_chosen');
+            if (chosen) chosen.textContent = '{PACZKOMAT}';
+        }}""")
+        await asyncio.sleep(1)
+
+    # Close InPost widget modal (click ✕ in topbar)
     await page.evaluate("""() => {
-        // Try closing any modal/overlay that might block further clicks
-        const close = document.querySelector('.inpost-search__close, .inpost_close, [class*="inpost"] .close');
+        // Click the X button in widget-modal__topbar
+        const topbar = document.querySelector('.widget-modal__topbar');
+        if (topbar) {
+            const closeBtn = topbar.querySelector('*');
+            if (closeBtn) closeBtn.click();
+        }
+        // Also try any close/X element in the modal
+        const close = document.querySelector('.widget-modal__topbar, .inpost-search__close, .inpost_close');
         if (close) close.click();
     }""")
-    await asyncio.sleep(1)
+    await asyncio.sleep(2)
 
     log.info("Tab 1: Selecting Blik payment...")
 
