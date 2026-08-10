@@ -822,16 +822,21 @@ async def main():
     parser.add_argument("--accounts", type=int, default=4, help="Number of accounts (1-4, default: 4)")
     parser.add_argument("--start", type=int, default=1, help="Start from account N (1-4, default: 1)")
     parser.add_argument("--qty", type=int, default=1, help="Quantity per product (1-10, default: 1)")
+    parser.add_argument("--products-json", type=str, default="", help="JSON list of {url, qty} products (overrides positional URLs)")
     args = parser.parse_args()
 
-    if not args.product_urls:
-        parser.error("At least one product URL is required")
+    # Build product list — either from --products-json or from positional URLs + --qty
+    if args.products_json:
+        product_list = json.loads(args.products_json)
+    elif args.product_urls:
+        product_list = [{"url": url, "qty": args.qty} for url in args.product_urls]
+    else:
+        parser.error("At least one product URL or --products-json is required")
+
     if args.accounts < 1 or args.accounts > 4:
         parser.error(f"--accounts must be 1-4 (got {args.accounts})")
     if args.start < 1 or args.start > 4:
         parser.error(f"--start must be 1-4 (got {args.start})")
-    if args.qty < 1 or args.qty > 10:
-        parser.error(f"--qty must be 1-10 (got {args.qty})")
 
     display = os.environ.get("DISPLAY", "")
     if display != ":99":
@@ -845,15 +850,15 @@ async def main():
         accounts_to_use = ACCOUNTS[args.start - 1 : args.start - 1 + args.accounts]
         random.shuffle(accounts_to_use)
 
-    log.info(f"Products ({len(args.product_urls)}):")
-    for url in args.product_urls:
-        log.info(f"  {url}")
-    log.info(f"Accounts: {len(accounts_to_use)}, Qty: {args.qty}")
+    log.info(f"Products ({len(product_list)}):")
+    for item in product_list:
+        log.info(f"  {item['url']} x{item.get('qty', 1)}")
+    log.info(f"Accounts: {len(accounts_to_use)}")
 
     # Discord notify
     if not args.test:
-        prod_list = "\n".join([f"• {url.split('/')[-1][:50]}" for url in args.product_urls])
-        await send_discord(f"🚨 **TCGUMISIA AutoBuy** uruchomiony!\n{prod_list}\nKonta: {len(accounts_to_use)}, qty: {args.qty}")
+        prod_list = "\n".join([f"• {item['url'].split('/')[-1][:40]} x{item.get('qty',1)}" for item in product_list])
+        await send_discord(f"🚨 **TCGUMISIA AutoBuy** uruchomiony!\n{prod_list}\nKonta: {len(accounts_to_use)}")
 
     results = []
 
@@ -883,7 +888,7 @@ async def main():
             """)
 
             try:
-                result = await run_for_account(page, account, args.product_urls, args.qty, test_mode=args.test)
+                result = await run_for_account(page, account, product_list, test_mode=args.test)
                 results.append((account["name"], result))
             except Exception as e:
                 log.error(f"[{account['name']}] Exception: {e}")
