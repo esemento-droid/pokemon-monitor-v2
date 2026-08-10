@@ -29,8 +29,7 @@ async def main():
                         results.push({
                             name,
                             price: price ? price.textContent.trim() : "brak",
-                            available: !availClass.includes("--none"),
-                            category: arguments[0] || "unknown"
+                            available: !availClass.includes("--none")
                         });
                     }
                 }
