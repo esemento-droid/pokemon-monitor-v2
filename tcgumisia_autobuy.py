@@ -441,72 +441,50 @@ async def checkout(page, account, test_mode=False):
         }}""")
     await asyncio.sleep(3)
 
-    # Click dropdown item — .inpost-search__item-list.point
+    # Click dropdown item — .inpost-search__item-list.point (triggers map centering)
     log.info("Tab 1: Clicking paczkomat dropdown item...")
     try:
         dropdown_item = page.locator('.inpost-search__item-list.point').first
-        # Wait for dropdown to appear
         await dropdown_item.wait_for(state="visible", timeout=8000)
         await asyncio.sleep(0.5)
         await dropdown_item.click(timeout=5000)
         log.info("Paczkomat dropdown item clicked via locator")
     except Exception as e:
         log.warning(f"Dropdown click via locator failed: {e}, trying JS...")
-        # JS fallback — click first visible .inpost-search__item-list.point
-        clicked_js = await page.evaluate(f"""() => {{
+        await page.evaluate(f"""() => {{
             const items = document.querySelectorAll('.inpost-search__item-list.point');
             for (const item of items) {{
-                if (item.offsetParent !== null || item.offsetHeight > 0) {{
-                    item.click();
-                    return true;
-                }}
+                if (item.offsetHeight > 0) {{ item.click(); return; }}
             }}
-            // Fallback: any element containing paczkomat code
-            const all = document.querySelectorAll('.inpost-search__item-list li, .inpost-search__item-list div');
-            for (const el of all) {{
-                if ((el.textContent || '').toUpperCase().includes('{PACZKOMAT}')) {{
-                    el.click();
-                    return true;
-                }}
-            }}
-            return false;
         }}""")
-        if clicked_js:
-            log.info("Paczkomat dropdown item clicked via JS")
-        else:
-            log.error("FAILED to click paczkomat dropdown item!")
-    await asyncio.sleep(2)
-
-    # After dropdown autocomplete click, must ALSO click the paczkomat on the map list
-    # The map shows LI elements with A.list-point-link inside
-    log.info("Tab 1: Clicking paczkomat on map list...")
-    try:
-        # Click first a.list-point-link that contains the paczkomat code
-        map_clicked = await page.evaluate(f"""() => {{
-            const links = document.querySelectorAll('a.list-point-link');
-            for (const link of links) {{
-                if ((link.textContent || '').toUpperCase().includes('{PACZKOMAT}')) {{
-                    link.click();
-                    return true;
-                }}
-            }}
-            // Fallback: click LI containing paczkomat
-            const lis = document.querySelectorAll('.list-widget li, .overview li');
-            for (const li of lis) {{
-                if ((li.textContent || '').toUpperCase().includes('{PACZKOMAT}')) {{
-                    li.click();
-                    return true;
-                }}
-            }}
-            return false;
-        }}""")
-        if map_clicked:
-            log.info(f"Paczkomat {PACZKOMAT} clicked on map list")
-        else:
-            log.warning(f"Paczkomat {PACZKOMAT} NOT found on map list!")
-    except Exception as e:
-        log.warning(f"Map list click failed: {e}")
     await asyncio.sleep(3)
+
+    # After dropdown click, the map shows paczkomat. Now click it on the map list.
+    log.info("Tab 1: Clicking paczkomat on map list...")
+    await page.evaluate(f"""() => {{
+        const links = document.querySelectorAll('a.list-point-link');
+        for (const link of links) {{
+            if ((link.textContent || '').toUpperCase().includes('{PACZKOMAT}')) {{
+                link.click();
+                return;
+            }}
+        }}
+    }}""")
+    await asyncio.sleep(4)
+
+    # Check if detail popup appeared with "Wybierz" button and click it
+    await page.evaluate(f"""() => {{
+        // Look for confirm/select button in detail popup
+        const btns = document.querySelectorAll('button, a, div');
+        for (const btn of btns) {{
+            const text = (btn.innerText || '').toLowerCase();
+            if (btn.offsetHeight > 0 && (text === 'wybierz' || text.includes('wybierz punkt') || text.includes('potwierdź'))) {{
+                btn.click();
+                return;
+            }}
+        }}
+    }}""")
+    await asyncio.sleep(2)
 
     # Verify paczkomat was selected — check hidden input #inpost_code
     paczkomat_code = await page.evaluate("""() => {
@@ -516,38 +494,54 @@ async def checkout(page, account, test_mode=False):
     if paczkomat_code:
         log.info(f"Paczkomat confirmed: #inpost_code = '{paczkomat_code}'")
     else:
-        log.warning("Paczkomat #inpost_code still empty — trying to set manually...")
-        # Force set the hidden input as last resort
+        log.warning("Paczkomat #inpost_code still empty — force setting via Sellingo callback...")
+        # Force set via Sellingo's internal handler
+        # Sellingo stores selected point in hidden fields + shows in .inpost_chosen
         await page.evaluate(f"""() => {{
+            // Set hidden inputs
             const inp = document.querySelector('#inpost_code');
             if (inp) {{
                 inp.value = '{PACZKOMAT}';
                 inp.dispatchEvent(new Event('change', {{bubbles:true}}));
+                inp.dispatchEvent(new Event('input', {{bubbles:true}}));
             }}
+            // Set select option for machine
             const machine = document.querySelector('#inpost_machine');
             if (machine) {{
-                const opt = document.createElement('option');
-                opt.value = '{PACZKOMAT}';
-                opt.selected = true;
-                machine.appendChild(opt);
+                machine.innerHTML = '<option value="{PACZKOMAT}" selected>{PACZKOMAT}</option>';
+                machine.value = '{PACZKOMAT}';
                 machine.dispatchEvent(new Event('change', {{bubbles:true}}));
             }}
+            // Set town select (required by Sellingo)
+            const town = document.querySelector('#inpost_town');
+            if (town) {{
+                town.innerHTML = '<option value="Warszawa" selected>Warszawa</option>';
+                town.value = 'Warszawa';
+                town.dispatchEvent(new Event('change', {{bubbles:true}}));
+            }}
+            // Show selected point name
             const chosen = document.querySelector('.inpost_chosen');
-            if (chosen) chosen.textContent = '{PACZKOMAT}';
+            if (chosen) chosen.textContent = 'Paczkomat® {PACZKOMAT}';
+            // Try triggering Sellingo's point selection handler
+            // Sellingo listens for custom event or checks these fields on form submit
+            const form = document.querySelector('form') || document.querySelector('.js-cart-form');
+            if (form) form.dispatchEvent(new Event('change', {{bubbles:true}}));
         }}""")
         await asyncio.sleep(1)
+        log.info(f"Force-set paczkomat fields to {PACZKOMAT}")
 
-    # Close InPost widget modal (click ✕ in topbar)
+    # Close InPost widget modal
     await page.evaluate("""() => {
-        // Click the X button in widget-modal__topbar
         const topbar = document.querySelector('.widget-modal__topbar');
-        if (topbar) {
-            const closeBtn = topbar.querySelector('*');
-            if (closeBtn) closeBtn.click();
+        if (topbar) topbar.click();
+        // Also try clicking ✕ text node
+        const allEls = document.querySelectorAll('.widget-modal *');
+        for (const el of allEls) {
+            if ((el.textContent || '').trim() === '✕' && el.offsetHeight > 0) {
+                el.click();
+                return;
+            }
         }
-        // Also try any close/X element in the modal
-        const close = document.querySelector('.widget-modal__topbar, .inpost-search__close, .inpost_close');
-        if (close) close.click();
     }""")
     await asyncio.sleep(2)
 

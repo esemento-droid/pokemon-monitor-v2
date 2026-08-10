@@ -87,17 +87,6 @@ async def main():
                 log.info(f"Final URL: {page.url}")
             else:
                 log.error("\n❌ CHECKOUT FAILED")
-                # Capture page state for debugging
-                body = await page.evaluate("() => document.body.innerText.substring(0, 500)")
-                log.error(f"Page URL: {page.url}")
-                log.error(f"Page text: {body[:300]}")
-
-                # Take screenshot for debug
-                try:
-                    await page.screenshot(path="/opt/pokemon-monitor-v2/debug_checkout_screenshot.png")
-                    log.info("Screenshot saved: debug_checkout_screenshot.png")
-                except Exception:
-                    pass
 
         except Exception as e:
             log.error(f"❌ EXCEPTION: {e}")
