@@ -119,24 +119,30 @@ async def run_checkout_capture(page, account):
         # Check if we're on an intermediate page (not tpay, not koszyk)
         if "tpay" in url or "przelewy24" in url or "autopay" in url:
             print(f"\n[{i}s] Reached payment: {url}")
+            # Dump text before tpay (might be confirmation)
+            print(f"Text: {body[:1000]}")
             break
         
         if "zamówienie" in body.lower() or "podsumowanie" in body.lower() or "potwierdzenie" in body.lower() or "paczkomat" in body.lower():
             print(f"\n[{i}s] CONFIRMATION PAGE FOUND!")
             print(f"URL: {url}")
-            await page.screenshot(path="/opt/pokemon-monitor-v2/confirmation_page.png")
-            print("Screenshot: confirmation_page.png")
             print(f"\n=== PAGE TEXT ===\n{body}")
+            try:
+                await page.screenshot(path="/opt/pokemon-monitor-v2/confirmation_page.png")
+                print("Screenshot: confirmation_page.png")
+            except Exception as e:
+                print(f"Screenshot failed: {e}")
             break
         
         if i == 0:
-            # Take screenshot immediately after click
-            await page.screenshot(path="/opt/pokemon-monitor-v2/after_submit_0s.png")
-            print(f"[0s] URL: {url} (screenshot saved)")
+            print(f"[0s] URL: {url}")
+            print(f"[0s] Text: {body[:500]}")
         elif i == 2:
-            await page.screenshot(path="/opt/pokemon-monitor-v2/after_submit_2s.png")
-            print(f"[2s] URL: {url} (screenshot saved)")
-            print(f"[2s] Text (first 500): {body[:500]}")
+            print(f"[2s] URL: {url}")
+            print(f"[2s] Text: {body[:500]}")
+        elif i == 5:
+            print(f"[5s] URL: {url}")
+            print(f"[5s] Text: {body[:500]}")
 
     print("\nDone.")
 
