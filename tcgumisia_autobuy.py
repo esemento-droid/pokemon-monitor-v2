@@ -29,6 +29,8 @@ WEBHOOK_FILE = BOT_DIR / "discord_webhook_strefatcg.txt"
 PROXY = "http://127.0.0.1:8888"
 PACZKOMAT = "PAD04M"
 
+import random
+
 ACCOUNTS = [
     {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},
     {"email": "blackmat36@gmail.com", "password": "v2@pvDGt#ZuN3ui", "name": "Natalia Szczepaniak"},
@@ -832,6 +834,7 @@ async def main():
         log.info("=== TEST MODE (using test account, will NOT submit) ===")
     else:
         accounts_to_use = ACCOUNTS[args.start - 1 : args.start - 1 + args.accounts]
+        random.shuffle(accounts_to_use)
 
     log.info(f"Products ({len(args.product_urls)}):")
     for url in args.product_urls:
