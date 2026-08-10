@@ -94,6 +94,58 @@ async def debug():
         for el in waw_els:
             print(f"  {el}")
 
+        # Click the dropdown item first
+        try:
+            await page.locator('.inpost-search__item-list.point').first.click(timeout=5000)
+            print("\nClicked .inpost-search__item-list.point")
+        except Exception as e:
+            print(f"\nDropdown click failed: {e}")
+        await asyncio.sleep(3)
+
+        # Check if inpost_code got filled
+        code_val = await page.evaluate("""() => {
+            const inp = document.querySelector('#inpost_code');
+            return inp ? inp.value : 'NOT FOUND';
+        }""")
+        print(f"\ninpost_code value after dropdown click: '{code_val}'")
+
+        # Get list-widget items (map list)
+        list_items = await page.evaluate("""() => {
+            const items = document.querySelectorAll('.list-widget .point-wrapper, .list-widget li, .list-widget [class*="point"], .overview > div');
+            return Array.from(items).slice(0, 8).map(el => ({
+                tag: el.tagName,
+                classes: el.className.substring(0, 60),
+                text: el.textContent.substring(0, 80).trim(),
+                clickable: el.querySelector('a, button, [role="button"]') !== null
+            }));
+        }""")
+        print("\n=== MAP LIST ITEMS ===")
+        for item in list_items:
+            print(f"  {item}")
+
+        # Check if there's a "Wybierz" or "Potwierdź" button visible
+        buttons = await page.evaluate("""() => {
+            const btns = Array.from(document.querySelectorAll('button, a, div[role="button"], .btn'));
+            return btns.filter(b => {
+                const text = (b.innerText || '').toLowerCase();
+                return (text.includes('wybierz') || text.includes('potwierdź') || text.includes('zatwierdź')) && b.offsetHeight > 0;
+            }).map(b => ({tag: b.tagName, classes: b.className.substring(0, 60), text: b.innerText.substring(0, 50).trim()}));
+        }""")
+        print("\n=== VISIBLE 'WYBIERZ/POTWIERDZ' BUTTONS ===")
+        for btn in buttons:
+            print(f"  {btn}")
+
+        # Get widget-modal content structure
+        modal_children = await page.evaluate("""() => {
+            const modal = document.querySelector('.widget-modal');
+            if (!modal) return [{tag: 'NONE', classes: '', text: 'NO MODAL FOUND'}];
+            const children = Array.from(modal.children);
+            return children.map(c => ({tag: c.tagName, classes: (c.className || '').substring(0, 60), text: (c.textContent || '').substring(0, 60).trim()}));
+        }""")
+        print("\n=== WIDGET-MODAL CHILDREN ===")
+        for child in modal_children:
+            print(f"  {child}")
+
         await ctx.close()
         await browser.close()
 
