@@ -5,91 +5,45 @@
 
 ## W TRAKCIE: TCGumisia Auto-Buy Bot
 
-### Status: CHECKOUT W BUDOWIE — paczkomat dropdown do naprawienia
+### Status: ✅ GOTOWY — podpięty do monitora, czeka na trigger
 
 ### Co działa:
 - **Login** ✅ — PW `fill()` + `.js-submit-login` click, POST /account/login
 - **Clear cart** ✅ — `.c-table-product__delete--desktop` force click, loop until empty
-- **ATC** ✅ — `#product-card-add-to-card` click, cena 220 PLN na produkcyjnych kontach
+- **ATC** ✅ — `#product-card-add-to-card` click
 - **InPost radio** ✅ — click label parent of `input[name="shipment"][value="15"]`
-- **Wyszukaj button** ✅ — `.inpost_search_point` click
+- **Wyszukaj button** ✅ — `.inpost_search_point` click (force=True)
 - **Paczkomat search** ✅ — `input[name="easypack-search"]` + `type()` char by char (delay=100ms)
-- **Dropdown pojawia się** ✅ — WAW65N widoczny w `.inpost-search__item-list.point`
+- **Autocomplete dropdown** ✅ — `.inpost-search__item-list.point` click
+- **Map list click** ✅ — `a.list-point-link` zawierający kod paczkomatu
+- **"Wybierz" popup** ✅ — klik leaf element z text="wybierz" w `.widget-modal`
+- **#inpost_code** ✅ — wypełnione prawidłowo po kliknięciu "Wybierz"
+- **Blik radio** ✅ — `input[name="payment"][value="25"]` force=True
 - **Tab 1 → Tab 2** ✅ — `.js-cart-next` force=True
+- **Regulamin** ✅ — `input[name="rules"]` force=True
+- **Tab 2 → Tab 3** ✅ — `.js-cart-next` force=True
+- **Zamawiam i płacę** ✅ — klik submit → redirect tpay.com
+- **Logout + fresh session** ✅ — /wyloguj + nowy browser context per konto
+- **Trigger** ✅ — podpięty w detector.py, batch mode (30th keywords)
 
-### Co NIE działa (do naprawienia):
-1. **Kliknięcie dropdown itemu WAW65N** — bot nie klika `.inpost-search__item-list.point`
-2. **Blik radio** — `input[name="payment"][value="25"]` (hidden dopóki InPost nie wybrane, ale force=True powinno)
-3. **Tab 2 → Tab 3** — nie przechodzi (pewnie regulamin `input[name="rules"]` nie zaznaczony bo widgetInPost blokuje)
-4. **Zamawiam i płacę** — nie klika bo nie jest na Tab 3
+### Paczkomat produkcyjny: PAD04M
+### Paczkomat testowy: WAW65N (w test_full_flow.py)
 
-### Konto testowe `t11008543@gmail.com`:
-- **ZFLAGOWANE** przez Sellingo — produkty dodane przez bota mają cenę 0 PLN
-- Na produkcyjnych kontach (esemento) cena jest prawidłowa (220 PLN) ✅
-- Hasło: `mt!cSsphud4Zhnz`
-- Paczkomat testowy: **WAW65N** (nie PAD04M!)
+### Konta:
+- esemento@gmail.com (Tomasz Szczepaniak)
+- blackmat36@gmail.com (Natalia Szczepaniak)
+- tjbtaniojuzbylo@gmail.com (Jagoda Kaczmarek)
+- y24015411@gmail.com (Miroslawa Szczepaniak)
+- TEST: t11008543@gmail.com (Marian Wasilewski) — ZFLAGOWANE, cena 0 PLN
 
-### Kluczowe selektory Sellingo (tcgumisia.pl):
-```
-LOGIN:
-  Modal open: button[data-aside-target="modal-aside-entry-form"]
-  Form: .js-login-form
-  Email: .js-login-form input[type="email"]
-  Password: .js-login-form input[type="password"]
-  Submit: .js-submit-login
-  Cookie accept: .js-accept-cookie-alert-1
-
-CART:
-  Delete item: .c-table-product__delete--desktop (force=True)
-  Empty text: "koszyk jest pusty"
-
-ATC:
-  Button: #product-card-add-to-card
-  Cart value check: .js-cart-value
-
-CHECKOUT TAB 1 (Koszyk):
-  InPost radio: input[name="shipment"][value="15"] — CLICK PARENT LABEL
-  Odbiór osobisty: input[name="shipment"][value="7"] (domyślny)
-  Wyszukaj: .inpost_search_point (DIV not button!)
-  Search input: input[name="easypack-search"] — use type() not fill()!
-  Dropdown item: .inpost-search__item-list.point — KLIKNĄĆ TU!
-  Blik radio: input[name="payment"][value="25"] (hidden initially, force=True)
-  Przelew radio: input[name="payment"][value="4"] (domyślny)
-  Dalej: .js-cart-next (force=True, widget blokuje pointer)
-
-CHECKOUT TAB 2 (Dane):
-  Regulamin: input[name="rules"] (force=True)
-  Przejdź dalej: .js-cart-next (force=True)
-
-CHECKOUT TAB 3 (Płatność):
-  Zamawiam: button/a containing "zamawiam"
-```
-
-### Fingerprint fix (w kodzie):
-- `viewport: 1920x1080`
-- `locale: pl-PL`
-- `add_init_script`: platform=Win32, languages pl-PL — ALE NIE DZIAŁA (Patchright ignoruje)
-- Mimo to bot nie jest wykrywany — cena OK na produkcyjnych kontach
+### Trigger keywords (30th):
+- "30th", "30 celebration", "30-lecie", "30 lecie", "30 rocznica"
 
 ### Pliki:
 - `/opt/pokemon-monitor-v2/tcgumisia_autobuy.py` — główny bot
 - `/opt/pokemon-monitor-v2/tcgumisia_trigger.py` — trigger (30th keywords, batch mode)
-- `/opt/pokemon-monitor-v2/test_full_flow.py` — test script (prawdziwe zamówienie)
-- Debug files (do usunięcia): debug_atc.py, debug_login.py, debug_cart.py, debug_clearcart.py, debug_checkout.py, debug_fingerprint.py, debug_esemento_cart.py
-
-### Następne kroki:
-1. Naprawić klik na dropdown WAW65N (`.inpost-search__item-list.point`)
-2. Po wybraniu paczkomatu zamknąć widget (klik "Wybierz" lub "✕")
-3. Wybrać Blik (`payment=25`)
-4. Kliknąć Dalej (Tab 1→2)
-5. Zaznaczyć regulamin (`rules`)
-6. Kliknąć Przejdź dalej (Tab 2→3)
-7. Kliknąć Zamawiam (Tab 3)
-8. Sprawdzić zamówienie na mailu — czy InPost + Blik + prawidłowa cena
-9. Przenieść fixy z test_full_flow.py do tcgumisia_autobuy.py
-10. Podpiąć trigger w detector.py
-11. Usunąć debug files
-12. Push + restart
+- `/opt/pokemon-monitor-v2/test_full_flow.py` — test script (konto testowe)
+- `/opt/pokemon-monitor-v2/detector.py` — wired: check_tcgumisia_trigger + flush_tcgumisia_batch
 
 ---
 

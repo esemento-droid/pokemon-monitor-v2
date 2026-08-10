@@ -27,7 +27,7 @@ COMPLETED_FILE = BOT_DIR / "tcgumisia_completed.json"
 LOG_FILE = BOT_DIR / "tcgumisia_autobuy.log"
 WEBHOOK_FILE = BOT_DIR / "discord_webhook_strefatcg.txt"
 PROXY = "http://127.0.0.1:8888"
-PACZKOMAT = "WAW65N"
+PACZKOMAT = "PAD04M"
 
 ACCOUNTS = [
     {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},

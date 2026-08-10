@@ -7,6 +7,7 @@ from empik_trigger import check_empik_trigger
 from strefatcg_trigger import check_strefatcg_trigger
 from japancollectibles_trigger import check_japancollectibles_trigger
 from japancollectibles_30th_trigger import check_jc_30th_trigger, flush_jc_30th_batch
+from tcgumisia_trigger import check_tcgumisia_trigger, flush_tcgumisia_batch
 
 logger = logging.getLogger("monitor")
 
@@ -33,6 +34,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                         check_strefatcg_trigger("NEW_PRODUCT", product)
                         check_japancollectibles_trigger("NEW_PRODUCT", product)
                         check_jc_30th_trigger("NEW_PRODUCT", product)
+                        check_tcgumisia_trigger("NEW_PRODUCT", product)
                 continue
 
             old = old_by_id[pid]
@@ -53,6 +55,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                     check_strefatcg_trigger("PRICE_CHANGE", product)
                     check_japancollectibles_trigger("PRICE_CHANGE", product)
                     check_jc_30th_trigger("PRICE_CHANGE", product)
+                    check_tcgumisia_trigger("PRICE_CHANGE", product)
 
             # Zmiana dostepnosci
             old_available = old.get("available", False)
@@ -76,6 +79,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                 check_strefatcg_trigger("RESTOCK", product)
                 check_japancollectibles_trigger("RESTOCK", product)
                 check_jc_30th_trigger("RESTOCK", product)
+                check_tcgumisia_trigger("RESTOCK", product)
             elif sold_out:
                 new_p = str(product.get("price", "")).strip().lower()
                 if new_p not in ("brak", "none", ""):
@@ -87,4 +91,5 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
     flush_kartexpol_batch()
     flush_tantis_batch()
     flush_jc_30th_batch()
+    flush_tcgumisia_batch()
     return is_first
