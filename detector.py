@@ -4,7 +4,7 @@ from smyk_trigger import check_smyk_autobuy
 from kartexpol_trigger import check_kartexpol_trigger, flush_kartexpol_batch
 from tantis_trigger import check_tantis_trigger, flush_tantis_batch
 from empik_trigger import check_empik_trigger
-from strefatcg_trigger import check_strefatcg_trigger
+from strefatcg_trigger import check_strefatcg_trigger, flush_strefatcg_batch
 from japancollectibles_trigger import check_japancollectibles_trigger
 from japancollectibles_30th_trigger import check_jc_30th_trigger, flush_jc_30th_batch
 from tcgumisia_trigger import check_tcgumisia_trigger, flush_tcgumisia_batch
@@ -96,4 +96,5 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
     flush_tantis_batch()
     flush_jc_30th_batch()
     flush_tcgumisia_batch()
+    flush_strefatcg_batch()
     return is_first
