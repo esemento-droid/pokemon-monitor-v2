@@ -124,17 +124,29 @@ async def main():
         await page.locator('.js-cart-next').click(force=True, timeout=5000)
         await asyncio.sleep(4)
 
-        # === TAB 3: SCREENSHOT ===
-        print("\n=== TAB 3 SUMMARY ===")
-        body_text = await page.evaluate("() => document.body ? (document.body.innerText || '').substring(0, 1500) : ''")
+        # === TAB 3: SUBMIT + SCREENSHOT CONFIRMATION ===
+        print("\n=== TAB 3 - Clicking Zamawiam i płacę ===")
+
+        # Click submit
+        await page.evaluate("""() => {
+            const btns = Array.from(document.querySelectorAll('button, a, input[type="submit"]'));
+            const submit = btns.find(el => {
+                const text = (el.innerText || el.value || '').toLowerCase();
+                return text.includes('zamawiam');
+            });
+            if (submit) submit.click();
+        }""")
+        await asyncio.sleep(4)
+
+        # Screenshot immediately after submit (confirmation page with paczkomat info)
+        await page.screenshot(path="/opt/pokemon-monitor-v2/tab3_confirmation.png")
+        print("Screenshot saved: /opt/pokemon-monitor-v2/tab3_confirmation.png")
+
+        # Dump page text
+        body_text = await page.evaluate("() => document.body ? (document.body.innerText || '').substring(0, 2000) : ''")
+        print("\n=== CONFIRMATION PAGE TEXT ===")
         print(body_text)
-
-        # Screenshot
-        await page.screenshot(path="/opt/pokemon-monitor-v2/tab3_screenshot.png")
-        print("\nScreenshot saved: /opt/pokemon-monitor-v2/tab3_screenshot.png")
-
-        # Do NOT submit
-        print("\n[NOT SUBMITTING - debug only]")
+        print(f"\nURL: {page.url}")
 
         await ctx.close()
         await browser.close()
