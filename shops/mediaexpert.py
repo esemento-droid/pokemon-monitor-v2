@@ -12,6 +12,10 @@ import json
 import logging
 import re
 
+# Ensure DISPLAY is set for headless Chrome (Xvfb)
+if not os.environ.get("DISPLAY"):
+    os.environ["DISPLAY"] = ":99"
+
 log = logging.getLogger("monitor")
 
 SEARCH_URLS = [
