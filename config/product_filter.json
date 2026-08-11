@@ -1,64 +1,132 @@
 {
-  "_doc": "Centralna lista EXCLUDE dla wszystkich scraperów. Produkt zawierający którekolwiek słowo z listy = wyrzucony. Edytuj ten plik - zmiana działa na WSZYSTKIE scrapery bez restartu (reload co cykl).",
+  "_doc": "Centralna EXCLUDE lista. Produkt zawierający JAKIEKOLWIEK słowo = WYRZUCONY. Edytuj ten plik na VPS → działa natychmiast bez restartu. Wszystkie porównania case-insensitive.",
 
-  "exclude_global": [
-    "sleeve", "koszulk", "sleeves",
-    "playmat", "mata",
-    "album", "klaser", "segregator", "folder",
+  "exclude_accessories": [
+    "sleeve", "sleeves", "koszulk", "koszulki", "koszulek",
     "toploader", "loader",
-    "ultra pro",
-    "ochraniacz", "plastikowy", "protector",
-    "pencil", "piórnik",
-    "pluszak", "plush", "maskotka",
-    "figurk", "figurka",
-    "kubek", "portfel", "poduszk", "puzzle",
-    "dice", "kości do gry",
-    "coin flip",
-    "deck box",
+    "playmat", "mata", "mata do gry",
+    "album", "portfolio", "klaser", "segregator", "folder",
     "binder pages",
-    "card pages"
+    "deck box",
+    "deck protector",
+    "protector", "ochraniacz",
+    "ultra pro", "ultra-pro", "up:", "up -",
+    "gamegenic",
+    "one-touch",
+    "acrylic", "case for",
+    "alcove",
+    "pro-binder",
+    "holder",
+    "dice", "kości i znaczniki", "znacznik", "marker",
+    "coin flip",
+    "energia", "energii", "energy", "kart energy"
+  ],
+
+  "exclude_toys_merch": [
+    "pluszak", "plush", "maskotk", "maskotka",
+    "figurk", "figurka", "funko",
+    "kubek", "portfel", "poduszk",
+    "puzzle", "klocki", "lego",
+    "mega construx", "mega pokemon",
+    "lampk", "zegar", "zegarek", "radio",
+    "t-shirt", "czapka", "capslab", "trucker", "snapback",
+    "torb", "plecak", "worek", "saszetka",
+    "piórnik", "piornik", "pencil",
+    "zeszyt", "teczka",
+    "plastikowy",
+    "spinner", "pokeball", "poke ball", "pas clip", "clip'n'go", "clip n go",
+    "przypink", "zawieszk",
+    "crochet",
+    "szczoteczk",
+    "interaktywn",
+    "ubrani",
+    "plakat"
   ],
 
   "exclude_other_games": [
     "lorcana",
     "one piece",
-    "flesh and blood", "fab",
+    "flesh and blood", "flesh & blood", "fab",
     "disney",
     "riftbound",
     "cyberpunk",
     "dragon ball",
-    "yu-gi-oh", "yu gi oh", "yugioh",
+    "yu-gi-oh", "yu gi oh", "yugioh", "ygo",
     "naruto",
     "digimon",
-    "magic the gathering", "mtg ",
+    "magic the", "magic:", "mtg:", "mtg ",
     "star wars",
-    "lord of the rings",
     "force of will",
-    "weiss schwarz", "weiß schwarz",
+    "weiss schwarz",
     "cardfight vanguard",
-    "final fantasy tcg"
+    "final fantasy tcg",
+    "marvel",
+    "fairy tail",
+    "lord of the rings",
+    "nihil zero", "nihil",
+    "timelines"
   ],
 
   "exclude_language": [
-    "jpn", "(jpn", "japanese", "japonsk",
-    "korea", "korean",
-    "chiny", "chinese"
+    "jpn", "(jpn", "jap)", "(jap",
+    "japanese", "japonsk", "japońsk", "japoński", "japenese",
+    "japan",
+    "korea", "korean", "koreańsk", "koreansk", "koreański",
+    "chiny", "china", "chinese", "chinsk", "chińsk", "chiński", "s-chin",
+    "espanol", "spanish"
   ],
 
   "exclude_deck_types": [
-    "battle deck",
     "league battle deck",
-    "starter deck",
-    "world championships deck",
+    "world championships deck", "world championship", "wcd deck", "wcs",
     "battle academy",
+    "starter deck",
     "trainer kit"
   ],
 
-  "_note_deck": "Słowo 'deck' samo w sobie NIE jest na liście — bo istnieją produkty typu 'V/VMAX/ex deck case'. Wyrzucamy tylko konkretne typy decków powyżej.",
+  "_note_battle_deck": "UWAGA: 'battle deck' NIE jest tu — bo mogą być kaski. Wyrzucamy TYLKO 'league battle deck'. Gdybyś chciał wyrzucić zwykłe battle decki, dodaj tutaj.",
 
   "exclude_singles": [
-    "singiel", "single",
-    "psa ", "psa-", "graded",
-    "cgc "
+    "singl", "single", "singiel",
+    "karta pokemon", "karta pokémon", "karta pojedyncza",
+    "psa ", "psa-", "psa 10", "psa 9", "psa 8",
+    "cgc ", "slab ",
+    "graded", "grading",
+    "losow"
+  ],
+
+  "exclude_video_games": [
+    "nintendo", "switch",
+    "scarlet", "violet",
+    "let's go",
+    "shining pearl", "brilliant diamond",
+    "pokemon snap", "pokemon shield", "pokemon sword",
+    "mystery dungeon", "legends"
+  ],
+
+  "exclude_events_other": [
+    "turniej", "cup", "liga", "wejsc",
+    "gra planszowa", "planszow", "board game",
+    "memory game",
+    "kolorowe przygody",
+    "podręcznik", "podrecznik", "książk", "ksiazk",
+    "oversize",
+    "talia",
+    "signal",
+    "outlet",
+    "mystery box",
+    "gra "
+  ],
+
+  "exclude_jp_set_codes": [
+    "(sv1", "(sv2", "(sv3", "(sv4", "(sv5", "(sv6", "(sv7", "(sv8", "(sv9",
+    "(csv", "(s12",
+    "(m1l)", "(m2)", "(m3)", "(m4)", "(m5)",
+    "cbb", "gem pack"
+  ],
+
+  "exclude_old_vintage_sets": [
+    "gym heroes", "gym challenge",
+    "base set", "fossil", "jungle", " neo "
   ]
 }
