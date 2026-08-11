@@ -45,9 +45,9 @@ PRODUCT_CONFIG = {
 # Products to SKIP (not interested)
 SKIP_KEYWORDS = []
 
-# All 4 accounts
+# All active accounts (esemento disabled - manual order)
 ALL_ACCOUNTS = [
-    "esemento@gmail.com",
+    # "esemento@gmail.com",
     "blackmat36@gmail.com",
     "tjbtaniojuzbylo@gmail.com",
     "y24015411@gmail.com",

@@ -33,7 +33,7 @@ PACZKOMAT = "PAD04M"
 import random
 
 ACCOUNTS = [
-    {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},
+    # {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},  # DISABLED - manual order placed
     {"email": "blackmat36@gmail.com", "password": "v2@pvDGt#ZuN3ui", "name": "Natalia Szczepaniak"},
     {"email": "tjbtaniojuzbylo@gmail.com", "password": "P9XAfQE.SCwFq5i", "name": "Jagoda Kaczmarek"},
     {"email": "y24015411@gmail.com", "password": "huw!e.twdCmv9@B", "name": "Miroslawa Szczepaniak"},
@@ -366,15 +366,34 @@ async def add_to_cart(page, product_url, qty=1):
     # Wait for cart popup
     await asyncio.sleep(4)
 
-    # Verify: check cart value changed
-    cart_val = await page.evaluate("""() => {
-        const el = document.querySelector('.js-cart-value');
-        return el ? el.innerText.trim() : '?';
-    }""")
-    log.info(f"Post-ATC cart value: {cart_val}")
+    # Verify: check cart value changed (RETRY if cart still empty)
+    for retry in range(3):
+        cart_val = await page.evaluate("""() => {
+            const el = document.querySelector('.js-cart-value');
+            return el ? el.innerText.trim() : '?';
+        }""")
+        log.info(f"Post-ATC cart value: {cart_val} (attempt {retry+1})")
 
-    log.info(f"Added to cart: {product_url.split('/')[-1][:50]}")
-    return True
+        # Check if cart has value (not 0, not empty)
+        if cart_val and cart_val != '0' and cart_val != '?' and cart_val != '0,00':
+            log.info(f"Added to cart: {product_url.split('/')[-1][:50]}")
+            return True
+
+        if retry < 2:
+            log.warning(f"Cart still empty after ATC, retrying in 5s...")
+            await asyncio.sleep(5)
+            # Try clicking ATC again via JS
+            await page.evaluate("""() => {
+                const btn = document.getElementById('product-card-add-to-card') ||
+                            document.querySelector('.js-product-card-cart-button') ||
+                            document.querySelector('.js-add-product-to-card:not(.u-hide)');
+                if (btn) btn.click();
+            }""")
+            await asyncio.sleep(4)
+
+    # All retries failed — cart is empty
+    log.error(f"ATC FAILED - cart still empty after 3 attempts: {product_url.split('/')[-1][:50]}")
+    return False
 
 
 
@@ -935,7 +954,9 @@ async def main():
                 log.info(f"[{account['name']}] Context closed (fresh session for next account)")
 
             if i < len(accounts_to_use) - 1:
-                await asyncio.sleep(2)
+                delay = random.randint(10, 20)
+                log.info(f"Waiting {delay}s before next account...")
+                await asyncio.sleep(delay)
 
         await browser.close()
 
