@@ -223,29 +223,56 @@ async def clear_cart(page):
     await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(4)
 
-    # Remove items one by one (Sellingo: div.js-cart-product-delete)
-    for attempt in range(10):
+    # Remove items one by one
+    for attempt in range(15):
         # Check if cart is empty
         is_empty = await page.evaluate("""() => {
             const text = document.body ? (document.body.innerText || '').toLowerCase() : '';
-            return text.includes('koszyk jest pusty') || text.includes('brak produktów');
+            return text.includes('koszyk jest pusty') || text.includes('brak produktów') || text.includes('twój koszyk jest pusty');
         }""")
         if is_empty:
             log.info("Cart is empty")
             return
 
-        # Click first visible delete button (desktop version)
-        del_btn = page.locator('.c-table-product__delete--desktop').first
-        try:
-            if await del_btn.count() == 0:
-                log.info("No more items to remove")
-                return
-            await del_btn.click(force=True, timeout=5000)
-        except Exception:
-            log.info("Delete button click failed, cart may be empty")
+        # Try multiple selectors for delete button
+        deleted = await page.evaluate("""() => {
+            // Try various delete button selectors (Sellingo versions)
+            const selectors = [
+                '.c-table-product__delete--desktop',
+                '.c-table-product__delete',
+                '[class*="delete"]',
+                '[class*="remove"]',
+                'button[title*="Usuń"]',
+                'a[title*="Usuń"]',
+                '.js-cart-product-delete',
+                '[data-action="remove"]',
+                '.cart-remove',
+                '.remove-product',
+            ];
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el && el.offsetParent !== null) {
+                    el.click();
+                    return sel;
+                }
+            }
+            // Fallback: find any clickable element with trash/remove icon or "usuń" text
+            const allBtns = document.querySelectorAll('button, a, [role="button"]');
+            for (const btn of allBtns) {
+                const text = (btn.innerText || btn.title || btn.getAttribute('aria-label') || '').toLowerCase();
+                if (text.includes('usuń') || text.includes('usun') || text.includes('remove')) {
+                    btn.click();
+                    return 'fallback:' + text.substring(0, 20);
+                }
+            }
+            return null;
+        }""")
+
+        if not deleted:
+            log.info(f"No delete button found (attempt {attempt+1}), assuming cart empty or different layout")
             return
 
-        log.info(f"Removed item from cart (attempt {attempt+1})")
+        log.info(f"Removed item from cart via '{deleted}' (attempt {attempt+1})")
         await asyncio.sleep(2)
 
         # Reload to see updated cart
