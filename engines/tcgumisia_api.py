@@ -188,17 +188,17 @@ class TcgumisiaEngine:
             products = []
             seen_ids = set()
 
-            # Split HTML by product box titles (reliable anchor point)
-            # Each chunk starts right after "c-product-box__title" 
-            # Format: ...c-product-box__title">Product Name</span>...
-            chunks = html.split('c-product-box__title')
+            # Split by product box opening div
+            # HTML format: <div ... class="... c-product-box ...">
+            # We split on "c-product-box " (with space) to catch the class
+            chunks = re.split(r'class="[^"]*c-product-box[^"]*"', html)
 
             for chunk in chunks[1:]:  # Skip first chunk (before first product)
                 # Limit chunk size — each product block is ~2-3KB
-                chunk = chunk[:4000]
+                chunk = chunk[:5000]
 
-                # Extract title — right at the start of chunk: ...">Name</...
-                title_match = re.search(r'[^>]*>([^<]+)<', chunk)
+                # Extract title from c-product-box__title
+                title_match = re.search(r'c-product-box__title[^>]*>([^<]+)<', chunk)
                 if not title_match:
                     continue
                 name = title_match.group(1).strip()
@@ -214,19 +214,16 @@ class TcgumisiaEngine:
                     if not any(kw in name.lower() for kw in POKEMON_KEYWORDS):
                         continue
 
-                # Extract link
-                link_match = RE_BOX_LINK.search(chunk)
-                if not link_match:
+                # Extract link — skip cart links (koszyk)
+                product_link = None
+                for m in RE_BOX_LINK.finditer(chunk):
+                    href_candidate = m.group(1)
+                    if "koszyk" not in href_candidate and len(href_candidate) > 30:
+                        product_link = href_candidate
+                        break
+                if not product_link:
                     continue
-                href = link_match.group(1)
-                if "koszyk" in href:
-                    # Try next link
-                    for m in RE_BOX_LINK.finditer(chunk):
-                        if "koszyk" not in m.group(1):
-                            href = m.group(1)
-                            break
-                    else:
-                        continue
+                href = product_link
 
                 # Clean URL — remove trailing /category_id
                 href_clean = re.sub(r'/\d+$', '', href.rstrip("/"))

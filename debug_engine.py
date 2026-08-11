@@ -20,23 +20,28 @@ async def test():
             print()
 
             # Test the new split approach
-            chunks = html.split('c-product-box__title')
-            print(f"Split by 'c-product-box__title' = {len(chunks)} chunks ({len(chunks)-1} products)")
+            import re as re2
+            chunks = re2.split(r'class="[^"]*c-product-box[^"]*"', html)
+            print(f"Split by product-box class = {len(chunks)} chunks ({len(chunks)-1} products)")
             print()
 
-            # Parse first 3 products
+            # Parse first 10 products
             count = 0
             for chunk in chunks[1:]:
-                chunk = chunk[:4000]
-                title_match = re.search(r'[^>]*>([^<]+)<', chunk)
+                chunk = chunk[:5000]
+                title_match = re.search(r'c-product-box__title[^>]*>([^<]+)<', chunk)
                 if not title_match:
                     continue
                 name = title_match.group(1).strip()
                 if not name or len(name) < 3:
                     continue
 
-                # Link
-                link_match = re.search(r'<a[^>]*href="(https://tcgumisia\.pl/[^"]*?)"[^>]*>', chunk)
+                # Link — skip koszyk
+                link_match = None
+                for m in re.finditer(r'<a[^>]*href="(https://tcgumisia\.pl/[^"]*?)"[^>]*>', chunk):
+                    if "koszyk" not in m.group(1) and len(m.group(1)) > 30:
+                        link_match = m
+                        break
                 href = link_match.group(1) if link_match else "NO LINK"
 
                 # Availability
@@ -53,7 +58,7 @@ async def test():
                 print(f"  [{status:5}] {price:>10} PLN | {name[:60]}")
                 print(f"          URL: {href[:80]}")
 
-                if count >= 10:
+                if count >= 15:
                     break
 
             print(f"\n  ... showed {count} of {len(chunks)-1} products")
