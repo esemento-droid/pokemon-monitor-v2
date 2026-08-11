@@ -140,6 +140,7 @@ JS_GET_XSRF = """
 async def run_bot(product_ids: list, dry_run: bool = False, num_accounts: int = 4):
     """Main bot: open browser, pass CF, then do checkout for each account."""
     from patchright.async_api import async_playwright
+from bot_utils import wait_for_verification
 
     log.info(f"{'='*60}")
     log.info(f"TANTIS AUTO-BUY | Products: {product_ids} | DryRun: {dry_run} | Accounts: {num_accounts}")

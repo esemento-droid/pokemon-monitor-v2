@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SMYK Auto-Buy Bot v2 - with cart clearing and test mode"""
 import asyncio, sys, os, logging
+from bot_utils import wait_for_verification
 
 ACCOUNTS = [
     {"email":"esemento@gmail.com","password":"cR!9GW#x2wqJtGw","firstName":"Tomasz","lastName":"Szczepaniak","street":"Lesna","streetNumber":"46a","flatNumber":"2","zipCode":"62-069","city":"Paledzie","phone":"607183797"},

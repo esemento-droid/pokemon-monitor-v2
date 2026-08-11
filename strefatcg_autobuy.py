@@ -19,6 +19,7 @@ import time
 import argparse
 from pathlib import Path
 from patchright.async_api import async_playwright
+from bot_utils import wait_for_verification
 
 # === CONFIG ===
 BASE_URL = "https://strefa-tcg.pl"

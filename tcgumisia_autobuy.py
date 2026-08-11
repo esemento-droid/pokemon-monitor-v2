@@ -18,6 +18,7 @@ import time
 import argparse
 from pathlib import Path
 from patchright.async_api import async_playwright
+from bot_utils import wait_for_verification
 
 # === CONFIG ===
 BASE_URL = "https://tcgumisia.pl"
@@ -136,6 +137,7 @@ async def login(page, email, password):
         try:
             await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(4)
+            await wait_for_verification(page)
 
             # Accept cookies if present
             try:
@@ -203,6 +205,7 @@ async def login(page, email, password):
             # If NOT there = logged in (account checkout)
             await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(3)
+            await wait_for_verification(page)
             cart_text = await page.evaluate("() => (document.body ? document.body.innerText : '').toLowerCase()")
             if "kup bez rejestracji" not in cart_text:
                 return True
@@ -222,6 +225,7 @@ async def clear_cart(page):
     """Go to /koszyk and click remove buttons for all items."""
     await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
     await asyncio.sleep(4)
+    await wait_for_verification(page)
 
     # Remove items one by one
     for attempt in range(15):
@@ -278,6 +282,7 @@ async def clear_cart(page):
         # Reload to see updated cart
         await page.goto(f"{BASE_URL}/koszyk", wait_until="domcontentloaded", timeout=30000)
         await asyncio.sleep(3)
+        await wait_for_verification(page)
 
 
 async def add_to_cart(page, product_url, qty=1):

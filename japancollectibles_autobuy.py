@@ -14,6 +14,7 @@ from pathlib import Path
 
 # Patchright for stealth
 from patchright.async_api import async_playwright
+from bot_utils import wait_for_verification
 
 BASE_DIR = Path("/opt/pokemon-monitor-v2")
 COMPLETED_FILE = BASE_DIR / "japancollectibles_completed.json"
