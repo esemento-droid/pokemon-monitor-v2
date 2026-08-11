@@ -103,6 +103,16 @@ async def _scrape():
             # Wait for products to load
             await asyncio.sleep(3)
 
+            # Debug: save page state
+            try:
+                html_content = await page.content()
+                debug_path = "/opt/pokemon-monitor-v2/data/battlestash_debug.html"
+                with open(debug_path, "w") as f:
+                    f.write(html_content)
+                log.info(f"[battlestash] DEBUG: saved HTML ({len(html_content)} chars), title='{title}'")
+            except Exception as de:
+                log.warning(f"[battlestash] DEBUG save failed: {de}")
+
             # Scroll to load lazy images
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await asyncio.sleep(2)
