@@ -188,18 +188,22 @@ class TcgumisiaEngine:
             products = []
             seen_ids = set()
 
-            # Split HTML by product boxes
-            chunks = html.split('c-product-box"')
+            # Split HTML by product box titles (reliable anchor point)
+            # Each chunk starts right after "c-product-box__title" 
+            # Format: ...c-product-box__title">Product Name</span>...
+            chunks = html.split('c-product-box__title')
 
             for chunk in chunks[1:]:  # Skip first chunk (before first product)
-                # Limit chunk size to avoid parsing into next product
+                # Limit chunk size — each product block is ~2-3KB
                 chunk = chunk[:4000]
 
-                # Extract title
-                title_match = RE_BOX_TITLE.search(chunk)
+                # Extract title — right at the start of chunk: ...">Name</...
+                title_match = re.search(r'[^>]*>([^<]+)<', chunk)
                 if not title_match:
                     continue
                 name = title_match.group(1).strip()
+                if not name or len(name) < 3:
+                    continue
 
                 # Filter: exclude unwanted products (central exclude list)
                 if should_exclude(name):
