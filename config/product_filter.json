@@ -1,0 +1,64 @@
+{
+  "_doc": "Centralna lista EXCLUDE dla wszystkich scraperów. Produkt zawierający którekolwiek słowo z listy = wyrzucony. Edytuj ten plik - zmiana działa na WSZYSTKIE scrapery bez restartu (reload co cykl).",
+
+  "exclude_global": [
+    "sleeve", "koszulk", "sleeves",
+    "playmat", "mata",
+    "album", "klaser", "segregator", "folder",
+    "toploader", "loader",
+    "ultra pro",
+    "ochraniacz", "plastikowy", "protector",
+    "pencil", "piórnik",
+    "pluszak", "plush", "maskotka",
+    "figurk", "figurka",
+    "kubek", "portfel", "poduszk", "puzzle",
+    "dice", "kości do gry",
+    "coin flip",
+    "deck box",
+    "binder pages",
+    "card pages"
+  ],
+
+  "exclude_other_games": [
+    "lorcana",
+    "one piece",
+    "flesh and blood", "fab",
+    "disney",
+    "riftbound",
+    "cyberpunk",
+    "dragon ball",
+    "yu-gi-oh", "yu gi oh", "yugioh",
+    "naruto",
+    "digimon",
+    "magic the gathering", "mtg ",
+    "star wars",
+    "lord of the rings",
+    "force of will",
+    "weiss schwarz", "weiß schwarz",
+    "cardfight vanguard",
+    "final fantasy tcg"
+  ],
+
+  "exclude_language": [
+    "jpn", "(jpn", "japanese", "japonsk",
+    "korea", "korean",
+    "chiny", "chinese"
+  ],
+
+  "exclude_deck_types": [
+    "battle deck",
+    "league battle deck",
+    "starter deck",
+    "world championships deck",
+    "battle academy",
+    "trainer kit"
+  ],
+
+  "_note_deck": "Słowo 'deck' samo w sobie NIE jest na liście — bo istnieją produkty typu 'V/VMAX/ex deck case'. Wyrzucamy tylko konkretne typy decków powyżej.",
+
+  "exclude_singles": [
+    "singiel", "single",
+    "psa ", "psa-", "graded",
+    "cgc "
+  ]
+}

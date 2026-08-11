@@ -25,10 +25,16 @@ Usage:
 import asyncio
 import hashlib
 import logging
+import os
 import re
+import sys
 import time
 
 import aiohttp
+
+# Ensure parent dir is in path for config imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.product_filter import should_exclude
 
 logger = logging.getLogger("engine.tcgumisia")
 
@@ -45,15 +51,7 @@ POLL_INTERVAL = 3  # seconds between full poll cycles
 POW_REFRESH_INTERVAL = 1800  # re-solve PoW every 30 min
 REQUEST_TIMEOUT = 20  # per-request timeout
 
-# Product filtering — same as shops/tcgumisia.py
-EXCLUDE_KEYWORDS = [
-    "lorcana", "one piece", "flesh and blood", "fab", "disney",
-    "album", "sleeve", "koszulk", "binder", "toploader", "ultra pro",
-    "ochraniacz", "plastikowy", "jpn", "(jpn", "deck", "pencil",
-    "riftbound", "cyberpunk", "playmat", "mata", "singiel", "single",
-]
-
-# For /pre-order page — only include Pokemon products
+# For /pre-order page — only include Pokemon products (other games filtered out by central exclude)
 POKEMON_KEYWORDS = ["pokemon", "pokémon", "pikachu", "charizard", "booster", "etb", "trainer box"]
 
 # Regex patterns for category page parsing (replaces BeautifulSoup)
@@ -100,7 +98,7 @@ class TcgumisiaEngine:
     """Rapid category poller for tcgumisia.pl — all sealed Pokemon products."""
 
     def __init__(self):
-        self.session: aiohttp.ClientSession | None = None
+        self.session: "aiohttp.ClientSession | None" = None
         self.pow_solved_at: float = 0
 
     async def ensure_session(self):
@@ -203,14 +201,13 @@ class TcgumisiaEngine:
                     continue
                 name = title_match.group(1).strip()
 
-                # Filter: exclude unwanted products
-                name_lower = name.lower()
-                if any(kw in name_lower for kw in EXCLUDE_KEYWORDS):
+                # Filter: exclude unwanted products (central exclude list)
+                if should_exclude(name):
                     continue
 
                 # Filter: pre-order page — only Pokemon products
                 if is_preorder:
-                    if not any(kw in name_lower for kw in POKEMON_KEYWORDS):
+                    if not any(kw in name.lower() for kw in POKEMON_KEYWORDS):
                         continue
 
                 # Extract link
