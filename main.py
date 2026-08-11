@@ -31,6 +31,7 @@ from database import init_db, get_shop_products, save_products_batch, is_snapsho
 from detector import detect_and_send
 from discord_sender import discord
 from sanitize import sanitize_batch
+from engines.engine_runner import run_engines_process
 
 # ============================================================
 # SHOP CATEGORIES
@@ -391,10 +392,11 @@ def main():
     logger.info(f"FAST: {len(fast_shops)} shops (in-process async)")
     logger.info(f"SLOW: {len(slow_shops)} shops (in-process async)")
     logger.info(f"NODRIVER: {len(nodriver_names)} shops (subprocess/Chrome)")
-    logger.info(f"Total: {len(all_shops)} shops in 3 independent processes")
+    logger.info(f"ENGINES: Hydra v3 rapid pollers (separate process)")
+    logger.info(f"Total: {len(all_shops)} shops in 4 independent processes")
     logger.info("Architecture: each process has OWN event loop, ZERO interference")
 
-    # Fork 3 processes
+    # Fork 3 processes + 1 engine process
     processes = []
 
     p_fast = multiprocessing.Process(target=run_fast_process, args=(fast_shops,), name="monitor-fast")
@@ -411,6 +413,12 @@ def main():
     p_nodriver.start()
     processes.append(p_nodriver)
     logger.info(f"Started NODRIVER process (PID {p_nodriver.pid})")
+
+    # Hydra v3: ENGINE process (rapid API pollers)
+    p_engines = multiprocessing.Process(target=run_engines_process, name="monitor-engines")
+    p_engines.start()
+    processes.append(p_engines)
+    logger.info(f"Started ENGINES process (PID {p_engines.pid}) — Hydra v3 rapid pollers")
 
     # Wait for all (restart on crash)
     def signal_handler(sig, frame):
@@ -431,6 +439,8 @@ def main():
                     p_new = multiprocessing.Process(target=run_fast_process, args=(fast_shops,), name="monitor-fast")
                 elif p.name == "monitor-slow":
                     p_new = multiprocessing.Process(target=run_slow_process, args=(slow_shops,), name="monitor-slow")
+                elif p.name == "monitor-engines":
+                    p_new = multiprocessing.Process(target=run_engines_process, name="monitor-engines")
                 else:
                     p_new = multiprocessing.Process(target=run_nodriver_process, args=(nodriver_names,), name="monitor-nodriver")
                 p_new.start()
