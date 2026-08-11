@@ -1,9 +1,42 @@
-import subprocess, logging, re
+import subprocess, logging, re, json, os
 
 log = logging.getLogger("monitor")
 TRIGGER_KW = re.compile(r"first.partner|illustration.collection|30th|30.anniversary|30.lecie|30.rocznica", re.IGNORECASE)
 PYTHON = "/opt/pokemon-monitor-v2/venv/bin/python3"
 SCRIPT = "/opt/pokemon-monitor-v2/smyk_autobuy.py"
+COMPLETED_FILE = "/opt/pokemon-monitor-v2/data/smyk_completed.json"
+
+
+def _load_completed():
+    try:
+        if os.path.exists(COMPLETED_FILE):
+            with open(COMPLETED_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+
+def _save_completed(completed):
+    try:
+        os.makedirs(os.path.dirname(COMPLETED_FILE), exist_ok=True)
+        with open(COMPLETED_FILE, "w") as f:
+            json.dump(completed, f)
+    except Exception as e:
+        log.warning(f"[SMYK-TRIGGER] Failed to save completed: {e}")
+
+
+def is_smyk_completed(url):
+    """Check if this URL was already bought."""
+    return url in _load_completed()
+
+
+def mark_smyk_completed(url):
+    """Mark URL as bought so we don't trigger again."""
+    completed = _load_completed()
+    if url not in completed:
+        completed.append(url)
+        _save_completed(completed)
 
 
 def check_smyk_autobuy(shop, event_type, product):
