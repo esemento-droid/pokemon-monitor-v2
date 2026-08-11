@@ -195,10 +195,9 @@ class TcgumisiaEngine:
             products = []
             seen_ids = set()
 
-            # Split by product box opening div
-            # HTML format: <div ... class="... c-product-box ...">
-            # We split on "c-product-box " (with space) to catch the class
-            chunks = re.split(r'class="[^"]*c-product-box[^"]*"', html)
+            # Split by main product box container ONLY
+            # Use word boundary to NOT match c-product-box__title, c-product-box__price etc
+            chunks = re.split(r'class="[^"]*\bc-product-box\b(?![-_])[^"]*"', html)
 
             for chunk in chunks[1:]:  # Skip first chunk (before first product)
                 # Limit chunk size — each product block is ~2-3KB

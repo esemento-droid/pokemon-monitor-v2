@@ -27,7 +27,7 @@ async def test():
             print()
 
             # Split by product box class
-            chunks = re.split(r'class="[^"]*c-product-box[^"]*"', html)
+            chunks = re.split(r'class="[^"]*\bc-product-box\b(?![-_])[^"]*"', html)
             print(f"Split = {len(chunks)-1} raw product boxes")
 
             products = []
