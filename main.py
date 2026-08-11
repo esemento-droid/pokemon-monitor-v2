@@ -39,7 +39,7 @@ from sanitize import sanitize_batch
 NODRIVER_SHOPS = {
     "empik", "proshop", "boosterpoint",
     "dragonus", "piwniczaki", "rgfk", "strefamarzen", "wilczek", "tantis",
-    "battlestash",
+    "battlestash", "bonito",
 }
 
 SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
