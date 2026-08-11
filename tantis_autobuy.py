@@ -410,6 +410,13 @@ def main():
         if idx < len(args):
             num_accounts = int(args.pop(idx))
 
+    # Parse --qty (ignore it — bot uses hardcoded QUANTITY)
+    if "--qty" in args:
+        idx = args.index("--qty")
+        args.pop(idx)
+        if idx < len(args):
+            args.pop(idx)  # remove the value too
+
     product_ids = []
     i = 0
     while i < len(args):

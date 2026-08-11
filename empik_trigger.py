@@ -4,6 +4,7 @@ Fires on ANY event (NEW_PRODUCT, RESTOCK, PRICE_CHANGE, or just scan)
 when: stock="empik" + available=True + pid in WATCH_PIDS + price <= max_price
 """
 import subprocess
+import os
 import json
 import logging
 from pathlib import Path
@@ -96,7 +97,7 @@ def check_empik_trigger(event_type, product):
         "--max", str(QTY * MAX_ACCOUNTS),
         url
     ]
-    env = {"DISPLAY": ":99", "PATH": "/usr/bin:/bin"}
+    env = {**os.environ, "DISPLAY": ":99"}
     try:
         proc = subprocess.Popen(
             cmd, env=env,
