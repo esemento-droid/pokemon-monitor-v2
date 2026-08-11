@@ -1,33 +1,32 @@
 """
 HYDRA v3 Engine: tcgumisia_api.py
 =================================
-Rapid product-level poller for tcgumisia.pl (Sellingo platform).
+Rapid category poller for tcgumisia.pl (Sellingo platform).
 
 Strategy:
-- Monitors a WATCHLIST of specific product URLs (not entire category)
-- Uses regex instead of BeautifulSoup (10x lighter)
+- Scans /pokemon and /pre-order every 3 seconds
+- Uses regex instead of BeautifulSoup (10x lighter parsing)
 - Solves PoW ONCE and reuses cookies (~30 min lifetime)
-- Polls every 3 seconds (vs 5-15s for old HTML scraper)
-- Parallel async requests via asyncio.gather()
+- Monitors ALL sealed Pokemon TCG products (not just 30th)
 - Reports to detector.py using same product dict contract
 
 This runs ALONGSIDE shops/tcgumisia.py (old scraper stays as fallback).
-Whichever detects a restock FIRST triggers the bot.
+Whichever detects a restock or new drop FIRST triggers the bot.
+
+Filters:
+- ONLY English sealed products (booster boxes, ETBs, tins, collections, bundles)
+- EXCLUDES: decks, singles, Japanese, accessories, sleeves, playmats, albums
 
 Usage:
-  Called from main.py as engine (see integration in engine_runner)
+  Called from main.py as engine (via engine_runner)
   Or standalone: python -m engines.tcgumisia_api
 """
 
 import asyncio
 import hashlib
-import json
 import logging
-import os
 import re
-import sys
 import time
-from pathlib import Path
 
 import aiohttp
 
@@ -39,44 +38,33 @@ logger = logging.getLogger("engine.tcgumisia")
 
 SHOP = "tcgumisia.pl"
 BASE_URL = "https://tcgumisia.pl"
+CATEGORY_URLS = ["/pokemon", "/pre-order"]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
 
 POLL_INTERVAL = 3  # seconds between full poll cycles
 POW_REFRESH_INTERVAL = 1800  # re-solve PoW every 30 min
-REQUEST_TIMEOUT = 10  # per-product request timeout
-MAX_CONCURRENT = 5  # max parallel product requests
+REQUEST_TIMEOUT = 20  # per-request timeout
 
-WATCHLIST_PATH = Path(__file__).parent / "tcgumisia_watchlist.json"
+# Product filtering — same as shops/tcgumisia.py
+EXCLUDE_KEYWORDS = [
+    "lorcana", "one piece", "flesh and blood", "fab", "disney",
+    "album", "sleeve", "koszulk", "binder", "toploader", "ultra pro",
+    "ochraniacz", "plastikowy", "jpn", "(jpn", "deck", "pencil",
+    "riftbound", "cyberpunk", "playmat", "mata", "singiel", "single",
+]
 
-# Regex patterns for extracting data from product pages
-RE_AVAILABILITY = re.compile(r'c-avaibility[^"]*?(--none)?', re.IGNORECASE)
-RE_PRICE = re.compile(r'c-product__price-value[^>]*>\s*([\d\s,.]+)\s*(?:PLN|zł)', re.IGNORECASE)
-RE_TITLE = re.compile(r'<h1[^>]*class="[^"]*c-product__title[^"]*"[^>]*>([^<]+)</h1>', re.IGNORECASE)
-RE_IMAGE = re.compile(r'c-product__image[^>]*?(?:data-src|src)="([^"]+)"', re.IGNORECASE)
-RE_STOCK_LABEL = re.compile(r'Niedostępny|Dostępny|Brak w magazynie|Produkt niedostępny', re.IGNORECASE)
+# For /pre-order page — only include Pokemon products
+POKEMON_KEYWORDS = ["pokemon", "pokémon", "pikachu", "charizard", "booster", "etb", "trainer box"]
 
-# Regex for category page (faster than BS4)
-RE_PRODUCT_BOX = re.compile(
-    r'<div[^>]*class="[^"]*c-product-box[^"]*"[^>]*>.*?</div>\s*</div>\s*</div>',
-    re.DOTALL | re.IGNORECASE
-)
+# Regex patterns for category page parsing (replaces BeautifulSoup)
 RE_BOX_TITLE = re.compile(r'c-product-box__title[^>]*>([^<]+)<', re.IGNORECASE)
 RE_BOX_LINK = re.compile(r'<a[^>]*href="(https://tcgumisia\.pl/[^"]*?)"[^>]*>', re.IGNORECASE)
-RE_BOX_PRICE = re.compile(r'c-product-box__price-value[^>]*>\s*([\d\s,.]+)\s*(?:PLN|zł)?', re.IGNORECASE)
-RE_BOX_AVAIL = re.compile(r'c-avaibility(--none)?', re.IGNORECASE)
+RE_BOX_PRICE = re.compile(r'c-product-box__price-value[^>]*>\s*([\d\s,.]+)', re.IGNORECASE)
 RE_BOX_IMAGE = re.compile(r'<img[^>]*(?:data-src|src)="([^"]+)"', re.IGNORECASE)
 
 # PoW patterns
 RE_POW_TOKEN = re.compile(r'token="([^"]+)"')
 RE_POW_DIFF = re.compile(r'diff=(\d+)')
-
-# Product filtering
-EXCLUDE_KEYWORDS = [
-    "lorcana", "one piece", "flesh and blood", "fab", "disney",
-    "album", "sleeve", "koszulk", "binder", "toploader", "ultra pro",
-    "ochraniacz", "plastikowy", "jpn", "(jpn", "deck", "pencil",
-    "riftbound", "cyberpunk"
-]
 
 
 # ============================================================
@@ -84,7 +72,7 @@ EXCLUDE_KEYWORDS = [
 # ============================================================
 
 def solve_pow(token: str, diff: int) -> int:
-    """Solve SHA-256 proof-of-work challenge (same as shops/tcgumisia.py)."""
+    """Solve SHA-256 proof-of-work challenge."""
     nonce = 0
     while True:
         h = hashlib.sha256(f"{token}|{nonce}".encode()).digest()
@@ -109,29 +97,11 @@ def solve_pow(token: str, diff: int) -> int:
 # ============================================================
 
 class TcgumisiaEngine:
-    """Rapid-poll engine for tcgumisia.pl watchlist products."""
+    """Rapid category poller for tcgumisia.pl — all sealed Pokemon products."""
 
     def __init__(self):
         self.session: aiohttp.ClientSession | None = None
         self.pow_solved_at: float = 0
-        self.watchlist: list[dict] = []
-        self._last_states: dict[str, bool] = {}  # url -> available
-        self._running = False
-
-    def load_watchlist(self):
-        """Load product watchlist from JSON file."""
-        if not WATCHLIST_PATH.exists():
-            logger.error(f"[ENGINE] Watchlist not found: {WATCHLIST_PATH}")
-            return []
-
-        try:
-            data = json.loads(WATCHLIST_PATH.read_text())
-            products = data.get("products", [])
-            logger.info(f"[ENGINE] Loaded watchlist: {len(products)} products")
-            return products
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"[ENGINE] Failed to load watchlist: {e}")
-            return []
 
     async def ensure_session(self):
         """Create or refresh aiohttp session with solved PoW cookies."""
@@ -157,7 +127,6 @@ class TcgumisiaEngine:
                 html = await resp.text()
 
             if "Weryfikacja" not in html or "nodea" not in html:
-                # No PoW needed (already solved or disabled)
                 self.pow_solved_at = now
                 logger.info("[ENGINE] No PoW needed, session ready")
                 return True
@@ -197,149 +166,84 @@ class TcgumisiaEngine:
                 self.session = None
             return False
 
-    async def poll_product(self, product: dict) -> dict | None:
+    async def poll_category(self, category_url: str) -> list[dict]:
         """
-        Poll a single product URL and return product dict.
-        Returns None on error (will be skipped in results).
+        Rapid category poll using regex (no BeautifulSoup).
+        Returns list of product dicts.
         """
-        url = product["url"]
+        url = BASE_URL + category_url
+        is_preorder = "pre-order" in category_url
+
         try:
             async with self.session.get(url) as resp:
                 if resp.status != 200:
                     logger.warning(f"[ENGINE] HTTP {resp.status} for {url}")
-                    return None
-                html = await resp.text()
-
-            # Check if PoW challenge appeared (session expired)
-            if "Weryfikacja" in html and "nodea" in html:
-                logger.warning("[ENGINE] PoW expired mid-session, marking for refresh")
-                self.pow_solved_at = 0  # Force refresh next cycle
-                return None
-
-            # Extract availability via regex (FAST)
-            # Look for availability indicator
-            available = True
-            if "Niedostępny" in html or "Brak w magazynie" in html or "Produkt niedostępny" in html:
-                available = False
-            elif "Dostępny" in html:
-                available = True
-            else:
-                # Fallback: check c-avaibility--none class
-                avail_match = RE_AVAILABILITY.search(html)
-                if avail_match and avail_match.group(1):
-                    available = False
-
-            # Extract price
-            price = "brak"
-            price_match = RE_PRICE.search(html)
-            if price_match:
-                price_raw = price_match.group(1).replace(" ", "").replace(",", ".").strip()
-                try:
-                    price = f"{float(price_raw):.2f} PLN"
-                except ValueError:
-                    price = price_raw + " PLN"
-
-            # Generate stable ID (same format as shops/tcgumisia.py)
-            # URL: https://tcgumisia.pl/slug/category_id → id = "tcgumisia_slug"
-            url_clean = re.sub(r'/\d+$', '', url.rstrip("/"))
-            slug = url_clean.replace("https://tcgumisia.pl/", "").replace("/", "_")
-            pid = f"tcgumisia_{slug}"
-
-            # Use watchlist name or extract from HTML
-            name = product.get("name", "")
-            if not name:
-                title_match = RE_TITLE.search(html)
-                if title_match:
-                    name = title_match.group(1).strip()
-                else:
-                    name = slug.replace("-", " ").title()
-
-            # Image (optional, not critical for detection)
-            image = ""
-            img_match = RE_IMAGE.search(html)
-            if img_match:
-                image = img_match.group(1)
-
-            return {
-                "id": pid,
-                "name": name,
-                "price": price,
-                "shop": SHOP,
-                "url": url_clean,
-                "image": image,
-                "stock": 1 if available else 0,
-                "available": available,
-            }
-
-        except asyncio.TimeoutError:
-            logger.warning(f"[ENGINE] Timeout polling {url}")
-            return None
-        except Exception as e:
-            logger.error(f"[ENGINE] Error polling {url}: {e}")
-            return None
-
-    async def poll_category(self, category_url: str) -> list[dict]:
-        """
-        Rapid category poll using regex (no BeautifulSoup).
-        Used as secondary method to discover NEW products not in watchlist.
-        """
-        try:
-            async with self.session.get(
-                f"{BASE_URL}{category_url}",
-                timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
-                if resp.status != 200:
                     return []
                 html = await resp.text()
 
+            # Check if PoW expired
             if "Weryfikacja" in html and "nodea" in html:
+                logger.warning("[ENGINE] PoW expired, marking for refresh")
                 self.pow_solved_at = 0
                 return []
 
             products = []
             seen_ids = set()
 
-            # Split by product boxes using a simpler approach
-            # Find all product box sections
-            boxes = html.split('c-product-box"')
+            # Split HTML by product boxes
+            chunks = html.split('c-product-box"')
 
-            for box_html in boxes[1:]:  # Skip first (before first product)
-                # Cut at next product box
-                box_html = box_html[:box_html.find('c-product-box"')] if 'c-product-box"' in box_html else box_html[:5000]
+            for chunk in chunks[1:]:  # Skip first chunk (before first product)
+                # Limit chunk size to avoid parsing into next product
+                chunk = chunk[:4000]
 
                 # Extract title
-                title_match = RE_BOX_TITLE.search(box_html)
+                title_match = RE_BOX_TITLE.search(chunk)
                 if not title_match:
                     continue
                 name = title_match.group(1).strip()
 
-                # Filter excluded keywords
-                if any(kw in name.lower() for kw in EXCLUDE_KEYWORDS):
+                # Filter: exclude unwanted products
+                name_lower = name.lower()
+                if any(kw in name_lower for kw in EXCLUDE_KEYWORDS):
                     continue
 
+                # Filter: pre-order page — only Pokemon products
+                if is_preorder:
+                    if not any(kw in name_lower for kw in POKEMON_KEYWORDS):
+                        continue
+
                 # Extract link
-                link_match = RE_BOX_LINK.search(box_html)
+                link_match = RE_BOX_LINK.search(chunk)
                 if not link_match:
                     continue
                 href = link_match.group(1)
                 if "koszyk" in href:
-                    continue
+                    # Try next link
+                    for m in RE_BOX_LINK.finditer(chunk):
+                        if "koszyk" not in m.group(1):
+                            href = m.group(1)
+                            break
+                    else:
+                        continue
 
-                # Clean URL
+                # Clean URL — remove trailing /category_id
                 href_clean = re.sub(r'/\d+$', '', href.rstrip("/"))
                 slug = href_clean.replace("https://tcgumisia.pl/", "").replace("/", "_")
                 pid = f"tcgumisia_{slug}"
 
-                if pid in seen_ids:
+                if not pid or pid == "tcgumisia_" or pid in seen_ids:
                     continue
                 seen_ids.add(pid)
 
-                # Availability
-                available = "--none" not in box_html.split("c-avaibility")[1][:20] if "c-avaibility" in box_html else True
+                # Availability — check for c-avaibility--none
+                available = True
+                if "c-avaibility--none" in chunk or "Niedostępny" in chunk:
+                    available = False
 
                 # Price
                 price = "brak"
-                price_match = RE_BOX_PRICE.search(box_html)
+                price_match = RE_BOX_PRICE.search(chunk)
                 if price_match:
                     price_raw = price_match.group(1).replace(" ", "").replace(",", ".").strip()
                     try:
@@ -349,9 +253,12 @@ class TcgumisiaEngine:
 
                 # Image
                 image = ""
-                img_match = RE_BOX_IMAGE.search(box_html)
+                img_match = RE_BOX_IMAGE.search(chunk)
                 if img_match:
-                    image = img_match.group(1)
+                    img_url = img_match.group(1)
+                    # Skip tiny placeholder images
+                    if "blank" not in img_url and len(img_url) > 10:
+                        image = img_url
 
                 products.append({
                     "id": pid,
@@ -366,52 +273,35 @@ class TcgumisiaEngine:
 
             return products
 
+        except asyncio.TimeoutError:
+            logger.warning(f"[ENGINE] Timeout for {url}")
+            return []
         except Exception as e:
-            logger.error(f"[ENGINE] Category poll error: {e}")
+            logger.error(f"[ENGINE] Error polling {url}: {e}")
             return []
 
     async def get_products(self) -> list[dict]:
         """
-        Main entry point - matches shops/*.py contract.
-        Polls watchlist products in parallel + category scan.
-        Returns combined unique product list.
+        Main entry point — matches shops/*.py contract.
+        Scans all category pages and returns combined product list.
         """
-        # Ensure we have a valid session
         if not await self.ensure_session():
             return []
 
-        # Load/reload watchlist
-        self.watchlist = self.load_watchlist()
-
-        # Poll watchlist products in parallel (capped concurrency)
-        sem = asyncio.Semaphore(MAX_CONCURRENT)
-
-        async def _poll_with_sem(product):
-            async with sem:
-                return await self.poll_product(product)
-
-        # Parallel poll watchlist
-        tasks = [_poll_with_sem(p) for p in self.watchlist]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        products = []
+        all_products = []
         seen_ids = set()
-        for r in results:
-            if isinstance(r, dict) and r is not None:
-                if r["id"] not in seen_ids:
-                    seen_ids.add(r["id"])
-                    products.append(r)
 
-        # Also do a quick category scan to catch NEW products
-        for cat in ["/pokemon", "/pre-order"]:
-            cat_products = await self.poll_category(cat)
+        for cat_url in CATEGORY_URLS:
+            cat_products = await self.poll_category(cat_url)
             for p in cat_products:
                 if p["id"] not in seen_ids:
                     seen_ids.add(p["id"])
-                    products.append(p)
+                    all_products.append(p)
 
-        logger.info(f"[ENGINE] Poll complete: {len(products)} products ({len(self.watchlist)} watchlist + category)")
-        return products
+        if all_products:
+            logger.info(f"[ENGINE] {len(all_products)} products from {len(CATEGORY_URLS)} categories")
+
+        return all_products
 
     async def close(self):
         """Cleanup."""
@@ -461,8 +351,9 @@ async def _standalone():
         print()
 
         for p in sorted(products, key=lambda x: (not x["available"], x["name"])):
-            status = "AVAILABLE" if p["available"] else "---"
-            print(f"  [{status:9}] {p['price']:>12} | {p['name'][:60]}")
+            status = "AVAIL" if p["available"] else "---"
+            print(f"  [{status:5}] {p['price']:>12} | {p['name'][:60]}")
+            print(f"          ID: {p['id']}")
 
     finally:
         await engine.close()
