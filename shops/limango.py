@@ -9,8 +9,14 @@ import asyncio
 import re
 import json
 import ssl
+import sys
+import os
 
 import aiohttp
+
+# Allow imports from parent directory
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from price_compare import compare_price, format_comparison
 
 SHOP = "limango"
 BASE = "https://www.limango.pl"
@@ -160,6 +166,27 @@ async def get_products():
             # Stop if page had fewer products (last page)
             if len(page_products) < 50:
                 break
+
+    # --- Price comparison with promoklocki.pl ---
+    if products:
+        try:
+            async with aiohttp.ClientSession(headers=HEADERS) as pc_session:
+                for product in products:
+                    if not product.get("available") or not product.get("price"):
+                        continue
+                    try:
+                        price_val = float(product["price"].replace(" zl", "").replace(",", ".").strip())
+                    except (ValueError, AttributeError):
+                        continue
+                    try:
+                        result = await compare_price(product["name"], price_val, pc_session)
+                        if result:
+                            product["price_compare"] = result
+                    except Exception as e:
+                        print(f"[LIMANGO] Price compare error: {e}")
+                        continue
+        except Exception as e:
+            print(f"[LIMANGO] Price compare session error: {e}")
 
     print(f"[LIMANGO] {len(products)} klocki LEGO (6 stron)")
     return products
