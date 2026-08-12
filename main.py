@@ -27,7 +27,7 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, DIR)
 
 from config import CHECK_MIN, CHECK_MAX, LOG_PATH, DISCORD_WEBHOOK
-from database import init_db, get_shop_products, save_products_batch, is_snapshot_done, mark_snapshot_done
+from database import init_db, get_shop_products, save_products_batch, is_snapshot_done, mark_snapshot_done, should_turbo_mode
 from detector import detect_and_send
 from discord_sender import discord
 from sanitize import sanitize_batch
@@ -186,6 +186,13 @@ async def shop_worker(name, module, logger, process_type):
                 await _send_alarm(name, e, logger)
 
         # Delay with jitter
+        # Check turbo mode (cross-shop intelligence)
+        try:
+            turbo = await should_turbo_mode(name)
+            stats["turbo"] = turbo
+        except Exception:
+            stats["turbo"] = False
+
         delay = _get_delay(name, stats, error=(stats["err"] > 0), scan_time=scan_time)
         delay += random.uniform(0, 3)
         await asyncio.sleep(delay)
@@ -197,6 +204,12 @@ def _get_delay(name, stats, error=False, scan_time=0.0):
         return random.randint(60, 120)
     elif errs >= 3:
         return random.randint(30, 60)
+
+    # Check turbo mode (set by cross-shop intelligence)
+    turbo = stats.get("turbo", False)
+    if turbo:
+        # TURBO: scan as fast as possible (2-5s delay)
+        return random.randint(2, 5)
 
     if name in VERY_SLOW_SHOPS:
         base = random.randint(60, 120)
