@@ -1,0 +1,38 @@
+{
+  "shop": "tcgumisia",
+  "email": "y24015411@gmail.com",
+  "saved_at": 1786557627.993104,
+  "saved_at_human": "2026-08-12 20:00:27",
+  "cookies": [
+    {
+      "name": "__nodea",
+      "value": "MTQ2LjU5LjQ1LjIyOHwxNzg2NTU3OTE2fDMwMA.606b806f4c5e4f5cf17b6309ecbf47114e140fa1e109d4eccccab01fd890a357",
+      "domain": "tcgumisia.pl",
+      "path": "/",
+      "expires": 1786557916.020883,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "cookie_alert",
+      "value": "20431cce9d588ff963bd232163a63906f2bc669b~1",
+      "domain": "tcgumisia.pl",
+      "path": "/",
+      "expires": 1821117616.258504,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "session",
+      "value": "apa3dbq0915otva3o1l51cjfvl",
+      "domain": "tcgumisia.pl",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ]
+}

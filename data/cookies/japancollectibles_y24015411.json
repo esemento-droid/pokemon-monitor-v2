@@ -1,0 +1,88 @@
+{
+  "shop": "japancollectibles",
+  "email": "y24015411@gmail.com",
+  "saved_at": 1786557674.4435008,
+  "saved_at_human": "2026-08-12 20:01:14",
+  "cookies": [
+    {
+      "name": "SERVERID",
+      "value": "apache-web",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "js_hash",
+      "value": "a649e19714",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": 1786644065,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ca_yes",
+      "value": "1",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": 1818093668,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ac_data",
+      "value": "%7B%7D",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": 1791741669,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "autologin",
+      "value": "eyJ1c2VyX2lkIjoxNjg4LCJ0b2tlbiI6IjFjN2VjMDU5MTA1ZGJkMmIwNmQyNTg3ZjBiOTUxMzI0NzMzYzMyNmM3ZGUyMjQ5Y2Y3ZmQ3OWU5ZmUxMzA3ZTYifQ%3D%3D",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": 1789149670.247112,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "PHPSESSID",
+      "value": "875qrv8dp36l6ovjq6gk7k6vhd",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "device_view",
+      "value": "full",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": 1789236071.953889,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "sky2_cart_id",
+      "value": "11effccd-3d53-4862-87fe-823c88678524",
+      "domain": "japancollectibles.shop",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ]
+}
