@@ -135,6 +135,22 @@ class DiscordSender:
                 {"name": "\U0001f4e6 Stan", "value": stock_text, "inline": True},
             ]
         }
+        # Price comparison field (LEGO)
+        price_compare = product.get("price_compare")
+        if price_compare:
+            embed["fields"].append({
+                "name": "📊 Porownanie cen",
+                "value": price_compare,
+                "inline": False,
+            })
+            kr_url = product.get("klockoradar_url", "")
+            if kr_url:
+                embed["fields"].append({
+                    "name": "🔍 KlockoRadar",
+                    "value": kr_url,
+                    "inline": False,
+                })
+
         if image and image.startswith("http"):
             image = image.replace(" ", "%20")
             embed["image"] = {"url": image}

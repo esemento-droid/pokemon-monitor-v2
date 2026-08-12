@@ -12,6 +12,15 @@ import ssl
 
 import aiohttp
 
+# Price comparison
+import sys
+sys.path.insert(0, '/opt/pokemon-monitor-v2')
+try:
+    from price_compare import get_price_comparison, format_price_comparison
+    HAS_PRICE_COMPARE = True
+except ImportError:
+    HAS_PRICE_COMPARE = False
+
 SHOP = "limango"
 BASE = "https://www.limango.pl"
 BROWSE_URL = f"{BASE}/shop/lego"
@@ -160,6 +169,24 @@ async def get_products():
             # Stop if page had fewer products (last page)
             if len(page_products) < 50:
                 break
+
+    # Price comparison with klockoradar.pl
+    if HAS_PRICE_COMPARE and products:
+        try:
+            for p in products:
+                price_val = 0
+                if p['price']:
+                    try:
+                        price_val = float(p['price'].replace(' zl','').replace(',','.'))
+                    except: pass
+                if price_val > 0:
+                    comp = await get_price_comparison(p['name'], price_val, session=None)
+                    if comp:
+                        p['price_compare'] = format_price_comparison(comp)
+                        p['set_number'] = comp.get('set_number', '')
+                        p['klockoradar_url'] = comp.get('klockoradar_url', '')
+        except Exception as e:
+            print(f"[LIMANGO] Price compare error: {e}")
 
     print(f"[LIMANGO] {len(products)} klocki LEGO (6 stron)")
     return products
