@@ -49,12 +49,12 @@ EXCLUDE_KEYWORDS = ["binder", "battle academy"]
 # ============================================================
 
 PRODUCT_BLOCK_RE = re.compile(
-    r'data-product-id="(\d+)"(.*?)(?=data-product-id=|</section)',
+    r'data-product-id="(\d+)"(.*?)(?=data-product-id=|</section|$)',
     re.DOTALL
 )
 TITLE_RE = re.compile(r'title="([^"]{5,})"')
 LINK_RE = re.compile(r'href="(/pl/p/[^"]+)"')
-PRICE_RE = re.compile(r'(\d+[\s,]\d{2})\s*z')
+PRICE_RE = re.compile(r'(\d[\d\s]*,\d{2})\s*z')
 
 
 def _parse_products(html: str) -> list:
