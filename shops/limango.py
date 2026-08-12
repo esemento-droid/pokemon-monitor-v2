@@ -170,21 +170,53 @@ async def get_products():
             if len(page_products) < 50:
                 break
 
-    # Price comparison with klockoradar.pl
+    # Price comparison — klockoradar only (fast, no CF)
+    # FlareSolverr/promoklocki is too slow for batch (30s per product)
     if HAS_PRICE_COMPARE and products:
         try:
-            for p in products:
-                price_val = 0
-                if p['price']:
-                    try:
-                        price_val = float(p['price'].replace(' zl','').replace(',','.'))
-                    except: pass
-                if price_val > 0:
-                    comp = await get_price_comparison(p['name'], price_val, session=None)
-                    if comp:
-                        p['price_compare'] = format_price_comparison(comp)
-                        p['set_number'] = comp.get('set_number', '')
-                        p['klockoradar_url'] = comp.get('klockoradar_url', '')
+            async with aiohttp.ClientSession(headers=HEADERS) as pc_session:
+                # Pre-load sitemap once
+                from price_compare import _load_sitemap, match_set_number, _fetch_klockoradar_price, format_price_comparison as _fmt
+                sitemap = await _load_sitemap(pc_session)
+                if sitemap:
+                    for p in products:
+                        if not p.get('available'):
+                            continue
+                        price_val = 0
+                        if p['price']:
+                            try:
+                                price_val = float(p['price'].replace(' zl','').replace(',','.'))
+                            except:
+                                continue
+                        if price_val <= 0:
+                            continue
+                        set_num = match_set_number(p['name'], sitemap)
+                        if not set_num:
+                            continue
+                        price_data = await _fetch_klockoradar_price(pc_session, set_num)
+                        if not price_data:
+                            continue
+                        lowest = price_data["lowest_price"]
+                        diff = price_val - lowest
+                        pct = (diff / lowest) * 100 if lowest > 0 else 0
+                        comp = {
+                            "set_number": set_num,
+                            "lowest_price": lowest,
+                            "shop": price_data.get("shop", ""),
+                            "shop_url": price_data.get("shop_url", ""),
+                            "offer_count": price_data.get("offer_count", 0),
+                            "klockoradar_url": price_data.get("klockoradar_url", ""),
+                            "promoklocki_url": f"https://promoklocki.pl/{set_num}",
+                            "source": "klockoradar.pl",
+                            "difference": round(diff, 2),
+                            "percentage": round(pct, 1),
+                            "is_cheaper": diff < 0,
+                        }
+                        p['price_compare'] = _fmt(comp)
+                        p['set_number'] = set_num
+                        p['klockoradar_url'] = price_data.get('klockoradar_url', '')
+        except Exception as e:
+            print(f"[LIMANGO] Price compare error: {e}")
         except Exception as e:
             print(f"[LIMANGO] Price compare error: {e}")
 
