@@ -3,6 +3,7 @@ import aiohttp
 from datetime import datetime
 from collections import deque
 from config import DISCORD_WEBHOOK, DISCORD_MAX_PER_MINUTE
+from price_compare import format_comparison
 
 
 class DiscordSender:
@@ -135,6 +136,14 @@ class DiscordSender:
                 {"name": "\U0001f4e6 Stan", "value": stock_text, "inline": True},
             ]
         }
+        # Add price comparison field if available
+        price_compare_data = product.get("price_compare")
+        if price_compare_data:
+            compare_text = format_comparison(price_compare_data)
+            if compare_text:
+                embed["fields"].append(
+                    {"name": "\U0001f4ca Porównanie cen", "value": compare_text, "inline": False}
+                )
         if image and image.startswith("http"):
             image = image.replace(" ", "%20")
             embed["image"] = {"url": image}
