@@ -1,9 +1,9 @@
 {
-  "monitor": false,
+  "monitor": true,
   "proxy_tunnel": true,
   "proxy_tailscale": true,
   "flaresolverr": true,
   "phone": true,
   "all_proxy_dead": false,
-  "last_check": "2026-08-12 20:06:03"
+  "last_check": "2026-08-12 20:08:03"
 }
