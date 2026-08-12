@@ -28,7 +28,10 @@ BOT_DIR = Path(__file__).parent
 COMPLETED_FILE = BOT_DIR / "kartexpol_completed.json"
 LOG_FILE = BOT_DIR / "kartexpol_autobuy.log"
 WEBHOOK_FILE = BOT_DIR / "discord_webhook_kartexpol.txt"
-PROXY = "http://127.0.0.1:8888"
+PROXY = "http://127.0.0.1:8888"  # LEGACY fallback
+import random
+from bot_engine import BotEngine
+_engine = BotEngine(shop="kartexpol", webhook_file=str(WEBHOOK_FILE))
 
 ACCOUNTS = [
     {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},
@@ -649,16 +652,51 @@ async def main():
 
     results = []
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=False,
-            args=['--disable-blink-features=AutomationControlled', '--no-sandbox', f'--proxy-server={PROXY}']
-        )
+    for i, account in enumerate(accounts_to_use):
+        email = account["email"]
+        fp = _engine.get_fingerprint(i)
+        proxy = _engine.get_proxy(email)
 
-        for i, account in enumerate(accounts_to_use):
+        log.info(f"[{account['name']}] Browser #{i+1}: proxy={proxy['server'] if proxy else 'DIRECT'}, "
+                 f"viewport={fp['viewport']['width']}x{fp['viewport']['height']}")
+
+        async with async_playwright() as p:
+            launch_args = {
+                "headless": False,
+                "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox",
+                         "--disable-dev-shm-usage"],
+            }
+            if proxy:
+                launch_args["proxy"] = proxy
+
+            try:
+                browser = await p.chromium.launch(**launch_args)
+            except Exception as e:
+                log.error(f"[{account['name']}] Browser launch failed: {e}")
+                if proxy:
+                    log.warning(f"[{account['name']}] Retrying without proxy...")
+                    launch_args.pop("proxy", None)
+                    try:
+                        browser = await p.chromium.launch(**launch_args)
+                    except Exception as e2:
+                        results.append((account["name"], f"error: browser launch failed"))
+                        continue
+                else:
+                    results.append((account["name"], f"error: {e}"))
+                    continue
+
             ctx = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                user_agent=fp["user_agent"],
+                viewport=fp["viewport"],
+                locale=fp["locale"],
+                timezone_id=fp["timezone_id"],
             )
+
+            cookies = _engine.load_cookies(email)
+            if cookies:
+                await ctx.add_cookies(cookies)
+                log.info(f"[{account['name']}] Loaded {len(cookies)} pre-warmed cookies")
+
             page = await ctx.new_page()
 
             try:
@@ -669,12 +707,12 @@ async def main():
                 results.append((account["name"], f"error: {e}"))
             finally:
                 await ctx.close()
+                await browser.close()
 
-            # Small delay between accounts
             if i < len(accounts_to_use) - 1:
-                await asyncio.sleep(2)
-
-        await browser.close()
+                delay = random.randint(12, 25)
+                log.info(f"Waiting {delay}s before next account (humanizer)...")
+                await asyncio.sleep(delay)
 
     # Summary
     log.info("\n=== SUMMARY ===")

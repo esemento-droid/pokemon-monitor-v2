@@ -2,6 +2,8 @@
 """SMYK Auto-Buy Bot v2 - with cart clearing and test mode"""
 import asyncio, sys, os, logging
 from bot_utils import wait_for_verification
+from bot_engine import BotEngine
+_engine = BotEngine(shop="smyk")
 
 ACCOUNTS = [
     {"email":"esemento@gmail.com","password":"cR!9GW#x2wqJtGw","firstName":"Tomasz","lastName":"Szczepaniak","street":"Lesna","streetNumber":"46a","flatNumber":"2","zipCode":"62-069","city":"Paledzie","phone":"607183797"},
@@ -398,8 +400,9 @@ async def buy_one(acc, url, p, test_mode=False):
     """Full flow for one account: login -> clear cart -> add -> checkout."""
     nm = f"{acc['firstName']} ({acc['email'][:8]})"
     log.info(f"[{nm}] === START {'(TEST MODE)' if test_mode else '(PRODUCTION)'} ===")
-    b = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"], proxy={"server": "http://127.0.0.1:8888"})
-    ctx = await b.new_context(viewport={"width": 1920, "height": 1080})
+    b = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"], proxy=_engine.get_proxy(acc["email"]) or {"server": "http://127.0.0.1:8888"})
+    fp = _engine.get_fingerprint(ACCOUNTS.index(acc) if acc in ACCOUNTS else 0)
+    ctx = await b.new_context(viewport=fp["viewport"], user_agent=fp["user_agent"])
     pg = await ctx.new_page()
     try:
         # --- LOGIN ---

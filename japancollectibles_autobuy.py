@@ -85,6 +85,34 @@ async def send_discord(msg, embed=None):
         log.error(f"Discord send failed: {e}")
 
 
+async def check_proxy(account_email=""):
+    """Get best proxy for this account via proxy_router (with fallback)."""
+    try:
+        from proxy_router import get_playwright_proxy
+        proxy = get_playwright_proxy("japancollectibles", account_email)
+        if proxy:
+            log.info(f"Proxy via router: {proxy['server']}")
+        else:
+            log.info("Proxy router: DIRECT (no proxy)")
+        return proxy
+    except ImportError:
+        pass
+    # Fallback if proxy_router not available
+    import subprocess
+    for name, url in [("tunnel", "http://127.0.0.1:8888"), ("tailscale", "http://100.127.72.24:8888")]:
+        try:
+            r = subprocess.run(["curl", "-x", url, "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                               "--connect-timeout", "3", "https://japancollectibles.shop/"],
+                              capture_output=True, text=True, timeout=5)
+            if r.stdout.strip() == "200":
+                log.info(f"Proxy fallback: {name} ({url})")
+                return {"server": url}
+        except Exception:
+            pass
+    log.warning("ALL PROXIES DEAD - DIRECT")
+    return None
+
+
 async def buy_product(account, product_url, product_id, qty=1, dry_run=False):
     """
     Full purchase flow for one account on one product.
@@ -93,16 +121,24 @@ async def buy_product(account, product_url, product_id, qty=1, dry_run=False):
     email = account["email"]
     log.info(f"[{email}] Starting buy for product {product_id} (qty={qty}, dry_run={dry_run})")
 
+    # Smart proxy selection (per-account routing)
+    proxy = await check_proxy(email)
+    proxy_desc = proxy["server"] if proxy else "DIRECT"
+    log.info(f"[{email}] Using proxy: {proxy_desc}")
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=False,
-            args=[
+        launch_args = {
+            "headless": False,
+            "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
             ],
-            proxy={"server": "http://127.0.0.1:8888"},
-        )
+        }
+        if proxy:
+            launch_args["proxy"] = proxy
+
+        browser = await p.chromium.launch(**launch_args)
         context = await browser.new_context(
             viewport={"width": 1280, "height": 900},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",

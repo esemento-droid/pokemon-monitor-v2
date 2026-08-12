@@ -37,7 +37,15 @@ async def send_discord_empik(msg):
 
 
 # === CONFIG ===
-PROXY = "http://127.0.0.1:8888"
+from bot_engine import BotEngine
+_engine = BotEngine(shop="empik")
+
+def _get_proxy_for_account(email=""):
+    """Get proxy URL for nodriver --proxy-server arg."""
+    url = _engine.get_proxy_url(email)
+    return url or "http://127.0.0.1:8888"
+
+PROXY = _get_proxy_for_account()  # Default, overridden per-account in run_one()
 ACCOUNT_TEMPLATE = {
     "email_prefix": "twanesek", "email_domain": "gmail.com",
     "password": "Senseye.",
@@ -1066,7 +1074,7 @@ async def run_one(account, product_url, qty, test_mode):
     log.info("[%s] START", email)
 
     browser = await uc.start(headless=False, browser_args=[
-        f"--proxy-server={PROXY}", "--no-first-run", "--no-default-browser-check",
+        f"--proxy-server={_get_proxy_for_account(email)}", "--no-first-run", "--no-default-browser-check",
         "--disable-popup-blocking", "--disable-extensions", "--window-size=1280,900"])
     try:
         tab = browser.main_tab
