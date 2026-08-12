@@ -140,7 +140,7 @@ def flush_strefatcg_batch():
         "--qty", "1",
     ] + urls  # Multiple URLs as positional args
     
-    env = dict(**__import__('os').environ, DISPLAY=":99")
+    env = {**__import__('os').environ, "DISPLAY": ":99"}
     
     log.info(f"[STCG-TRIGGER] Launching bot with {len(urls)} products")
     try:
