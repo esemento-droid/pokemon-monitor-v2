@@ -79,7 +79,7 @@ class BotEngine:
         }
 
     def get_proxy(self, account_email: str) -> Optional[Dict]:
-        """Get proxy for this account via router."""
+        """Get proxy for this account via router. Returns Playwright-format dict or None."""
         try:
             from proxy_router import get_playwright_proxy
             return get_playwright_proxy(self.shop, account_email)
@@ -97,6 +97,13 @@ class BotEngine:
             except Exception:
                 pass
             return None
+
+    def get_proxy_url(self, account_email: str) -> Optional[str]:
+        """Get proxy URL string (for nodriver --proxy-server= arg). Returns URL or None."""
+        proxy = self.get_proxy(account_email)
+        if proxy and proxy.get("server"):
+            return proxy["server"]
+        return None
 
     async def human_delay(self, delay_type: str = "action"):
         """Random delay to appear human."""
