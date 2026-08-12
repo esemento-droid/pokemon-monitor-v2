@@ -208,8 +208,8 @@ def _get_delay(name, stats, error=False, scan_time=0.0):
     # Check turbo mode (set by cross-shop intelligence)
     turbo = stats.get("turbo", False)
     if turbo:
-        # TURBO: scan as fast as possible (2-5s delay)
-        return random.randint(2, 5)
+        # TURBO: scan faster but safe (5-10s delay)
+        return random.randint(5, 10)
 
     if name in VERY_SLOW_SHOPS:
         base = random.randint(60, 120)

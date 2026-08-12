@@ -24,7 +24,7 @@ CORRELATED_SHOPS = {
 }
 
 # Turbo mode duration (minutes) when correlated shop has activity
-TURBO_DURATION_MIN = 10
+TURBO_DURATION_MIN = 5
 
 
 async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
