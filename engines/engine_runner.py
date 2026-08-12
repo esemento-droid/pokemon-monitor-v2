@@ -45,9 +45,9 @@ logger = logging.getLogger("monitor")
 # Each entry: (module_path, shop_name, poll_interval_seconds)
 ENGINES = [
     ("engines.tcgumisia_api", "tcgumisia", 3),
+    ("engines.strefatcg_api", "strefatcg", 3),
     # Add more engines here as they're built:
     # ("engines.kartexpol_api", "kartexpol", 5),
-    # ("engines.strefatcg_api", "strefatcg", 5),
 ]
 
 
