@@ -29,6 +29,8 @@ PRICE_TTL = 3600  # 1h
 PROMOKLOCKI_BASE = "https://promoklocki.pl"
 KLOCKORADAR_BASE = "https://klockoradar.pl"
 SITEMAP_URLS = [f"{KLOCKORADAR_BASE}/sitemap/{i}.xml" for i in range(8)]
+FLARESOLVERR_URL = "http://localhost:8191/v1"
+FLARESOLVERR_TIMEOUT = 30000  # ms
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -95,43 +97,70 @@ def _parse_price_str(text: str) -> Optional[float]:
 
 
 async def _fetch_promoklocki_price(session: aiohttp.ClientSession, set_number: str) -> Optional[dict]:
-    """Fetch lowest price from promoklocki.pl/{set_number}."""
+    """Fetch lowest price from promoklocki.pl/{set_number} via FlareSolverr (CF bypass)."""
     url = f"{PROMOKLOCKI_BASE}/{set_number}"
+    
+    # Try FlareSolverr first (bypasses Cloudflare)
     try:
-        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": FLARESOLVERR_TIMEOUT,
+        }
+        async with session.post(
+            FLARESOLVERR_URL,
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=35)
+        ) as resp:
             if resp.status != 200:
+                logger.warning(f"[PRICE] FlareSolverr HTTP {resp.status} for {set_number}")
                 return None
-            html = await resp.text()
+            data = await resp.json()
+            if data.get("status") != "ok":
+                logger.warning(f"[PRICE] FlareSolverr status={data.get('status')} for {set_number}")
+                return None
+            html = data.get("solution", {}).get("response", "")
+            if not html:
+                return None
+    except (aiohttp.ClientError, asyncio.TimeoutError, Exception) as e:
+        logger.warning(f"[PRICE] FlareSolverr error for {set_number}: {e}")
+        # Fallback: try direct (works if not CF blocked)
+        try:
+            async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status != 200:
+                    return None
+                html = await resp.text()
+        except Exception:
+            return None
 
-        # Primary: "Aktualnie najniższa cena XXX,XX zł"
-        price = None
-        match = PROMOKLOCKI_PRICE_RE.search(html)
+    # Extract price from HTML
+    price = None
+    
+    # Method 1: "Aktualnie najniższa cena" (JS-rendered, rare in raw HTML)
+    match = PROMOKLOCKI_PRICE_RE.search(html)
+    if match:
+        price = _parse_price_str(match.group(1))
+
+    # Method 2: JSON-LD lowPrice (always in raw HTML)
+    if not price:
+        match = PROMOKLOCKI_PRICE_FALLBACK_RE.search(html)
         if match:
             price = _parse_price_str(match.group(1))
 
-        # Fallback: JSON-LD lowPrice
-        if not price:
-            match = PROMOKLOCKI_PRICE_FALLBACK_RE.search(html)
-            if match:
-                price = _parse_price_str(match.group(1))
-
-        if not price:
-            return None
-
-        return {
-            "set_number": set_number,
-            "lowest_price": price,
-            "shop": "promoklocki.pl",
-            "shop_url": url,
-            "offer_count": 0,
-            "klockoradar_url": f"{KLOCKORADAR_BASE}/sets/{set_number}",
-            "promoklocki_url": url,
-            "source": "promoklocki.pl",
-            "fetched_at": time.time(),
-        }
-    except (aiohttp.ClientError, asyncio.TimeoutError, Exception) as e:
-        logger.warning(f"[PRICE] Promoklocki error for {set_number}: {e}")
+    if not price:
         return None
+
+    return {
+        "set_number": set_number,
+        "lowest_price": price,
+        "shop": "promoklocki.pl",
+        "shop_url": url,
+        "offer_count": 0,
+        "klockoradar_url": f"{KLOCKORADAR_BASE}/sets/{set_number}",
+        "promoklocki_url": url,
+        "source": "promoklocki.pl",
+        "fetched_at": time.time(),
+    }
 
 
 # ============================================================
