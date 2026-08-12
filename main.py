@@ -110,19 +110,36 @@ async def shop_worker(name, module, logger, process_type):
     """Independent async worker for one shop."""
     await asyncio.sleep(random.uniform(0, 30))
 
-    stats = {"ok": 0, "err": 0}
+    stats = {"ok": 0, "err": 0, "consecutive_err": 0, "turbo": False, "cooldown_until": 0}
     _shutdown = False
 
     while not _shutdown:
         scan_time = 0.0
+
+        # === ERROR RECOVERY: Cooldown check ===
+        import time as _time
+        if stats.get("cooldown_until", 0) > _time.time():
+            remaining = int(stats["cooldown_until"] - _time.time())
+            if remaining % 300 == 0:  # Log every 5 min during cooldown
+                logger.info(f"[{name}] Cooldown: {remaining}s remaining")
+            await asyncio.sleep(30)
+            continue
+
         try:
             start = datetime.now()
 
-            # Timeout based on category
-            if name in VERY_SLOW_SHOPS or name in SLOW_SHOPS:
+            # Timeout based on category (adaptive: increase after timeouts)
+            if name in VERY_SLOW_SHOPS:
+                timeout = TIMEOUT_NODRIVER
+            elif name in SLOW_SHOPS:
                 timeout = TIMEOUT_SLOW
             else:
                 timeout = TIMEOUT_DEFAULT
+
+            # Adaptive timeout: if last scan was timeout, increase by 50%
+            if stats.get("last_timeout", False):
+                timeout = int(timeout * 1.5)
+                stats["last_timeout"] = False
 
             # Scrape (with 1 retry on connection error)
             products = None
@@ -139,6 +156,7 @@ async def shop_worker(name, module, logger, process_type):
                     break  # Success
                 except asyncio.TimeoutError:
                     logger.warning(f"[{name}] Timeout {timeout}s")
+                    stats["last_timeout"] = True
                     break  # Don't retry timeouts
                 except asyncio.CancelledError:
                     return
@@ -150,12 +168,26 @@ async def shop_worker(name, module, logger, process_type):
 
             if not products:
                 stats["err"] += 1
+                stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
+
+                # === ERROR RECOVERY: Progressive cooldown ===
+                consec = stats["consecutive_err"]
+                if consec >= 20:
+                    # 20+ errors: cooldown 30 min
+                    stats["cooldown_until"] = _time.time() + 1800
+                    logger.warning(f"[{name}] 20 consecutive errors! Cooldown 30min")
+                elif consec >= 10:
+                    # 10+ errors: cooldown 10 min
+                    stats["cooldown_until"] = _time.time() + 600
+                    logger.warning(f"[{name}] 10 consecutive errors! Cooldown 10min")
+
                 await asyncio.sleep(_get_delay(name, stats, error=True))
                 continue
 
             products = sanitize_batch(products)
             if not products:
                 stats["err"] += 1
+                stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
                 await asyncio.sleep(_get_delay(name, stats, error=True))
                 continue
 
@@ -174,6 +206,7 @@ async def shop_worker(name, module, logger, process_type):
             scan_time = (datetime.now() - start).total_seconds()
             stats["ok"] += 1
             stats["err"] = 0
+            stats["consecutive_err"] = 0  # Reset on success!
             logger.info(f"[{name}] {len(products)} produktow w {scan_time:.1f}s")
 
         except asyncio.CancelledError:
@@ -181,8 +214,9 @@ async def shop_worker(name, module, logger, process_type):
         except Exception as e:
             logger.error(f"[{name}] ERROR: {e}")
             stats["err"] += 1
+            stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
 
-            if stats["err"] == 5:
+            if stats["consecutive_err"] == 5:
                 await _send_alarm(name, e, logger)
 
         # Delay with jitter

@@ -1,0 +1,179 @@
+{
+  "_comment": "Universal trigger config. Each shop defines: matching rules, accounts, bot to launch.",
+  
+  "tcgumisia": {
+    "shop_match": "tcgumisia.pl",
+    "events": ["NEW_PRODUCT", "RESTOCK", "PRICE_CHANGE"],
+    "rules": [
+      {"match": "elite trainer box", "qty_min": 2, "qty_max": 3, "max_price": 401},
+      {"match": "tin - sylveon|tin - greninja", "qty_min": 2, "qty_max": 3, "max_price": 145},
+      {"match": "sticker collection", "qty_min": 2, "qty_max": 6, "max_price": 120},
+      {"match": "booster bundle", "qty_min": 1, "qty_max": 4, "max_price": 249},
+      {"match": "ex box", "qty_min": 1, "qty_max": 4, "max_price": 162},
+      {"match": "poster collection", "qty_min": 1, "qty_max": 3, "max_price": 121},
+      {"match": "2-pack", "qty_min": 1, "qty_max": 5, "max_price": 81},
+      {"match": "binder collection", "qty_min": 1, "qty_max": 1, "max_price": 251},
+      {"match": "30th|30 celebration|30-lecie|30 lecie", "qty_min": 1, "qty_max": 1, "max_price": 500}
+    ],
+    "exclude": [],
+    "accounts": [
+      "blackmat36@gmail.com",
+      "tjbtaniojuzbylo@gmail.com",
+      "y24015411@gmail.com"
+    ],
+    "bot": "tcgumisia_autobuy.py",
+    "bot_args": ["--accounts", "4"],
+    "batch_mode": true,
+    "webhook_file": "discord_webhook_strefatcg.txt",
+    "completed_file": "tcgumisia_completed.json",
+    "delay_between_accounts": [12, 25]
+  },
+
+  "kartexpol": {
+    "shop_match": "kartexpol",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "30th|30 celebration|30-lecie|30 lecie", "qty_min": 1, "qty_max": 2, "max_price": 500}
+    ],
+    "exclude": ["deck", "sleeve", "album", "playmat"],
+    "accounts": [
+      "esemento@gmail.com",
+      "blackmat36@gmail.com",
+      "tjbtaniojuzbylo@gmail.com",
+      "y24015411@gmail.com"
+    ],
+    "bot": "kartexpol_autobuy.py",
+    "bot_args": [],
+    "batch_mode": true,
+    "webhook_file": "discord_webhook_kartexpol.txt",
+    "completed_file": "kartexpol_completed.json"
+  },
+
+  "strefatcg": {
+    "shop_match": "strefatcg",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "30th|30 celebration|30-lecie|30 lecie", "qty_min": 1, "qty_max": 2, "max_price": 500}
+    ],
+    "exclude": ["deck", "sleeve"],
+    "accounts": [
+      "esemento@gmail.com",
+      "blackmat36@gmail.com",
+      "tjbtaniojuzbylo@gmail.com",
+      "y24015411@gmail.com"
+    ],
+    "bot": "strefatcg_autobuy.py",
+    "bot_args": [],
+    "batch_mode": true,
+    "webhook_file": "discord_webhook_strefatcg.txt",
+    "completed_file": "strefatcg_completed.json"
+  },
+
+  "japancollectibles": {
+    "shop_match": "japancollectibles",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "30th|30 celebration|30-lecie|30 lecie", "qty_min": 1, "qty_max": 2, "max_price": 600}
+    ],
+    "exclude": ["deck", "singles", "japanese"],
+    "accounts": [
+      "esemento@gmail.com",
+      "blackmat36@gmail.com",
+      "tjbtaniojuzbylo@gmail.com",
+      "y24015411@gmail.com"
+    ],
+    "bot": "japancollectibles_autobuy.py",
+    "bot_args": [],
+    "batch_mode": true,
+    "webhook_file": "discord_webhook_jc.txt",
+    "completed_file": "japancollectibles_completed.json"
+  },
+
+  "japancollectibles_30th": {
+    "shop_match": "japancollectibles",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "30th|30 celebration", "qty_min": 1, "qty_max": 3, "max_price": 800}
+    ],
+    "exclude": [],
+    "accounts": [
+      "blackmat36@gmail.com",
+      "tjbtaniojuzbylo@gmail.com",
+      "y24015411@gmail.com"
+    ],
+    "bot": "japancollectibles_autobuy_30th.py",
+    "bot_args": [],
+    "batch_mode": true,
+    "webhook_file": "discord_webhook_jc.txt",
+    "completed_file": "jc_30th_completed.json"
+  },
+
+  "tantis": {
+    "shop_match": "tantis",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "30th|30 celebration|30-lecie", "qty_min": 1, "qty_max": 2, "max_price": 500}
+    ],
+    "exclude": ["deck"],
+    "accounts": [
+      "esemento@gmail.com",
+      "blackmat36@gmail.com"
+    ],
+    "bot": "tantis_autobuy.py",
+    "bot_args": [],
+    "batch_mode": true,
+    "webhook_file": "discord_webhook_tantis.txt",
+    "completed_file": "tantis_completed.json"
+  },
+
+  "smyk": {
+    "shop_match": "smyk",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "pokemon|pikachu", "qty_min": 1, "qty_max": 1, "max_price": 400}
+    ],
+    "exclude": ["deck", "album", "sleeve", "playmat"],
+    "accounts": [
+      "esemento@gmail.com"
+    ],
+    "bot": "smyk_autobuy.py",
+    "bot_args": [],
+    "batch_mode": false,
+    "webhook_file": "discord_webhook_smyk.txt",
+    "completed_file": "smyk_completed.json"
+  },
+
+  "empik": {
+    "shop_match": "empik",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "pokemon|pikachu|tcg", "qty_min": 1, "qty_max": 2, "max_price": 500}
+    ],
+    "exclude": ["deck", "album", "manga", "book", "figurka"],
+    "accounts": [
+      "esemento@gmail.com"
+    ],
+    "bot": "empik_autobuy.py",
+    "bot_args": [],
+    "batch_mode": false,
+    "webhook_file": "discord_webhook_empik.txt",
+    "completed_file": "empik_completed.json"
+  },
+
+  "mediaexpert": {
+    "shop_match": "mediaexpert",
+    "events": ["NEW_PRODUCT", "RESTOCK"],
+    "rules": [
+      {"match": "pokemon|tcg", "qty_min": 1, "qty_max": 1, "max_price": 500}
+    ],
+    "exclude": ["deck", "album"],
+    "accounts": [
+      "esemento@gmail.com"
+    ],
+    "bot": "mediaexpert_autobuy.py",
+    "bot_args": [],
+    "batch_mode": false,
+    "webhook_file": "discord_webhook_smyk.txt",
+    "completed_file": "mediaexpert_completed.json"
+  }
+}
