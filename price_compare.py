@@ -331,14 +331,20 @@ def format_price_comparison(comparison: dict) -> str:
     diff = comparison["difference"]
     pct = comparison["percentage"]
     source = comparison.get("source", "")
-    shop = comparison.get("shop", source)
+    shop = comparison.get("shop", "")
+    
+    # Show source (promoklocki/klockoradar) + cheapest shop name if available
+    if shop and shop != source and shop != "promoklocki.pl":
+        price_info = f"{shop} ({lowest:.2f} zl) via {source}"
+    else:
+        price_info = f"{lowest:.2f} zl ({source})"
 
     if diff < 0:
-        return f"\u2705 TANIEJ o {abs(diff):.2f} zl ({pct:.0f}%) vs {shop} ({lowest:.2f} zl)"
+        return f"\u2705 TANIEJ o {abs(diff):.2f} zl ({pct:.0f}%) | Najnizsza: {price_info}"
     elif diff > 0:
-        return f"\u26a0\ufe0f DROZEJ o {diff:.2f} zl (+{pct:.0f}%) vs {shop} ({lowest:.2f} zl)"
+        return f"\u26a0\ufe0f DROZEJ o {diff:.2f} zl (+{pct:.0f}%) | Najnizsza: {price_info}"
     else:
-        return f"\U0001f7f0 Taka sama cena jak {shop} ({lowest:.2f} zl)"
+        return f"\U0001f7f0 Taka sama cena | {price_info}"
 
 
 # Aliases for backwards compatibility
