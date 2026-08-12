@@ -84,6 +84,16 @@ def check_strefatcg_trigger(event_type, product):
     if not _matches_keywords(name):
         return
     
+    # Max price check
+    try:
+        price_str = product.get("price", "0")
+        price_val = float(price_str.replace("PLN", "").replace("zł", "").replace("zl", "").replace(",", ".").replace(" ", "").strip())
+        if price_val > 1580:
+            log.info(f"[STCG-TRIGGER] SKIP (price {price_val} > 1580): '{name}'")
+            return
+    except (ValueError, TypeError):
+        pass
+    
     log.info(f"[STCG-TRIGGER] MATCH! event={event_type} name='{name}' id={product_id}")
     
     # Add to batch (avoid duplicates)
