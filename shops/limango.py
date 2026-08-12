@@ -174,9 +174,9 @@ async def get_products():
     # FlareSolverr/promoklocki is too slow for batch (30s per product)
     if HAS_PRICE_COMPARE and products:
         try:
-            async with aiohttp.ClientSession(headers=HEADERS) as pc_session:
+            from price_compare import _load_sitemap, match_set_number, _fetch_klockoradar_price, format_price_comparison as _fmt, HEADERS as PC_HEADERS
+            async with aiohttp.ClientSession(headers=PC_HEADERS) as pc_session:
                 # Pre-load sitemap once
-                from price_compare import _load_sitemap, match_set_number, _fetch_klockoradar_price, format_price_comparison as _fmt
                 sitemap = await _load_sitemap(pc_session)
                 if sitemap:
                     for p in products:
