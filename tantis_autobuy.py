@@ -151,9 +151,14 @@ from bot_utils import wait_for_verification
     results = []
 
     async with async_playwright() as p:
+        # Tantis needs single browser for CF session sharing across accounts
+        from bot_engine import BotEngine
+        _engine = BotEngine(shop="tantis")
+        proxy = _engine.get_proxy(accounts_to_use[0].get("email", "")) or {"server": "http://127.0.0.1:8888"}
+
         browser = await p.chromium.launch(
             headless=False,
-            proxy={"server": "http://127.0.0.1:8888"},
+            proxy=proxy,
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
