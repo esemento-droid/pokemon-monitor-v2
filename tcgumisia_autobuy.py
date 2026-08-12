@@ -27,10 +27,14 @@ BOT_DIR = Path(__file__).parent
 COMPLETED_FILE = BOT_DIR / "tcgumisia_completed.json"
 LOG_FILE = BOT_DIR / "tcgumisia_autobuy.log"
 WEBHOOK_FILE = BOT_DIR / "discord_webhook_strefatcg.txt"
-PROXY = "http://127.0.0.1:8888"
+PROXY = "http://127.0.0.1:8888"  # LEGACY fallback — actual proxy from proxy_router
 PACZKOMAT = "PAD04M"
 
 import random
+from bot_engine import BotEngine
+
+# Initialize engine for proxy routing + fingerprints
+_engine = BotEngine(shop="tcgumisia", webhook_file=str(BOT_DIR / "discord_webhook_strefatcg.txt"))
 
 ACCOUNTS = [
     # {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},  # DISABLED - manual order placed
@@ -913,21 +917,50 @@ async def main():
 
     results = []
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=False,
-            args=['--disable-blink-features=AutomationControlled', '--no-sandbox', f'--proxy-server={PROXY}']
-        )
+    for i, account in enumerate(accounts_to_use):
+        # Each account gets its OWN browser with unique proxy + fingerprint
+        email = account["email"]
+        fp = _engine.get_fingerprint(i)
+        proxy = _engine.get_proxy(email)
 
-        for i, account in enumerate(accounts_to_use):
+        log.info(f"[{account['name']}] Browser #{i+1}: proxy={proxy['server'] if proxy else 'DIRECT'}, "
+                 f"viewport={fp['viewport']['width']}x{fp['viewport']['height']}")
+
+        async with async_playwright() as p:
+            launch_args = {
+                "headless": False,
+                "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox",
+                         "--disable-dev-shm-usage"],
+            }
+            if proxy:
+                launch_args["proxy"] = proxy
+
+            try:
+                browser = await p.chromium.launch(**launch_args)
+            except Exception as e:
+                log.error(f"[{account['name']}] Browser launch failed: {e}")
+                # Fallback: try without proxy
+                if proxy:
+                    log.warning(f"[{account['name']}] Retrying without proxy...")
+                    launch_args.pop("proxy", None)
+                    try:
+                        browser = await p.chromium.launch(**launch_args)
+                    except Exception as e2:
+                        log.error(f"[{account['name']}] Browser launch FAILED completely: {e2}")
+                        results.append((account["name"], f"error: browser launch failed"))
+                        continue
+                else:
+                    results.append((account["name"], f"error: {e}"))
+                    continue
+
             ctx = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-                viewport={"width": 1920, "height": 1080},
-                locale="pl-PL"
+                user_agent=fp["user_agent"],
+                viewport=fp["viewport"],
+                locale=fp["locale"],
+                timezone_id=fp["timezone_id"],
             )
-            page = await ctx.new_page()
-            # Fix fingerprint: match UA platform + WebGL
-            await page.add_init_script("""
+            # Anti-fingerprint init script
+            await ctx.add_init_script("""
                 Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
                 Object.defineProperty(navigator, 'languages', {get: () => ['pl-PL', 'pl', 'en-US', 'en']});
                 const getParameter = WebGLRenderingContext.prototype.getParameter;
@@ -938,6 +971,14 @@ async def main():
                 };
             """)
 
+            # Load pre-warmed cookies if available
+            cookies = _engine.load_cookies(email)
+            if cookies:
+                await ctx.add_cookies(cookies)
+                log.info(f"[{account['name']}] Loaded {len(cookies)} pre-warmed cookies")
+
+            page = await ctx.new_page()
+
             try:
                 result = await run_for_account(page, account, product_list, test_mode=args.test)
                 results.append((account["name"], result))
@@ -945,20 +986,18 @@ async def main():
                 log.error(f"[{account['name']}] Exception: {e}")
                 results.append((account["name"], f"error: {e}"))
             finally:
-                # Logout before closing context (clean server-side session)
                 try:
                     await logout(page)
                 except Exception:
                     pass
                 await ctx.close()
-                log.info(f"[{account['name']}] Context closed (fresh session for next account)")
+                await browser.close()
+                log.info(f"[{account['name']}] Browser closed")
 
             if i < len(accounts_to_use) - 1:
-                delay = random.randint(10, 20)
-                log.info(f"Waiting {delay}s before next account...")
+                delay = random.randint(12, 25)
+                log.info(f"Waiting {delay}s before next account (humanizer)...")
                 await asyncio.sleep(delay)
-
-        await browser.close()
 
     # Summary
     log.info("\n=== SUMMARY ===")
