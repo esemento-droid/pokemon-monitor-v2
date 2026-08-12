@@ -105,6 +105,7 @@ async def _fetch_promoklocki_price(session: aiohttp.ClientSession, set_number: s
         payload = {
             "cmd": "request.get",
             "url": url,
+            "session": "promoklocki",
             "maxTimeout": FLARESOLVERR_TIMEOUT,
         }
         async with session.post(
@@ -161,6 +162,29 @@ async def _fetch_promoklocki_price(session: aiohttp.ClientSession, set_number: s
         "source": "promoklocki.pl",
         "fetched_at": time.time(),
     }
+
+
+async def _create_flaresolverr_session(session: aiohttp.ClientSession):
+    """Create FlareSolverr session for promoklocki (reuse browser, faster subsequent requests)."""
+    try:
+        payload = {"cmd": "sessions.create", "session": "promoklocki"}
+        async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data.get("status") == "ok"
+    except Exception:
+        pass
+    return False
+
+
+async def _destroy_flaresolverr_session(session: aiohttp.ClientSession):
+    """Destroy FlareSolverr session."""
+    try:
+        payload = {"cmd": "sessions.destroy", "session": "promoklocki"}
+        async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+            pass
+    except Exception:
+        pass
 
 
 # ============================================================

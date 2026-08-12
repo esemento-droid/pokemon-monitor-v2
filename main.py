@@ -47,12 +47,12 @@ SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
 
 SLOW_SHOPS = {
     "am76", "blindbox", "flamberg", "mrpuggy", "pikashop",
-    "paladynat", "czytam", "swiatkart", "kuzniakart", "limango",
+    "paladynat", "czytam", "swiatkart", "kuzniakart",
 }
 
 VERY_SLOW_SHOPS = {
     "efantasy", "twojekarty", "canislupus", "tcgtrener",
-    "mangiusmoczejciotki", "vanaheim", "kartomaniak",
+    "mangiusmoczejciotki", "vanaheim", "kartomaniak", "limango",
 }
 
 # All non-fast shops (go to SLOW process)
