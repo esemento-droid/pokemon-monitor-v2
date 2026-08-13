@@ -10,7 +10,12 @@ CATEGORY_URLS = [
     "https://www.empik.com/bohater/pokemon/karty-kolekcjonerskie",
     "https://www.empik.com/strefa/karty-pokemon",
     "https://www.empik.com/szukaj/produkt?seriesFacet=pokemon%20tcg&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=priceDesc",
 ]
+
+# For search queries, limit pages to avoid excessive scan time
+SEARCH_MAX_PAGES = 5
 
 EXCLUDE_KW = [
     "korea", "korean", "kore", "kor ", " kor",
@@ -174,8 +179,13 @@ async def get_products():
 
     async with aiohttp.ClientSession() as session:
         for cat_url in CATEGORY_URLS:
-            for pg in range(1, MAX_PAGES + 1):
-                url = cat_url if pg == 1 else f"{cat_url}?start={(pg - 1) * PER_PAGE}"
+            # Search queries get fewer pages (they return more products per page)
+            is_search = "szukaj" in cat_url
+            max_pg = SEARCH_MAX_PAGES if is_search else MAX_PAGES
+            separator = "&" if "?" in cat_url else "?"
+
+            for pg in range(1, max_pg + 1):
+                url = cat_url if pg == 1 else f"{cat_url}{separator}start={(pg - 1) * PER_PAGE}"
 
                 html = await _fetch_page(session, url)
                 if not html:
