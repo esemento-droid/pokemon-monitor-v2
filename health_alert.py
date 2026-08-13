@@ -25,7 +25,11 @@ from typing import Dict, Optional
 
 BASE_DIR = Path("/opt/pokemon-monitor-v2")
 STATE_FILE = BASE_DIR / "data" / "health_state.json"
-WEBHOOK_FILE = BASE_DIR / "discord_webhook_jc.txt"
+WEBHOOK_FILE = BASE_DIR / "discord_webhook_stats.txt"  # dedicated stats/health channel
+WEBHOOK_FALLBACK = BASE_DIR / "discord_webhook_jc.txt"
+
+# Anti-spam: don't alert if state changed less than 5 min ago
+MIN_ALERT_INTERVAL = 300  # seconds
 
 
 def load_state() -> Dict:
@@ -44,9 +48,11 @@ def save_state(state: Dict):
 
 def send_discord(message: str):
     """Send alert to Discord webhook."""
-    if not WEBHOOK_FILE.exists():
-        return
-    webhook_url = WEBHOOK_FILE.read_text().strip()
+    webhook_url = ""
+    if WEBHOOK_FILE.exists():
+        webhook_url = WEBHOOK_FILE.read_text().strip()
+    if not webhook_url and WEBHOOK_FALLBACK.exists():
+        webhook_url = WEBHOOK_FALLBACK.read_text().strip()
     if not webhook_url:
         return
     try:
@@ -142,13 +148,28 @@ def main():
         was_ok = state.get(key, True)
         new_state[key] = is_ok
 
+        # Anti-spam: check when this key last changed
+        last_change_key = f"{key}_last_change"
+        last_change = state.get(last_change_key, 0)
+        now = time.time()
+
         if not is_ok and was_ok:
             # State change: was OK → now DEAD
-            emoji = "🔴" if severity == "CRITICAL" else "🟡"
-            alerts.append(f"{emoji} **{name}** — DOWN!")
+            if now - last_change > MIN_ALERT_INTERVAL:
+                emoji = "🔴" if severity == "CRITICAL" else "🟡"
+                alerts.append(f"{emoji} **{name}** — DOWN!")
+                new_state[last_change_key] = now
+            else:
+                new_state[last_change_key] = last_change  # keep old timestamp
         elif is_ok and not was_ok:
             # State change: was DEAD → now OK
-            recoveries.append(f"✅ **{name}** — RESTORED")
+            if now - last_change > MIN_ALERT_INTERVAL:
+                recoveries.append(f"✅ **{name}** — RESTORED")
+                new_state[last_change_key] = now
+            else:
+                new_state[last_change_key] = last_change
+        else:
+            new_state[last_change_key] = last_change  # no change
 
     # Special: ALL proxies dead = CRITICAL
     if not new_state.get("proxy_tunnel") and not new_state.get("proxy_tailscale"):
