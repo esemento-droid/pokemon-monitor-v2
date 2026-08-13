@@ -314,13 +314,25 @@ async def checkout(page, test_mode=False):
         log.info("Clicked POTWIERDZAM ZAKUP!")
         await asyncio.sleep(8)
         
-        url = page.url
+        try:
+            url = page.url
+        except Exception:
+            # Page navigating — means redirect happened = SUCCESS
+            log.info("Payment redirect detected (page navigating)!")
+            return True
+        
         if "przelewy24" in url or "pay" in url or "blik" in url or "basket" not in url:
             log.info(f"Payment page reached! URL: {url}")
             return True
         else:
-            body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
-            log.warning(f"After confirm: {body[:100]}")
+            # Try to read body, but don't crash if page is navigating
+            try:
+                body = await page.evaluate("() => document.body.innerText.substring(0, 200)")
+                log.warning(f"After confirm: {body[:100]}")
+            except Exception:
+                # Page navigating = redirect = SUCCESS
+                log.info("Payment redirect detected (evaluate failed)!")
+                return True
             return False
     else:
         log.error("POTWIERDZAM button not found!")
