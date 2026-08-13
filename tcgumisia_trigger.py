@@ -19,6 +19,9 @@ from pathlib import Path
 
 log = logging.getLogger("tcgumisia_trigger")
 
+# TCGUMISIA is paused while autobuy login/ATC failures are investigated.
+TCGUMISIA_ENABLED = False
+
 BOT_PATH = Path("/opt/pokemon-monitor-v2/tcgumisia_autobuy.py")
 COMPLETED_FILE = Path("/opt/pokemon-monitor-v2/tcgumisia_completed.json")
 WEBHOOK_FILE = Path("/opt/pokemon-monitor-v2/discord_webhook_strefatcg.txt")
@@ -108,6 +111,9 @@ def check_tcgumisia_trigger(event_type, product):
     Called from detector.py on NEW_PRODUCT, RESTOCK, PRICE_CHANGE.
     """
     global _batch_products
+
+    if not TCGUMISIA_ENABLED:
+        return
 
     shop_name = product.get("shop", "")
     if shop_name != "tcgumisia.pl":

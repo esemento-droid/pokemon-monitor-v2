@@ -44,7 +44,7 @@ logger = logging.getLogger("monitor")
 
 # Each entry: (module_path, shop_name, poll_interval_seconds)
 ENGINES = [
-    ("engines.tcgumisia_api", "tcgumisia", 3),
+    # ("engines.tcgumisia_api", "tcgumisia", 3),  # DISABLED — autobuy failure investigation
     # ("engines.strefatcg_api", "strefatcg", 3),  # DISABLED — old BS4 scraper only
     # Add more engines here as they're built:
     # ("engines.kartexpol_api", "kartexpol", 5),

@@ -93,6 +93,9 @@ def load_shops():
         if filename.startswith("__") or filename in ("base.py", "template.py"):
             continue
         name = filename[:-3]
+        if name == "tcgumisia":
+            # Temporarily disabled for autobuy failure investigation.
+            continue
         try:
             module = importlib.import_module(f"shops.{name}")
             if hasattr(module, "get_products"):
