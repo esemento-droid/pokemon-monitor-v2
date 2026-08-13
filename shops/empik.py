@@ -10,10 +10,14 @@ CATEGORY_URLS = [
     "https://www.empik.com/bohater/pokemon/karty-kolekcjonerskie",
     "https://www.empik.com/strefa/karty-pokemon",
     "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+tin&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+booster&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+collection&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+elite+trainer&searchCategory=all&sort=publishDesc",
 ]
 
-# Search queries: fewer pages (products per page is higher anyway)
-SEARCH_MAX_PAGES = 3
+# Search queries: fewer pages (they return 150+ products per page)
+SEARCH_MAX_PAGES = 2
 
 EXCLUDE_KW = [
     "korea", "korean", "kore", "kor ", " kor",
