@@ -1,93 +1,91 @@
-# Session Context — Pokemon Monitor v2
-## Last updated: 2026-08-09 21:30
+# Session Context — 2026-08-13 (evening)
 
----
+## Co zrobiono w tej sesji
 
-## W TRAKCIE: TCGumisia Auto-Buy Bot
+### 1. TCGUMISIA — ZATRZYMANA (pauza do diagnozy)
+- Branch: `ops/disable-tcgumisia` (commit `85b337c`)
+- **Wyłączone:** legacy scraper (main.py skip), Hydra engine (registry=[]), trigger (TCGUMISIA_ENABLED=False), autobuy process killed
+- **Backup:** `/opt/pokemon-monitor-v2/data/tcgumisia-disable-backup-20260813175019`
+- **Powód:** bot failował (0/3, atc_failed, login_failed, skipped) — user chce diagnozę zanim włączy
+- **NIE WŁĄCZAĆ** bez wyraźnej prośby usera
 
-### Status: ✅ GOTOWY — podpięty do monitora, czeka na trigger
+### 2. PROXY — zdiagnozowane, stabilne
+- Tunnel/Tailscale flappują co 15-60 min ale recovery supervisor naprawia w <1 min
+- SOCKS5 nigdy nie pada (najbardziej stabilny path)
+- `pokemon-proxy-recovery.service` = enabled, active
+- Tailscale ping mi-9t: 36ms, IP: 37.47.128.183
+- Alert Discord działa (DOWN→UP transition)
 
-### Co działa:
-- **Login** ✅ — PW `fill()` + `.js-submit-login` click, POST /account/login
-- **Clear cart** ✅ — `.c-table-product__delete--desktop` force click, loop until empty
-- **ATC** ✅ — `#product-card-add-to-card` click
-- **InPost radio** ✅ — click label parent of `input[name="shipment"][value="15"]`
-- **Wyszukaj button** ✅ — `.inpost_search_point` click (force=True)
-- **Paczkomat search** ✅ — `input[name="easypack-search"]` + `type()` char by char (delay=100ms)
-- **Autocomplete dropdown** ✅ — `.inpost-search__item-list.point` click
-- **Map list click** ✅ — `a.list-point-link` zawierający kod paczkomatu
-- **"Wybierz" popup** ✅ — klik leaf element z text="wybierz" w `.widget-modal`
-- **#inpost_code** ✅ — wypełnione prawidłowo po kliknięciu "Wybierz"
-- **Blik radio** ✅ — `input[name="payment"][value="25"]` force=True
-- **Tab 1 → Tab 2** ✅ — `.js-cart-next` force=True
-- **Regulamin** ✅ — `input[name="rules"]` force=True
-- **Tab 2 → Tab 3** ✅ — `.js-cart-next` force=True
-- **Zamawiam i płacę** ✅ — klik submit → redirect tpay.com
-- **Logout + fresh session** ✅ — /wyloguj + nowy browser context per konto
-- **Trigger** ✅ — podpięty w detector.py, batch mode (30th keywords)
+### 3. EMPIK SCRAPER — KOMPLETNIE PRZEPISANY
+- Branch: `fix/empik-flaresolverr-scraper` (commit `1995ab3`)
+- **Stare:** nodriver (browser, CF bypass, ~180s subprocess, broad search = 631 śmieci)
+- **Nowe:** FlareSolverr + aiohttp + regex (no browser, ~43s, 177 sealed products)
+- **Kategorie:** 2 URLe
+  - `https://www.empik.com/bohater/pokemon/karty-kolekcjonerskie`
+  - `https://www.empik.com/strefa/karty-pokemon`
+- **Paginacja:** 30/stronę, max 10 stron, `?start=30`, `?start=60`...
+- **Grupa:** SLOW (timeout 180s) ale custom delay **10-20s** (cykl co ~55-65s)
+- **Ceny:** data-product-price + itemprop + regex (działają)
+- **Obrazki:** ecsmedia.pl CDN (23/177 ma — reszta lazy-load, ale OK)
+- **Exclude (71 keywords):** deck, talia, japan, korea, chinese, german, spanish, ultra pro, sleeves, album, portfolio, playmat, magazyn, figurka, puzzle, klocki, battle academy, pokopia, wizytownik...
+- **Binder ZOSTAJE** (Binder Collection = sealed z boosterami)
+- **Pin collection ZOSTAJE** (sealed z boosterami)
+- **Trigger:** bez zmian — PID `1756071234` (First Partner #3), max 140 zł, stock=empik only
 
-### Paczkomat produkcyjny: PAD04M
-### Paczkomat testowy: WAW65N (w test_full_flow.py)
+### 4. MONITOR — aktywny, 177 produktów Empik
+- `pokemon-monitor-v2.service` = active
+- Pokenest: 135 produktów ✅
+- Hobbity: 43 produkty ✅
+- Empik: 177 produktów w 42.9s ✅
+- TCGUMISIA: 0 procesów ✅
 
-### Konta:
-- esemento@gmail.com (Tomasz Szczepaniak)
-- blackmat36@gmail.com (Natalia Szczepaniak)
-- tjbtaniojuzbylo@gmail.com (Jagoda Kaczmarek)
-- y24015411@gmail.com (Miroslawa Szczepaniak)
-- TEST: t11008543@gmail.com (Marian Wasilewski) — ZFLAGOWANE, cena 0 PLN
+## Stan techniczny
 
-### Trigger keywords (30th):
-- "30th", "30 celebration", "30-lecie", "30 lecie", "30 rocznica"
+### Procesy monitora
+- **FAST:** ~107 shops (HTTP/aiohttp, 5-15s delay)
+- **SLOW:** ~20 shops + empik (45-90s delay, empik override 10-20s)
+- **NODRIVER:** 10 shops (proshop, boosterpoint, dragonus, piwniczaki, rgfk, strefamarzen, wilczek, tantis, battlestash, bonito) — subprocess Chrome
+- **ENGINES:** 0 active (tcgumisia disabled, strefatcg disabled)
 
-### Pliki:
-- `/opt/pokemon-monitor-v2/tcgumisia_autobuy.py` — główny bot
-- `/opt/pokemon-monitor-v2/tcgumisia_trigger.py` — trigger (30th keywords, batch mode)
-- `/opt/pokemon-monitor-v2/test_full_flow.py` — test script (konto testowe)
-- `/opt/pokemon-monitor-v2/detector.py` — wired: check_tcgumisia_trigger + flush_tcgumisia_batch
+### Disabled/broken shops (TODO na przyszłe sesje)
+- **battlestash** — CF managed challenge blocks all automation (w NODRIVER ale fails)
+- **bonito** — mobile IP banned (37.47.128.183), needs IP rotation
+- **mediaexpert** — scraper exists ale disabled, needs seller filtering (only ME-own, not marketplace)
+- **tcgumisia** — paused for diagnosis (bot failures)
+- **strefatcg** — engine disabled, trigger disabled (bot 1750zł concern)
 
----
+### FlareSolverr
+- Docker: `http://localhost:8191/v1`
+- Session: `empik_scraper` (reused across pages)
+- Bypasses: Empik CF ✅, promoklocki.pl ✅
+- ~3-5s per page request
 
-## AKTYWNE BOTY AUTO-BUY (uzbrojone, gotowe na drop):
+### Git branches (on GitHub)
+- `main` — production baseline
+- `ops/disable-tcgumisia` — TCGUMISIA pause (deployed on VPS)
+- `fix/empik-flaresolverr-scraper` — new empik scraper (deployed on VPS)
+- `infra/persistent-proxy-recovery` — proxy supervisor (deployed on VPS)
 
-### 1. Kartexpol (NOWY — 2026-08-08)
-- **Plik:** `/opt/pokemon-monitor-v2/kartexpol_autobuy.py`
-- **Trigger:** `/opt/pokemon-monitor-v2/kartexpol_trigger.py`
-- **Metoda:** Patchright headless=False + mobile proxy (`127.0.0.1:8888`)
-- **Flow:** Login → ATC → Checkout single-page (paczkomat + BLIK + zgody) → "Zamawiam i płacę" → Autopay redirect
-- **Konta:** 4 produkcyjne + 1 test (t11008543)
-- **Status:** ✅ DZIAŁA
+## TODO na następne sesje (priorytet)
 
-### 2. Strefa-TCG
-- **Status:** ✅ DZIAŁA
+1. **DISABLED SCRAPERS — przywrócić/naprawić:**
+   - bonito.pl — potrzebuje IP rotation (druga SIM Play/T-Mobile) lub nowy proxy
+   - battlestash.pl — potrzebuje FlareSolverr session albo inny bypass
+   - mediaexpert.pl — seller filtering (exclude marketplace), test bot
+   - tcgumisia — diagnoza: dlaczego bot failuje (rate limit? IP ban? sesja?)
 
-### 3. Empik
-- **Status:** ✅ DZIAŁA
+2. **BOOKLAND.PL** — scraper istnieje (Magento 2 GraphQL), brakuje autobuy bot
 
-### 4. Tantis
-- **Status:** ✅ DZIAŁA
+3. **API ENGINES:**
+   - kartexpol (Shoper /webapi/) — ten sam pattern co strefatcg_api
+   - strefatcg — engine istnieje ale disabled, przywrócić po diagnozie
 
-### 5. Smyk
-- **Status:** ✅ DZIAŁA
+4. **EMPIK uzupełnienia:**
+   - Dodać 3rd source (seriesFacet jako fallback) gdyby kategorie nie łapały nowych?
+   - Więcej obrazków (lazy-load problem — 23/177 ma image)
 
-### 6. JapanCollectibles (30th batch)
-- **Status:** ✅ DZIAŁA
+5. **PARALLEL ACCOUNT EXECUTION** — boty na różnych IP (VPS + mobile + Tailscale)
 
----
+6. **FlareSolverr** — nowe scrapery na CF-blocked shops (tcg-zielona.pl)
 
-## Mobile Proxy (aktywne):
-- **Lokalne:** `127.0.0.1:8888` (tinyproxy na VPS)
-- **Używają:** empik, kartexpol, tcgumisia (w budowie), scrapery
-
----
-
-## Komendy VPS:
-```bash
-# Git pull + restart:
-cd /opt/pokemon-monitor-v2 && sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart pokemon-monitor-v2
-
-# Test tcgumisia:
-DISPLAY=:99 timeout 300 venv/bin/python3 test_full_flow.py 2>&1 | curl -s -d @- https://paste.rs/
-
-# Full report:
-bash <(curl -s https://paste.rs/T4qdZ) 2>&1 | curl -s -d @- https://paste.rs/
-```
+7. **MOBILE IP ROTATION** — automatyczny airplane mode toggle (Orange = static IP, potrzeba Play/T-Mobile SIM)
