@@ -1,4 +1,5 @@
 import logging
+import re
 from discord_sender import discord
 from database import log_event, log_price_change, record_restock, activate_turbo_mode
 from smyk_trigger import check_smyk_autobuy
@@ -69,6 +70,20 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                 if old_price.strip() in ("1 PLN", "1 zl", "1.00 PLN"):
                     pass
                 else:
+                    # Filter out micro price changes (< 5 PLN and < 3%)
+                    try:
+                        old_val = float(re.sub(r'[^\d.,]', '', old_price.replace(',', '.')).strip())
+                        new_val = float(re.sub(r'[^\d.,]', '', new_price.replace(',', '.')).strip())
+                        diff = abs(new_val - old_val)
+                        pct = (diff / old_val * 100) if old_val > 0 else 100
+                        if diff < 5 and pct < 3:
+                            # Micro change — log to DB but don't notify Discord/triggers
+                            await log_price_change(shop_name, pid, product.get("name", ""),
+                                                   old_price, new_price)
+                            continue
+                    except (ValueError, TypeError):
+                        pass  # Can't parse — notify anyway
+
                     product["price_change"] = f"{old_price} -> {new_price}"
                     discord.send_nowait("PRICE_CHANGE", product)
                     await log_event(shop_name, "PRICE_CHANGE", pid, product.get("name"),
