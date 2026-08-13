@@ -314,19 +314,33 @@ async def get_price_comparison(product_name: str, product_price: float, session=
         set_number = extract_set_number(product_name)
 
         if set_number:
-            # Strategy 1: Direct promoklocki.pl fetch (fast!)
+            # Strategy: check BOTH sources and take the LOWEST price
+            promoklocki_data = None
+            klockoradar_data = None
+
+            # Promoklocki
             cache_key = f"pk_{set_number}"
             cached = _price_cache.get(cache_key)
             if cached and (time.time() - cached.get("fetched_at", 0)) < PRICE_TTL:
-                price_data = cached
+                promoklocki_data = cached
             else:
-                price_data = await _fetch_promoklocki_price(session, set_number)
-                if price_data:
-                    _price_cache[cache_key] = price_data
+                promoklocki_data = await _fetch_promoklocki_price(session, set_number)
+                if promoklocki_data:
+                    _price_cache[cache_key] = promoklocki_data
 
-            # Fallback: klockoradar if promoklocki failed
-            if not price_data:
-                price_data = await _fetch_klockoradar_price(session, set_number)
+            # Klockoradar (always check — may have lower price)
+            klockoradar_data = await _fetch_klockoradar_price(session, set_number)
+
+            # Pick the LOWEST price from both sources
+            if promoklocki_data and klockoradar_data:
+                if klockoradar_data["lowest_price"] < promoklocki_data["lowest_price"]:
+                    price_data = klockoradar_data
+                else:
+                    price_data = promoklocki_data
+            elif promoklocki_data:
+                price_data = promoklocki_data
+            elif klockoradar_data:
+                price_data = klockoradar_data
 
         else:
             # Strategy 2: Fuzzy match via klockoradar sitemap
@@ -337,19 +351,29 @@ async def get_price_comparison(product_name: str, product_price: float, session=
             if not set_number:
                 return None
 
-            # Try promoklocki first with matched number
+            # Check both sources with matched number
+            promoklocki_data = None
             cache_key = f"pk_{set_number}"
             cached = _price_cache.get(cache_key)
             if cached and (time.time() - cached.get("fetched_at", 0)) < PRICE_TTL:
-                price_data = cached
+                promoklocki_data = cached
             else:
-                price_data = await _fetch_promoklocki_price(session, set_number)
-                if price_data:
-                    _price_cache[cache_key] = price_data
+                promoklocki_data = await _fetch_promoklocki_price(session, set_number)
+                if promoklocki_data:
+                    _price_cache[cache_key] = promoklocki_data
 
-            # Fallback to klockoradar
-            if not price_data:
-                price_data = await _fetch_klockoradar_price(session, set_number)
+            klockoradar_data = await _fetch_klockoradar_price(session, set_number)
+
+            # Pick lowest
+            if promoklocki_data and klockoradar_data:
+                if klockoradar_data["lowest_price"] < promoklocki_data["lowest_price"]:
+                    price_data = klockoradar_data
+                else:
+                    price_data = promoklocki_data
+            elif promoklocki_data:
+                price_data = promoklocki_data
+            elif klockoradar_data:
+                price_data = klockoradar_data
 
         if not price_data:
             return None
