@@ -13,7 +13,7 @@ CATEGORY_URLS = [
     "https://www.empik.com/szukaj/produkt?q=pokemon+tin&searchCategory=all&sort=publishDesc",
     "https://www.empik.com/szukaj/produkt?q=pokemon+booster&searchCategory=all&sort=publishDesc",
     "https://www.empik.com/szukaj/produkt?q=pokemon+collection&searchCategory=all&sort=publishDesc",
-    "https://www.empik.com/szukaj/produkt?q=pokemon+elite+trainer&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+elite+trainer+box&searchCategory=all&sort=publishDesc",
 ]
 
 # Search queries: fewer pages (they return 150+ products per page)
@@ -46,6 +46,15 @@ EXCLUDE_KW = [
     " up:", "up:",
     "pokopia",
     "wizytownik",
+    "trena\u017cer", "rowerow",
+    "board game", "gra elektroniczna", "gra planszowa",
+    "construction set", "building toy", "mega construx",
+    "moncolle", "takara tomy", "monster collection",
+    "trainer guess",
+    "evoretro", "protector",
+    "kanto friends",
+    "bandai",
+    "educa borras",
 ]
 
 FS_URL = "http://localhost:8191/v1"
