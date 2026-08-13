@@ -7,16 +7,20 @@ import re
 
 log = logging.getLogger("monitor")
 
-SEARCH_URL = "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=publishDesc"
+SEARCH_URLS = [
+    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=priceDesc",
+]
 EXCLUDE_KW = [
     "korea", "korean", "japan", "japanese", "kore", "japo\u0144sk", "jap",
     "deck", "battle deck", "league battle",
     "magazyn", "trenuj ze mn",
     "mata do gry", "playmat", "playmaty",
     "koszulki na karty", "sleeve", "battle box",
-    "minimalistyczna mata",
+    "minimalistyczna mata", "ultra pro", "ultra-pro",
+    "album", "segregator",
 ]
-MAX_PAGES = 3
+MAX_PAGES = 5
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
 
 EXTRACT_JS = """
@@ -71,7 +75,8 @@ async def get_products():
         return []
 
     try:
-        page = await browser.get(SEARCH_URL)
+        # First URL to resolve CF
+        page = await browser.get(SEARCH_URLS[0])
         await asyncio.sleep(12)
 
         title = await page.evaluate("document.title")
@@ -83,56 +88,63 @@ async def get_products():
                 log.error("[empik] CF block - cannot access")
                 return []
 
-        for pg in range(1, MAX_PAGES + 1):
-            if pg > 1:
-                url = SEARCH_URL + f"&start={(pg - 1) * 60}"
-                page = await browser.get(url)
-                await asyncio.sleep(6)
+        log.info("[empik] READY in %.1fs" % 0)
 
-            raw = await page.evaluate(EXTRACT_JS)
-            if not raw:
-                break
+        for search_url in SEARCH_URLS:
+            for pg in range(1, MAX_PAGES + 1):
+                if pg == 1:
+                    url = search_url
+                else:
+                    url = search_url + f"&start={(pg - 1) * 60}"
+                
+                if search_url != SEARCH_URLS[0] or pg > 1:
+                    page = await browser.get(url)
+                    await asyncio.sleep(6)
 
-            try:
-                items = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                break
+                raw = await page.evaluate(EXTRACT_JS)
+                if not raw:
+                    break
 
-            if not items:
-                break
+                try:
+                    items = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    break
 
-            for item in items:
-                pid = item.get("pid", "")
-                if not pid or pid in seen_ids:
-                    continue
+                if not items:
+                    break
 
-                name = item.get("name", "")
-                if any(kw in name.lower() for kw in EXCLUDE_KW):
-                    continue
+                for item in items:
+                    pid = item.get("pid", "")
+                    if not pid or pid in seen_ids:
+                        continue
 
-                seen_ids.add(pid)
-                price_val = item.get("price", "")
-                price_str = f"{price_val} zl" if price_val else "brak"
-                url = item.get("url", "")
-                if url and not url.startswith("http"):
-                    url = "https://www.empik.com" + url
+                    name = item.get("name", "")
+                    if any(kw in name.lower() for kw in EXCLUDE_KW):
+                        continue
 
-                shop_id = item.get("shopId", "0")
-                stock_label = "empik" if shop_id == "0" else f"marketplace_{shop_id}"
+                    seen_ids.add(pid)
+                    price_val = item.get("price", "")
+                    price_str = f"{price_val} zl" if price_val else "brak"
+                    url_product = item.get("url", "")
+                    if url_product and not url_product.startswith("http"):
+                        url_product = "https://www.empik.com" + url_product
 
-                products.append({
-                    "id": f"empik_{pid}",
-                    "name": name,
-                    "price": price_str,
-                    "shop": "empik",
-                    "url": url,
-                    "image": item.get("img", ""),
-                    "stock": stock_label,
-                    "available": bool(price_val),
-                })
+                    shop_id = item.get("shopId", "0")
+                    stock_label = "empik" if shop_id == "0" else f"marketplace_{shop_id}"
 
-            if len(items) < 20:
-                break
+                    products.append({
+                        "id": f"empik_{pid}",
+                        "name": name,
+                        "price": price_str,
+                        "shop": "empik",
+                        "url": url_product,
+                        "image": item.get("img", ""),
+                        "stock": stock_label,
+                        "available": bool(price_val),
+                    })
+
+                if len(items) < 20:
+                    break
 
     except Exception as e:
         log.error(f"[empik] Error: {e}")
