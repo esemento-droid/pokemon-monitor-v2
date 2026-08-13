@@ -5,7 +5,7 @@ Platform: Shoper (strefa-tcg.pl)
 Method: Patchright headless=False (Shoper blocks aiohttp login)
 Flow: Login → Clear cart → ATC → Basket → Select BLIK → ZAMAWIAM → 
       Select paczkomat + checkboxes → PODSUMOWANIE → POTWIERDZAM ZAKUP
-Accounts: 4 production + 1 test
+Accounts: 3 production + 1 test (esemento disabled)
 Requires: DISPLAY=:99, Xvfb running
 """
 
@@ -16,6 +16,7 @@ import json
 import logging
 import re
 import time
+import random
 import argparse
 from pathlib import Path
 from patchright.async_api import async_playwright
@@ -28,6 +29,9 @@ BOT_DIR = Path("/opt/pokemon-monitor-v2")
 COMPLETED_FILE = BOT_DIR / "strefatcg_completed.json"
 LOG_FILE = BOT_DIR / "strefatcg_autobuy.log"
 WEBHOOK_FILE = BOT_DIR / "discord_webhook_strefatcg.txt"
+
+from bot_engine import BotEngine
+_engine = BotEngine(shop="strefatcg", webhook_file=str(WEBHOOK_FILE))
 
 ACCOUNTS = [
     {"email": "esemento@gmail.com", "password": "cR!9GW#x2wqJtGw", "name": "Tomasz Szczepaniak"},
@@ -427,24 +431,55 @@ async def main():
     
     results = []
     
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=False,
-            args=['--disable-blink-features=AutomationControlled', '--no-sandbox'],
-            proxy={"server": "http://127.0.0.1:8888"},
-        )
-        
-        for i, account in enumerate(accounts_to_use):
-            if i < args.start - 1:
-                continue
-            
+    for i, account in enumerate(accounts_to_use):
+        if i < args.start - 1:
+            continue
+
+        email = account["email"]
+        fp = _engine.get_fingerprint(i)
+        proxy = _engine.get_proxy(email)
+
+        log.info(f"[{account['name']}] Browser #{i+1}: proxy={proxy['server'] if proxy else 'DIRECT'}")
+
+        async with async_playwright() as p:
+            launch_args = {
+                "headless": False,
+                "args": ["--disable-blink-features=AutomationControlled", "--no-sandbox",
+                         "--disable-dev-shm-usage"],
+            }
+            if proxy:
+                launch_args["proxy"] = proxy
+
+            try:
+                browser = await p.chromium.launch(**launch_args)
+            except Exception as e:
+                log.error(f"[{account['name']}] Browser launch failed: {e}")
+                if proxy:
+                    launch_args.pop("proxy", None)
+                    try:
+                        browser = await p.chromium.launch(**launch_args)
+                    except Exception:
+                        results.append((account["name"], f"error: browser failed"))
+                        continue
+                else:
+                    results.append((account["name"], f"error: {e}"))
+                    continue
+
             ctx = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                user_agent=fp["user_agent"],
+                viewport=fp["viewport"],
+                locale=fp["locale"],
+                timezone_id=fp["timezone_id"],
             )
+
+            cookies = _engine.load_cookies(email)
+            if cookies:
+                await ctx.add_cookies(cookies)
+                log.info(f"[{account['name']}] Loaded {len(cookies)} pre-warmed cookies")
+
             page = await ctx.new_page()
             
             try:
-                # Build list of URLs × qty
                 all_urls = []
                 for url in product_urls:
                     for _ in range(args.qty):
@@ -457,12 +492,12 @@ async def main():
                 results.append((account["name"], f"error: {e}"))
             finally:
                 await ctx.close()
+                await browser.close()
             
-            # Small delay between accounts
             if i < len(accounts_to_use) - 1:
-                await asyncio.sleep(2)
-        
-        await browser.close()
+                delay = random.randint(12, 25)
+                log.info(f"Waiting {delay}s before next account (humanizer)...")
+                await asyncio.sleep(delay)
     
     # Summary
     log.info("\n=== SUMMARY ===")
