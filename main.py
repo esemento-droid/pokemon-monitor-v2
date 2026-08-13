@@ -248,6 +248,8 @@ def _get_delay(name, stats, error=False, scan_time=0.0):
 
     if name in VERY_SLOW_SHOPS:
         base = random.randint(60, 120)
+    elif name == "empik":
+        base = random.randint(10, 20)
     elif name in SLOW_SHOPS:
         base = random.randint(45, 90)
     elif name in SHOPIFY_SHOPS:
