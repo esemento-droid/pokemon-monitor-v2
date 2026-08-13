@@ -112,6 +112,20 @@ def _parse_products(html):
             if price_match:
                 price = price_match.group(1).replace(' ', '') + '.' + price_match.group(2)
 
+        # Image
+        img = ""
+        img_match = re.search(r'<img[^>]+src="(https://[^"]*empik[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"', block, re.IGNORECASE)
+        if img_match:
+            img = img_match.group(1)
+        if not img:
+            img_match = re.search(r'<img[^>]+data-src="(https://[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"', block, re.IGNORECASE)
+            if img_match:
+                img = img_match.group(1)
+        if not img:
+            img_match = re.search(r'<img[^>]+src="(https://[^"]+)"', block)
+            if img_match:
+                img = img_match.group(1)
+
         # Marketplace check
         mp_match = re.search(r'mpShopId=(\d+)', href)
         shop_id = mp_match.group(1) if mp_match else "0"
@@ -129,6 +143,7 @@ def _parse_products(html):
             "shop_id": shop_id,
             "merchant": merchant,
             "url": href,
+            "img": img,
         })
 
     return products
@@ -194,7 +209,7 @@ async def get_products():
                         "price": price_str,
                         "shop": "empik",
                         "url": url_product,
-                        "image": "",
+                        "image": item.get("img", ""),
                         "stock": stock_label,
                         "available": bool(price_val),
                     })
