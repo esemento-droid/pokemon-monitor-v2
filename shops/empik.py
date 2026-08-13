@@ -9,6 +9,7 @@ log = logging.getLogger("monitor")
 CATEGORY_URLS = [
     "https://www.empik.com/bohater/pokemon/karty-kolekcjonerskie",
     "https://www.empik.com/strefa/karty-pokemon",
+    "https://www.empik.com/szukaj/produkt?seriesFacet=pokemon%20tcg&sort=publishDesc",
 ]
 
 EXCLUDE_KW = [
