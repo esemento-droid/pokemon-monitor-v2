@@ -52,7 +52,6 @@ EXCLUDE_KW = [
     "moncolle", "takara tomy", "monster collection",
     "trainer guess",
     "evoretro", "protector",
-    "kanto friends",
     "bandai",
     "educa borras",
 ]
