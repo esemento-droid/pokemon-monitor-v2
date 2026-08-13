@@ -9,13 +9,11 @@ log = logging.getLogger("monitor")
 CATEGORY_URLS = [
     "https://www.empik.com/bohater/pokemon/karty-kolekcjonerskie",
     "https://www.empik.com/strefa/karty-pokemon",
-    "https://www.empik.com/szukaj/produkt?seriesFacet=pokemon%20tcg&sort=publishDesc",
     "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=publishDesc",
-    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=priceDesc",
 ]
 
-# For search queries, limit pages to avoid excessive scan time
-SEARCH_MAX_PAGES = 5
+# Search queries: fewer pages (products per page is higher anyway)
+SEARCH_MAX_PAGES = 3
 
 EXCLUDE_KW = [
     "korea", "korean", "kore", "kor ", " kor",
@@ -48,7 +46,7 @@ EXCLUDE_KW = [
 
 FS_URL = "http://localhost:8191/v1"
 FS_SESSION = "empik_scraper"
-MAX_PAGES = 10
+MAX_PAGES = 7
 PER_PAGE = 30
 
 
