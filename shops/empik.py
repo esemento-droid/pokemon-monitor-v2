@@ -120,10 +120,6 @@ async def get_products():
                 shop_id = item.get("shopId", "0")
                 stock_label = "empik" if shop_id == "0" else f"marketplace_{shop_id}"
 
-                # Marketplace products: track in DB but mark as unavailable
-                # so Discord won't notify (only Empik-own triggers notifications)
-                is_empik_own = (shop_id == "0")
-
                 products.append({
                     "id": f"empik_{pid}",
                     "name": name,
@@ -132,7 +128,7 @@ async def get_products():
                     "url": url,
                     "image": item.get("img", ""),
                     "stock": stock_label,
-                    "available": is_empik_own and bool(price_val),
+                    "available": bool(price_val),
                 })
 
             if len(items) < 20:
