@@ -13,12 +13,14 @@ SEARCH_URLS = [
 ]
 EXCLUDE_KW = [
     "korea", "korean", "japan", "japanese", "kore", "japo\u0144sk", "jap",
+    "chn", "chi\u0144sk", "chinese", "china",
     "deck", "battle deck", "league battle",
     "magazyn", "trenuj ze mn",
     "mata do gry", "playmat", "playmaty",
     "koszulki na karty", "sleeve", "battle box",
     "minimalistyczna mata", "ultra pro", "ultra-pro",
     "album", "segregator",
+    "gem pack", "single", "karta ",
 ]
 MAX_PAGES = 5
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
