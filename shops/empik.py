@@ -1,28 +1,28 @@
-"""Empik scraper - nodriver (CF bypass) + mobile proxy"""
+"""Empik scraper - FlareSolverr (CF bypass), no browser needed."""
 import asyncio
-import os
-import json
-import logging
 import re
+import logging
+import aiohttp
 
 log = logging.getLogger("monitor")
 
-SEARCH_URLS = [
-    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=publishDesc",
-    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=priceDesc",
+CATEGORY_URLS = [
+    "https://www.empik.com/bohater/pokemon/karty-kolekcjonerskie",
+    "https://www.empik.com/strefa/karty-pokemon",
 ]
+
 EXCLUDE_KW = [
     "korea", "korean", "kore", "kor ", " kor",
-    "japan", "japanese", "japo\u0144sk", "jap ",
+    "japan", "japanese", "japo\u0144sk", "jap",
     "chn", "chi\u0144sk", "chinese", "china",
-    " de ", "deutsch", "german", "niemieck", "kollektion", "tedesco",
+    " de ", "deutsch", "german", "niemieck", "kollektion", "kollection", "tedesco",
     "espa\u0144ol", "castellano", "hiszpa\u0144sk", " spa ",
-    "deck", "battle deck", "league battle",
+    "deck", "battle deck", "league battle", "talia",
     "magazyn", "trenuj ze mn",
     "mata do gry", "playmat", "playmaty",
     "koszulki na karty", "sleeve", "battle box",
     "minimalistyczna mata", "ultra pro", "ultra-pro",
-    "album", "segregator",
+    "album", "segregator", "portfolio",
     "gem pack", "single", "karta ",
     "akrylowe", "akrylowy", "acrylic",
     "torba", "plecak",
@@ -33,123 +33,159 @@ EXCLUDE_KW = [
     "ninja spinner",
     "terastal gathering", "battle partners",
     "paradigm trigger",
+    "battle academy",
+    "planet wow",
+    " up:", "up:",
+    "pokopia",
+    "wizytownik",
 ]
-MAX_PAGES = 5
-PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
 
-EXTRACT_JS = """
-JSON.stringify((function(){
-    const result = [];
-    const items = document.querySelectorAll('.search-list-item');
-    for (const item of items) {
-        try {
-            const titleEl = item.querySelector('h2.product-title');
-            const link = item.querySelector('a[href*=",p"]');
-            const priceEl = item.querySelector('.product-price__value, .price, [class*="price"]');
-            const imgEl = item.querySelector('img');
-            if (!link) continue;
-            const href = link.getAttribute('href') || '';
-            const pidMatch = href.match(/,p(\\d+),/);
-            if (!pidMatch) continue;
-            const name = titleEl ? titleEl.textContent.trim() : '';
-            if (!name) continue;
-            const priceText = priceEl ? priceEl.textContent.trim() : '';
-            const priceMatch = priceText.match(/([\\d]+[,.]?[\\d]*)\\s*z/);
-            const price = priceMatch ? priceMatch[1].replace(',', '.') : '';
-            const img = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
-            const mpMatch = href.match(/mpShopId=(\\d+)/);
-            const shopId = mpMatch ? mpMatch[1] : '0';
-            result.push({pid: pidMatch[1], name: name, price: price, img: img, url: href, shopId: shopId});
-        } catch(e) {}
+FS_URL = "http://localhost:8191/v1"
+FS_SESSION = "empik_scraper"
+MAX_PAGES = 10
+PER_PAGE = 30
+
+
+async def _fetch_page(session, url):
+    """Fetch a page via FlareSolverr, return HTML or None."""
+    payload = {
+        "cmd": "request.get",
+        "url": url,
+        "maxTimeout": 30000,
+        "session": FS_SESSION,
     }
-    return result;
-})())
-"""
+    try:
+        async with session.post(FS_URL, json=payload, timeout=aiohttp.ClientTimeout(total=35)) as resp:
+            data = await resp.json()
+            if data.get("status") == "ok":
+                return data["solution"]["response"]
+            else:
+                log.warning("[empik] FlareSolverr status=%s for %s", data.get("status"), url)
+    except Exception as e:
+        log.error("[empik] FlareSolverr error: %s", e)
+    return None
+
+
+def _parse_products(html):
+    """Parse products from Empik HTML using regex."""
+    products = []
+    blocks = re.split(r'class="[^"]*search-list-item[^"]*"', html)
+
+    for block in blocks[1:]:
+        link_match = re.search(r'href="([^"]*,p(\d+)[^"]*)"', block)
+        if not link_match:
+            continue
+        href = link_match.group(1)
+        pid = link_match.group(2)
+
+        # Title
+        name = ""
+        title_match = re.search(
+            r'class="[^"]*product-title[^"]*"[^>]*>(.*?)</(?:h2|h3|div)', block, re.DOTALL
+        )
+        if title_match:
+            name = re.sub(r'<[^>]+>', '', title_match.group(1)).strip()
+        if not name:
+            title_match = re.search(r'title="([^"]+)"', block)
+            if title_match:
+                name = title_match.group(1).strip()
+
+        # Price
+        price = ""
+        price_match = re.search(r'data-product-price="([\d.]+)"', block)
+        if price_match:
+            price = price_match.group(1)
+        if not price:
+            price_match = re.search(r'itemprop="price"\s+content="([\d.]+)"', block)
+            if price_match:
+                price = price_match.group(1)
+        if not price:
+            price_match = re.search(r'data-price="([\d.]+)"', block)
+            if price_match:
+                price = price_match.group(1)
+        if not price:
+            price_match = re.search(r'(\d+,\d{2})\s*z[łl]', block)
+            if price_match:
+                price = price_match.group(1).replace(',', '.')
+        if not price:
+            price_match = re.search(r'(\d[\d\s]*\d),(\d{2})', block)
+            if price_match:
+                price = price_match.group(1).replace(' ', '') + '.' + price_match.group(2)
+
+        # Marketplace check
+        mp_match = re.search(r'mpShopId=(\d+)', href)
+        shop_id = mp_match.group(1) if mp_match else "0"
+
+        # Merchant name from data attribute (fallback)
+        merchant = "empik"
+        merchant_match = re.search(r'data-merchant-name="([^"]+)"', block)
+        if merchant_match:
+            merchant = merchant_match.group(1).lower()
+
+        products.append({
+            "pid": pid,
+            "name": name,
+            "price": price,
+            "shop_id": shop_id,
+            "merchant": merchant,
+            "url": href,
+        })
+
+    return products
+
+
+def _is_excluded(name):
+    """Check if product name matches any exclude keyword."""
+    name_lower = name.lower()
+    for kw in EXCLUDE_KW:
+        if kw in name_lower:
+            return True
+    # Suffix checks
+    name_stripped = name.rstrip()
+    if name_stripped.endswith(" DE") or name_stripped.endswith("-DE") or "(DE)" in name:
+        return True
+    if name_stripped.endswith(" KOR") or name_stripped.endswith(" SPA"):
+        return True
+    if name_stripped.endswith(" JPN") or name_stripped.endswith(" JAP"):
+        return True
+    return False
 
 
 async def get_products():
-    import nodriver as uc
-
+    """Main scraper entry point. Returns list of product dicts."""
     products = []
-    seen_ids = set()
+    seen_pids = set()
 
-    browser_args = [
-        "--no-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-setuid-sandbox",
-    ]
-    if PROXY_ADDR and PROXY_ADDR != "none":
-        browser_args.append(f"--proxy-server=http://{PROXY_ADDR}")
-
-    try:
-        browser = await uc.start(headless=False, sandbox=False, browser_args=browser_args)
-    except Exception as e:
-        log.error(f"[empik] Failed to start browser: {e}")
-        return []
-
-    try:
-        # First URL to resolve CF
-        page = await browser.get(SEARCH_URLS[0])
-        await asyncio.sleep(12)
-
-        title = await page.evaluate("document.title")
-        if not title or "moment" in title.lower():
-            log.warning("[empik] CF not resolved, waiting longer...")
-            await asyncio.sleep(10)
-            title = await page.evaluate("document.title")
-            if not title or "moment" in title.lower():
-                log.error("[empik] CF block - cannot access")
-                return []
-
-        log.info("[empik] READY in %.1fs" % 0)
-
-        for search_url in SEARCH_URLS:
+    async with aiohttp.ClientSession() as session:
+        for cat_url in CATEGORY_URLS:
             for pg in range(1, MAX_PAGES + 1):
-                if pg == 1:
-                    url = search_url
-                else:
-                    url = search_url + f"&start={(pg - 1) * 60}"
-                
-                if search_url != SEARCH_URLS[0] or pg > 1:
-                    page = await browser.get(url)
-                    await asyncio.sleep(6)
+                url = cat_url if pg == 1 else f"{cat_url}?start={(pg - 1) * PER_PAGE}"
 
-                raw = await page.evaluate(EXTRACT_JS)
-                if not raw:
+                html = await _fetch_page(session, url)
+                if not html:
                     break
 
-                try:
-                    items = json.loads(raw)
-                except (json.JSONDecodeError, TypeError):
-                    break
-
+                items = _parse_products(html)
                 if not items:
                     break
 
                 for item in items:
-                    pid = item.get("pid", "")
-                    if not pid or pid in seen_ids:
+                    pid = item["pid"]
+                    if pid in seen_pids:
+                        continue
+                    seen_pids.add(pid)
+
+                    name = item["name"]
+                    if _is_excluded(name):
                         continue
 
-                    name = item.get("name", "")
-                    if any(kw in name.lower() for kw in EXCLUDE_KW):
-                        continue
-                    # Exclude non-English editions by suffix
-                    name_upper = name.rstrip()
-                    if name_upper.endswith(" DE") or name_upper.endswith("-DE") or "(DE)" in name:
-                        continue
-                    if name_upper.endswith(" KOR") or name_upper.endswith(" SPA") or name_upper.endswith(" JPN"):
-                        continue
-
-                    seen_ids.add(pid)
-                    price_val = item.get("price", "")
+                    price_val = item["price"]
                     price_str = f"{price_val} zl" if price_val else "brak"
-                    url_product = item.get("url", "")
+                    url_product = item["url"]
                     if url_product and not url_product.startswith("http"):
                         url_product = "https://www.empik.com" + url_product
 
-                    shop_id = item.get("shopId", "0")
+                    shop_id = item["shop_id"]
                     stock_label = "empik" if shop_id == "0" else f"marketplace_{shop_id}"
 
                     products.append({
@@ -158,21 +194,13 @@ async def get_products():
                         "price": price_str,
                         "shop": "empik",
                         "url": url_product,
-                        "image": item.get("img", ""),
+                        "image": "",
                         "stock": stock_label,
                         "available": bool(price_val),
                     })
 
-                if len(items) < 20:
+                if len(items) < 15:
                     break
 
-    except Exception as e:
-        log.error(f"[empik] Error: {e}")
-    finally:
-        try:
-            browser.stop()
-        except:
-            pass
-
-    log.info(f"[EMPIK] {len(products)} produktow")
+    log.info("[EMPIK] %d produktow", len(products))
     return products
