@@ -114,15 +114,15 @@ def _parse_products(html):
 
         # Image
         img = ""
-        img_match = re.search(r'<img[^>]+src="(https://[^"]*empik[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"', block, re.IGNORECASE)
+        img_match = re.search(r'<img[^>]+src="(https://ecsmedia\.pl/[^"]+)"', block)
         if img_match:
             img = img_match.group(1)
         if not img:
-            img_match = re.search(r'<img[^>]+data-src="(https://[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"', block, re.IGNORECASE)
+            img_match = re.search(r'<img[^>]+src="(https://[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"', block, re.IGNORECASE)
             if img_match:
                 img = img_match.group(1)
         if not img:
-            img_match = re.search(r'<img[^>]+src="(https://[^"]+)"', block)
+            img_match = re.search(r'<img[^>]+data-src="(https://[^"]+)"', block)
             if img_match:
                 img = img_match.group(1)
 
