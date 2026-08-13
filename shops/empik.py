@@ -12,9 +12,11 @@ SEARCH_URLS = [
     "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=priceDesc",
 ]
 EXCLUDE_KW = [
-    "korea", "korean", "japan", "japanese", "kore", "japo\u0144sk", "jap",
+    "korea", "korean", "kore", "kor ", " kor",
+    "japan", "japanese", "japo\u0144sk", "jap ",
     "chn", "chi\u0144sk", "chinese", "china",
     " de ", "deutsch", "german", "niemieck", "kollektion", "tedesco",
+    "espa\u0144ol", "castellano", "hiszpa\u0144sk", " spa ",
     "deck", "battle deck", "league battle",
     "magazyn", "trenuj ze mn",
     "mata do gry", "playmat", "playmaty",
@@ -27,6 +29,10 @@ EXCLUDE_KW = [
     "plakat", "poster",
     "pin collection", "coin",
     "puzzle", "figurka", "figurk",
+    "koc ", "klocki", "construx", "mega construx",
+    "ninja spinner",
+    "terastal gathering", "battle partners",
+    "paradigm trigger",
 ]
 MAX_PAGES = 5
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
@@ -129,8 +135,11 @@ async def get_products():
                     name = item.get("name", "")
                     if any(kw in name.lower() for kw in EXCLUDE_KW):
                         continue
-                    # Exclude German editions (ends with DE, -DE, (DE))
-                    if name.rstrip().endswith(" DE") or name.rstrip().endswith("-DE") or "(DE)" in name:
+                    # Exclude non-English editions by suffix
+                    name_upper = name.rstrip()
+                    if name_upper.endswith(" DE") or name_upper.endswith("-DE") or "(DE)" in name:
+                        continue
+                    if name_upper.endswith(" KOR") or name_upper.endswith(" SPA") or name_upper.endswith(" JPN"):
                         continue
 
                     seen_ids.add(pid)
