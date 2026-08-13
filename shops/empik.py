@@ -8,16 +8,26 @@ import re
 log = logging.getLogger("monitor")
 
 SEARCH_URLS = [
+    # Seria Pokemon TCG - powinno złapać WSZYSTKO co Empik ma w tej serii
+    "https://www.empik.com/szukaj/produkt?seriesFacet=pokemon%20tcg&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?seriesFacet=pokemon%20tcg&sort=priceDesc",
+    "https://www.empik.com/szukaj/produkt?seriesFacet=pokemon%20tcg&sort=priceAsc",
+    # Klasyczne wyszukiwanie
     "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=publishDesc",
     "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=priceDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+tcg&searchCategory=all&sort=priceAsc",
+    # Dodatkowe frazy łapiące produkty bez "tcg" w nazwie
+    "https://www.empik.com/szukaj/produkt?q=pokemon+booster+box&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+elite+trainer&searchCategory=all&sort=publishDesc",
+    "https://www.empik.com/szukaj/produkt?q=pokemon+collection&searchCategory=all&sort=publishDesc",
 ]
 EXCLUDE_KW = [
     "korea", "korean", "kore", "kor ", " kor",
-    "japan", "japanese", "japo\u0144sk", "jap ",
+    "japan", "japanese", "japo\u0144sk", "jap",
     "chn", "chi\u0144sk", "chinese", "china",
-    " de ", "deutsch", "german", "niemieck", "kollektion", "tedesco",
+    " de ", "deutsch", "german", "niemieck", "kollektion", "kollection", "tedesco",
     "espa\u0144ol", "castellano", "hiszpa\u0144sk", " spa ",
-    "deck", "battle deck", "league battle",
+    "deck", "battle deck", "league battle", "talia",
     "magazyn", "trenuj ze mn",
     "mata do gry", "playmat", "playmaty",
     "koszulki na karty", "sleeve", "battle box",
@@ -139,7 +149,7 @@ async def get_products():
                     name_upper = name.rstrip()
                     if name_upper.endswith(" DE") or name_upper.endswith("-DE") or "(DE)" in name:
                         continue
-                    if name_upper.endswith(" KOR") or name_upper.endswith(" SPA") or name_upper.endswith(" JPN"):
+                    if name_upper.endswith(" KOR") or name_upper.endswith(" SPA") or name_upper.endswith(" JPN") or name_upper.endswith(" JAP"):
                         continue
 
                     seen_ids.add(pid)

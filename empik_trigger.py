@@ -13,7 +13,7 @@ log = logging.getLogger("monitor")
 
 # PIDs to watch: {pid: max_price}
 WATCH_PIDS = {
-    "1756071234": 160,  # First Partner Booster Collection 3
+    "1756071234": 140,  # First Partner Booster Collection 3
 }
 
 QTY = 3
