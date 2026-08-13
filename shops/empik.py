@@ -120,6 +120,10 @@ async def get_products():
                 shop_id = item.get("shopId", "0")
                 stock_label = "empik" if shop_id == "0" else f"marketplace_{shop_id}"
 
+                # Only include Empik-own products (not marketplace sellers)
+                if shop_id != "0":
+                    continue
+
                 products.append({
                     "id": f"empik_{pid}",
                     "name": name,
