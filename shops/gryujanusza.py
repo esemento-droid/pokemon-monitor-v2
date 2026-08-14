@@ -68,7 +68,7 @@ async def get_products():
             except (ValueError, KeyError):
                 pass
 
-        price = min(prices) if prices else 0.0
+        price = str(min(prices)) if prices else "0"
 
         # Stock info from variant count available
         stock_count = sum(1 for v in variants if v.get("available", False))
