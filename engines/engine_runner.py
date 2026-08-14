@@ -170,6 +170,12 @@ def run_engines_process():
 
     log.info(f"[ENGINE] Process starting with {len(ENGINES)} engines")
 
+    if not ENGINES:
+        log.info("[ENGINE] No engines registered — sleeping (idle)")
+        import time
+        while True:
+            time.sleep(3600)
+
     async def _run_all():
         await init_db()
         tasks = [
