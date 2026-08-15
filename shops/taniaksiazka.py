@@ -1,6 +1,14 @@
 import aiohttp
 import re
 import json
+import sys
+
+sys.path.insert(0, '/opt/pokemon-monitor-v2')
+try:
+    from price_compare import get_price_comparison, format_price_comparison
+    HAS_PRICE_COMPARE = True
+except ImportError:
+    HAS_PRICE_COMPARE = False
 
 SHOP = "taniaksiazka"
 URLS = [
@@ -82,4 +90,16 @@ async def get_products():
                     "available": available,
                 })
     print(f"[TANIAKSIAZKA] {len(products)} produktow")
+
+    # Price comparison for LEGO products
+    if HAS_PRICE_COMPARE:
+        lego_products = [p for p in products if p["shop"] == "taniaksiazka_lego"]
+        for p in lego_products:
+            try:
+                comparison = await get_price_comparison(p["name"], p["price"])
+                if comparison:
+                    p["price_compare"] = format_price_comparison(comparison)
+            except Exception:
+                pass
+
     return products
