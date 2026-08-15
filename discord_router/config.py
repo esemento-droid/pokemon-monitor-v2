@@ -14,5 +14,5 @@ FOREIGN_SHOPS = {"efantasy"}
 FOREIGN_CATEGORY_NAME = "🌍 Zagraniczne"
 
 # LEGO shops - route to LEGO category
-LEGO_SHOPS = {"limango"}
+LEGO_SHOPS = {"limango", "taniaksiazka_lego"}
 LEGO_CATEGORY_NAME = "🧱 LEGO"
