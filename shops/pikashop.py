@@ -116,6 +116,9 @@ async def get_products():
                             break
                     if not image:
                         image = img.get("src", "")
+                # Pikashop has hotlink protection (403) - use weserv.nl proxy for Discord embeds
+                if image and image.startswith("http") and "pikashop.pl" in image:
+                    image = f"https://images.weserv.nl/?url={image}&w=400"
                 products.append({"id": f"pikashop_{pid}", "name": name, "price": price, "shop": SHOP, "url": href, "image": image, "stock": None, "available": available})
     print(f"[PIKASHOP] {len(products)} produktow")
     return products

@@ -58,8 +58,15 @@ async def get_products():
         img = item.select_one("img")
         image = ""
         if img:
-            src = img.get("src", "")
-            image = BASE + "/" + src if src and not src.startswith("http") else src
+            # Try data-src first (lazy loading), then src
+            src = img.get("data-src", "") or img.get("src", "")
+            if src and not src.startswith("http"):
+                if src.startswith("/"):
+                    image = BASE + src
+                else:
+                    image = BASE + "/" + src
+            else:
+                image = src
         url_prod = BASE + "/" + href if href and not href.startswith("http") else href
         products.append({"id": f"gameover_{pid}", "name": name, "price": price, "shop": SHOP, "url": url_prod, "image": image, "stock": None, "available": available})
     print(f"[GAMEOVER] {len(products)} produktow")

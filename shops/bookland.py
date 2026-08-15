@@ -87,6 +87,9 @@ async def get_products():
         price = f"{price_val:.2f} {currency}" if price_val else "brak"
 
         image = item.get("small_image", {}).get("url", "")
+        # Remove width/height params that cause 403 on direct access
+        if image and "?" in image:
+            image = image.split("?")[0]
         url = f"https://bookland.com.pl/{url_key}" if url_key else ""
 
         products.append({
