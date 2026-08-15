@@ -13,16 +13,16 @@ SEARCH_URLS = [
 ]
 EXCLUDE_KW = [
     "korea", "korean", "kore", "kor ", " kor",
-    "japan", "japanese", "japo\u0144sk", "jap ",
+    "japan", "japanese", "japo\u0144sk", "jap ", " jap",
     "chn", "chi\u0144sk", "chinese", "china",
-    " de ", "deutsch", "german", "niemieck", "kollektion", "tedesco",
+    " de ", "deutsch", "german", "niemieck", "kollektion", "kollection", "tedesco",
     "espa\u0144ol", "castellano", "hiszpa\u0144sk", " spa ",
     "deck", "battle deck", "league battle",
     "magazyn", "trenuj ze mn",
     "mata do gry", "playmat", "playmaty",
     "koszulki na karty", "sleeves", "battle box",
     "minimalistyczna mata", "ultra pro", "ultra-pro",
-    "album", "segregator",
+    "album", "segregator", "portfolio", "binder",
     "gem pack", "single", "karta ",
     "akrylowe", "akrylowy", "acrylic",
     "torba", "plecak",
@@ -32,7 +32,7 @@ EXCLUDE_KW = [
     "koc ", "klocki", "construx", "mega construx",
     "ninja spinner",
     "terastal gathering", "battle partners",
-    "paradigm trigger",
+    "paradigm trigger", "talia",
 ]
 MAX_PAGES = 5
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
