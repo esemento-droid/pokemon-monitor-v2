@@ -47,6 +47,7 @@ async def get_products():
         parent = wrapper.parent
         text = parent.get_text(" ", strip=True).lower() if parent else ""
         available = "niedost" not in text
-        products.append({"id": f"strefamarzen_{pid}", "name": name, "price": price, "shop": SHOP, "url": href, "image": "", "stock": None, "available": available})
+        full_url = href if href.startswith("http") else BASE + href
+        products.append({"id": f"strefamarzen_{pid}", "name": name, "price": price, "shop": SHOP, "url": full_url, "image": "", "stock": None, "available": available})
     print(f"[STREFAMARZEN] {len(products)} produktow")
     return products
