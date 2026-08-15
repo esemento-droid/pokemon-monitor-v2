@@ -1,34 +1,81 @@
+"""
+Scraper: tantis.pl
+Platform: Custom (CF protected, HTML scraping)
+Method: Patchright (headless=False, NO proxy) + HTML extraction
+Products: Pokemon TCG category page
+"""
 import asyncio
-import json
 import re
+import logging
 from patchright.async_api import async_playwright
+
+log = logging.getLogger("monitor")
 
 SHOP = "tantis"
 BASE_URL = "https://tantis.pl"
-EXCLUDE = [
-    "ultra-pro", "ultra pro", "playmat", "portfolio", "pro-binder", "deck box", "sleeves",
-    "toploader", "album", "lalie", "nihil", "historia pokemon", "niezbędnik", "puzzle",
-    "pokemon go", "karty do kolekc", "alcove", "symphonia", "synmphonia", "battle deck",
-    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
-    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
-    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "koszulk", "segregator",
-    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
-    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
-    "weiss schwarz", "force of will", "riftbound", "zeszyt", "figurk", "figure set"
+CATEGORY_URL = f"{BASE_URL}/pokemon-tcg-c7053"
+# Try loading more products per page
+CATEGORY_URLS = [
+    f"{BASE_URL}/pokemon-tcg-c7053?limit=100&sort=newest",
+    f"{BASE_URL}/pokemon-tcg-c7053?limit=100",
+    f"{BASE_URL}/pokemon-tcg-c7053",
 ]
 
-JS_FETCH_JSON = """
-async (path) => {
-    const r = await fetch(path, {
-        headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
-        credentials: 'same-origin'
+EXCLUDE = [
+    # Accessories
+    "ultra-pro", "ultra pro", "playmat", "portfolio", "pro-binder", "deck box", "sleeves",
+    "toploader", "album", "alcove", "koszulk", "segregator",
+    # Junk
+    "nihil", "historia pokemon", "niezbędnik", "puzzle", "figurk", "figure set",
+    "pokemon go", "karty do kolekc", "symphonia", "synmphonia", "lalie",
+    # Decks
+    "battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy",
+    # Foreign
+    "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean",
+    "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    # Other games
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood",
+    "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    # Junk
+    "zeszyt", "figurk", "figure set",
+]
+
+EXTRACT_JS = """
+() => {
+    const tuples = document.querySelectorAll('.ui-product-tuple');
+    const results = [];
+    tuples.forEach(el => {
+        const titleEl = el.querySelector('.ui-product-tuple__title a') || el.querySelector('.ui-product-tuple__title');
+        const name = titleEl ? titleEl.textContent.trim() : '';
+        const linkEl = el.querySelector('a[href*="/p"]');
+        const url = linkEl ? linkEl.href : '';
+        const priceBox = el.querySelector('.ui-product-tuple__price-box');
+        let price = '';
+        if (priceBox) {
+            // Extract just the number, ignore "Wysyłka" etc
+            const priceMatch = priceBox.textContent.match(/(\\d+[,.]\\d{2})\\s*zł/);
+            if (priceMatch) price = priceMatch[1].replace(',', '.');
+        }
+        const imgEl = el.querySelector('img');
+        const img = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
+        const unavail = el.querySelector('.ui-product-tuple__price-box--unavailable') !== null;
+        const cartBtn = el.querySelector('.ui-product-tuple__cart-button');
+        const notifBtn = el.querySelector('.ui-product-tuple__notification-button-container');
+        const avail = (cartBtn !== null) && !unavail && !notifBtn;
+        // PID from URL
+        const pidMatch = url.match(/p(\\d+)/);
+        const pid = pidMatch ? pidMatch[1] : '';
+        if (name) results.push({pid, name, price, url, img, avail});
     });
-    if (!r.ok) return '[]';
-    return await r.text();
+    return results;
 }
 """
 
 MAX_RETRIES = 2
+
 
 async def get_products():
     for attempt in range(MAX_RETRIES + 1):
@@ -36,11 +83,11 @@ async def get_products():
             return await _scrape()
         except Exception as e:
             err = str(e)
-            if ("closed" in err or "crashed" in err or "Target" in err) and attempt < MAX_RETRIES:
-                print(f"[TANTIS] Attempt {attempt+1} failed ({err}), retrying...")
+            if attempt < MAX_RETRIES:
+                log.warning(f"[tantis] Attempt {attempt+1} failed ({err[:60]}), retrying...")
                 await asyncio.sleep(3)
                 continue
-            print(f"[TANTIS] Error: {e}")
+            log.error(f"[tantis] Error: {err[:80]}")
             return []
     return []
 
@@ -48,6 +95,7 @@ async def get_products():
 async def _scrape():
     products = []
     seen_ids = set()
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
@@ -57,107 +105,209 @@ async def _scrape():
         page = await browser.new_page(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         )
+
         try:
-            await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45000)
-            # Wait for CF challenge
-            for _ in range(8):
-                title = await page.title()
-                if "moment" not in title.lower() and "checking" not in title.lower():
-                    break
-                await asyncio.sleep(2)
-            await asyncio.sleep(1)
+            # Try URLs in order (limit=100 first, fallback to default)
+            loaded = False
+            for url in CATEGORY_URLS:
+                try:
+                    await page.goto(url, wait_until="load", timeout=45000)
+                    # Wait for CF challenge
+                    for _ in range(12):
+                        title = await page.title()
+                        if "moment" not in title.lower() and "checking" not in title.lower():
+                            break
+                        await asyncio.sleep(2)
+                    await asyncio.sleep(2)
 
-            # Source 1: Category API (gives ~10 products with full details)
-            try:
-                raw = await page.evaluate(JS_FETCH_JSON, "/front-api/v1/products?categoryId=7053&limit=100")
-                items = json.loads(raw)
-                if isinstance(items, list):
-                    for item in items:
-                        pid = item.get("productId")
-                        if pid and pid not in seen_ids:
-                            seen_ids.add(pid)
-                            _add_product(products, item)
-            except Exception as e1:
-                print(f"[TANTIS] Category API error: {e1}")
+                    # Verify page loaded
+                    count = await page.evaluate("() => document.querySelectorAll('.ui-product-tuple').length")
+                    if count > 0:
+                        loaded = True
+                        break
+                except Exception as e:
+                    log.debug(f"[tantis] URL {url} failed: {e}")
+                    continue
 
-            # Source 2: Search autocomplete (gives 10 more, some overlap)
+            if not loaded:
+                log.warning("[tantis] Could not load category page")
+                await browser.close()
+                return []
+
+            # Scroll to load lazy content
+            for _ in range(5):
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await asyncio.sleep(0.8)
+
+            # Extract products
+            items = await page.evaluate(EXTRACT_JS)
+
+            for item in items:
+                name = item.get("name", "")
+                pid = item.get("pid", "")
+                if not name or not pid:
+                    continue
+
+                name_lower = name.lower()
+
+                # Must be Pokemon
+                if "pokemon" not in name_lower and "pokémon" not in name_lower:
+                    continue
+
+                # Exclude filter
+                if any(ex in name_lower for ex in EXCLUDE):
+                    continue
+
+                # Price
+                price_val = item.get("price", "")
+                if price_val:
+                    price_str = f"{price_val} PLN"
+                    # Filter singles <10 PLN
+                    try:
+                        if float(price_val) < 10:
+                            continue
+                    except ValueError:
+                        pass
+                else:
+                    price_str = "brak"
+
+                # Dedup
+                if pid in seen_ids:
+                    continue
+                seen_ids.add(pid)
+
+                # URL
+                url = item.get("url", "")
+                if url and not url.startswith("http"):
+                    url = BASE_URL + url
+
+                # Image
+                image = item.get("img", "")
+                if image and not image.startswith("http"):
+                    image = BASE_URL + image
+
+                products.append({
+                    "id": f"tantis_{pid}",
+                    "name": name,
+                    "price": price_str,
+                    "shop": SHOP,
+                    "url": url,
+                    "image": image,
+                    "stock": None,
+                    "available": item.get("avail", False),
+                })
+
+            # Check if there's pagination (next page)
+            has_next = await page.evaluate("""() => {
+                const next = document.querySelector('a[rel="next"], [class*=pagination] a[class*=next], a[class*="next"]');
+                return next ? next.href : null;
+            }""")
+
+            # Load page 2 if exists
+            if has_next and len(items) >= 10:
+                try:
+                    await page.goto(has_next, wait_until="load", timeout=30000)
+                    await asyncio.sleep(3)
+                    for _ in range(3):
+                        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        await asyncio.sleep(0.5)
+
+                    items2 = await page.evaluate(EXTRACT_JS)
+                    for item in items2:
+                        name = item.get("name", "")
+                        pid = item.get("pid", "")
+                        if not name or not pid or pid in seen_ids:
+                            continue
+                        name_lower = name.lower()
+                        if "pokemon" not in name_lower and "pokémon" not in name_lower:
+                            continue
+                        if any(ex in name_lower for ex in EXCLUDE):
+                            continue
+                        price_val = item.get("price", "")
+                        if price_val:
+                            price_str = f"{price_val} PLN"
+                            try:
+                                if float(price_val) < 10:
+                                    continue
+                            except ValueError:
+                                pass
+                        else:
+                            price_str = "brak"
+                        seen_ids.add(pid)
+                        url = item.get("url", "")
+                        if url and not url.startswith("http"):
+                            url = BASE_URL + url
+                        image = item.get("img", "")
+                        if image and not image.startswith("http"):
+                            image = BASE_URL + image
+                        products.append({
+                            "id": f"tantis_{pid}",
+                            "name": name,
+                            "price": price_str,
+                            "shop": SHOP,
+                            "url": url,
+                            "image": image,
+                            "stock": None,
+                            "available": item.get("avail", False),
+                        })
+                except Exception as e:
+                    log.debug(f"[tantis] Page 2 error: {e}")
+
+            # Also try API (gives different set of products)
             try:
-                raw = await page.evaluate(JS_FETCH_JSON, "/front-api/v1/search/autocomplete?query=pokemon+tcg")
-                data = json.loads(raw)
-                for r in data.get("item", {}).get("results", []):
-                    attrs = r.get("attributes", {})
-                    pid_str = r.get("url", "")
-                    pid_match = re.search(r"i(\d+)", pid_str)
-                    if not pid_match:
-                        continue
-                    pid = int(pid_match.group(1))
-                    if pid in seen_ids:
-                        continue
-                    seen_ids.add(pid)
-                    name_list = attrs.get("name", [])
-                    name = name_list[0] if isinstance(name_list, list) and name_list else str(name_list)
-                    name_low = name.lower()
-                    if any(ex in name_low for ex in EXCLUDE):
-                        continue
-                    if "pokemon" not in name_low and "pokémon" not in name_low:
-                        continue
-                    price_str = attrs.get("price", "brak")
-                    price_amount = attrs.get("price_amount", 0)
-                    price = f"{price_amount:.2f} PLN" if price_amount else str(price_str)
-                    img_list = attrs.get("images_urls_json", [])
-                    image = img_list[0] if img_list else ""
-                    web_url = attrs.get("web_url", [""])[0] if isinstance(attrs.get("web_url"), list) else ""
-                    url = f"{BASE_URL}{web_url}" if web_url else ""
-                    products.append({
-                        "id": f"tantis_{pid}",
-                        "name": name,
-                        "price": price,
-                        "shop": SHOP,
-                        "url": url,
-                        "image": image,
-                        "stock": None,
-                        "available": True,
-                    })
-            except Exception as e2:
-                print(f"[TANTIS] Search API error: {e2}")
+                JS_FETCH = """
+                async (path) => {
+                    const r = await fetch(path, {
+                        headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+                        credentials: 'same-origin'
+                    });
+                    if (!r.ok) return '[]';
+                    return await r.text();
+                }
+                """
+                raw = await page.evaluate(JS_FETCH, "/front-api/v1/products?categoryId=7053&limit=100")
+                import json
+                api_items = json.loads(raw)
+                if isinstance(api_items, list):
+                    for item in api_items:
+                        pid = str(item.get("productId", ""))
+                        name = item.get("name", "")
+                        if not pid or not name or pid in seen_ids:
+                            continue
+                        name_lower = name.lower()
+                        if "pokemon" not in name_lower and "pokémon" not in name_lower:
+                            continue
+                        if any(ex in name_lower for ex in EXCLUDE):
+                            continue
+                        price_val = item.get("price", 0)
+                        if price_val and price_val < 10:
+                            continue
+                        price_str = f"{price_val:.2f} PLN" if price_val else "brak"
+                        seen_ids.add(pid)
+                        url = item.get("url", "")
+                        if url and not url.startswith("http"):
+                            url = BASE_URL + url
+                        image = ""
+                        img_data = item.get("image")
+                        if isinstance(img_data, dict):
+                            image = img_data.get("url", "")
+                        elif isinstance(img_data, str):
+                            image = img_data
+                        products.append({
+                            "id": f"tantis_{pid}",
+                            "name": name,
+                            "price": price_str,
+                            "shop": SHOP,
+                            "url": url,
+                            "image": image,
+                            "stock": None,
+                            "available": item.get("available", False),
+                        })
+            except Exception as e:
+                log.debug(f"[tantis] API fallback error: {e}")
 
         finally:
             await browser.close()
+
+    print(f"[TANTIS] {len(products)} produktow")
     return products
-
-
-def _add_product(products, item):
-    """Add a product from category API format."""
-    name = item.get("name", "")
-    name_low = name.lower()
-    if any(ex in name_low for ex in EXCLUDE):
-        return
-    if "pokemon" not in name_low and "pokémon" not in name_low:
-        return
-    pid = item.get("productId")
-    if not pid:
-        return
-    price_val = item.get("price", 0)
-    price = f"{price_val:.2f} PLN" if price_val else "brak"
-    available = item.get("available", False)
-    url = item.get("url", "")
-    if url and not url.startswith("http"):
-        url = f"{BASE_URL}{url}"
-    image = ""
-    img_data = item.get("image")
-    if isinstance(img_data, dict):
-        image = img_data.get("url", "")
-    elif isinstance(img_data, str):
-        image = img_data
-    buy_limit = item.get("buyLimit")
-    stock = buy_limit if buy_limit else None
-    products.append({
-        "id": f"tantis_{pid}",
-        "name": name,
-        "price": price,
-        "shop": SHOP,
-        "url": url,
-        "image": image,
-        "stock": stock,
-        "available": available,
-    })
