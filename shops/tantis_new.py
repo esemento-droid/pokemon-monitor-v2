@@ -16,6 +16,7 @@ BASE_URL = "https://tantis.pl"
 CATEGORY_URL = f"{BASE_URL}/pokemon-tcg-c7053"
 # Try loading more products per page
 CATEGORY_URLS = [
+    f"{BASE_URL}/pokemon-tcg-c7053?limit=100&sort=newest",
     f"{BASE_URL}/pokemon-tcg-c7053?limit=100",
     f"{BASE_URL}/pokemon-tcg-c7053",
 ]
@@ -198,7 +199,7 @@ async def _scrape():
 
             # Check if there's pagination (next page)
             has_next = await page.evaluate("""() => {
-                const next = document.querySelector('a[rel="next"], [class*=pagination] a[class*=next]');
+                const next = document.querySelector('a[rel="next"], [class*=pagination] a[class*=next], a[class*="next"]');
                 return next ? next.href : null;
             }""")
 
@@ -251,6 +252,59 @@ async def _scrape():
                         })
                 except Exception as e:
                     log.debug(f"[tantis] Page 2 error: {e}")
+
+            # Also try API (gives different set of products)
+            try:
+                JS_FETCH = """
+                async (path) => {
+                    const r = await fetch(path, {
+                        headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+                        credentials: 'same-origin'
+                    });
+                    if (!r.ok) return '[]';
+                    return await r.text();
+                }
+                """
+                raw = await page.evaluate(JS_FETCH, "/front-api/v1/products?categoryId=7053&limit=100")
+                import json
+                api_items = json.loads(raw)
+                if isinstance(api_items, list):
+                    for item in api_items:
+                        pid = str(item.get("productId", ""))
+                        name = item.get("name", "")
+                        if not pid or not name or pid in seen_ids:
+                            continue
+                        name_lower = name.lower()
+                        if "pokemon" not in name_lower and "pokémon" not in name_lower:
+                            continue
+                        if any(ex in name_lower for ex in EXCLUDE):
+                            continue
+                        price_val = item.get("price", 0)
+                        if price_val and price_val < 10:
+                            continue
+                        price_str = f"{price_val:.2f} PLN" if price_val else "brak"
+                        seen_ids.add(pid)
+                        url = item.get("url", "")
+                        if url and not url.startswith("http"):
+                            url = BASE_URL + url
+                        image = ""
+                        img_data = item.get("image")
+                        if isinstance(img_data, dict):
+                            image = img_data.get("url", "")
+                        elif isinstance(img_data, str):
+                            image = img_data
+                        products.append({
+                            "id": f"tantis_{pid}",
+                            "name": name,
+                            "price": price_str,
+                            "shop": SHOP,
+                            "url": url,
+                            "image": image,
+                            "stock": None,
+                            "available": item.get("available", False),
+                        })
+            except Exception as e:
+                log.debug(f"[tantis] API fallback error: {e}")
 
         finally:
             await browser.close()
