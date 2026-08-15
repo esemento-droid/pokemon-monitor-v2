@@ -49,6 +49,21 @@ def _parse_page(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
     products = []
 
+    # Extract prices from GA4 dataLayer (most reliable source)
+    price_map = {}
+    import json as json_mod
+    match = re.search(r'"items":\[(.*?)\]', html)
+    if match:
+        try:
+            items = json_mod.loads('[' + match.group(1) + ']')
+            for item in items:
+                pid = str(item.get("item_id", ""))
+                price = item.get("price", 0)
+                if pid and price:
+                    price_map[pid] = float(price)
+        except (json_mod.JSONDecodeError, ValueError):
+            pass
+
     cards = soup.select(".product")
 
     for card in cards:
@@ -68,11 +83,15 @@ def _parse_page(html: str) -> list[dict]:
             if not pid:
                 continue
 
-            # Price
-            price_el = card.select_one(".price .pprice, .price strong, .price")
-            price_text = price_el.get_text(strip=True) if price_el else ""
-            price_match = re.search(r"(\d+[.,]\d{2})", price_text)
-            price = price_match.group(1).replace(",", ".") if price_match else ""
+            # Price from GA4 dataLayer (primary) or HTML (fallback)
+            price = ""
+            if pid in price_map:
+                price = f"{price_map[pid]:.2f}"
+            else:
+                price_el = card.select_one(".price .pprice, .price strong, .price")
+                price_text = price_el.get_text(strip=True) if price_el else ""
+                price_match_html = re.search(r"(\d+[.,]\d{2})", price_text)
+                price = price_match_html.group(1).replace(",", ".") if price_match_html else ""
 
             # Image
             img_el = card.select_one("img")
@@ -85,7 +104,6 @@ def _parse_page(html: str) -> list[dict]:
                     image = ""
 
             # Availability: products with basket/cart button or price = available
-            # Products without price on listing = check for "Zapytaj" or unavailable markers
             card_text = card.get_text(" ", strip=True).lower()
             has_basket = card.select_one("[class*=basket], [class*=cart], .addtobasket") is not None
             is_unavail = "niedost" in card_text or "wyprzedane" in card_text or "zapytaj" in card_text
