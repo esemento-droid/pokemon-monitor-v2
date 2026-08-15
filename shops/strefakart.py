@@ -26,7 +26,7 @@ EXCLUDE = [
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy",
     "segregator", "alcove", "zeszyt", "puzzle", "figurk", "figure set",
-    "singl", "single", "lego",
+    "singl", "single", "lego", "monopoly",
 ]
 
 
@@ -80,6 +80,11 @@ async def get_products():
                     price = f"{price_val:.2f} zl"
                 except (ValueError, TypeError):
                     price = "brak"
+                    price_val = 0
+
+                # Skip singles/cheap items (< 10 PLN = not sealed)
+                if price_val > 0 and price_val < 10:
+                    continue
 
                 # Availability
                 available = item.get("is_in_stock", False)
