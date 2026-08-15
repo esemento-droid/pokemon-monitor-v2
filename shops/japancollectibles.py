@@ -72,10 +72,26 @@ async def get_products():
             for link_m in re.finditer(r'href="((?:https://japancollectibles\.shop)?/[^"]*-p(\d+))"', page_html):
                 url_map[link_m.group(2)] = link_m.group(1)
 
-            # Get images - data-src with product link context
+            # Get images - try multiple patterns
             img_map = {}
-            for img_m in re.finditer(r'<a[^>]*href="[^"]*-p(\d+)"[^>]*>.*?<img[^>]*(?:data-src|src)="([^"]*upload/[^"]*)"', page_html, re.DOTALL):
-                img_map[img_m.group(1)] = img_m.group(2)
+            # Pattern 1: data-src inside product link
+            for img_m in re.finditer(r'<a[^>]*href="[^"]*-p(\d+)"[^>]*>\s*<img[^>]*(?:data-src|src)="([^"]+)"', page_html):
+                pid_img = img_m.group(1)
+                img_url = img_m.group(2)
+                if pid_img not in img_map and '/upload/' in img_url:
+                    img_map[pid_img] = img_url
+            # Pattern 2: product container with data-product-id and img
+            for block_m in re.finditer(r'data-product-id="(\d+)"[^>]*>.*?<img[^>]*(?:data-src|src)="([^"]+)"', page_html, re.DOTALL):
+                pid_img = block_m.group(1)
+                img_url = block_m.group(2)
+                if pid_img not in img_map and '/upload/' in img_url:
+                    img_map[pid_img] = img_url
+            # Pattern 3: any img near product link (broader, non-DOTALL per line)
+            for img_m in re.finditer(r'href="[^"]*-p(\d+)"[^>]*>.*?(?:data-src|src)="([^"]*(?:upload|product|cache)[^"]*\.(?:jpg|jpeg|png|webp|gif))"', page_html, re.DOTALL):
+                pid_img = img_m.group(1)
+                img_url = img_m.group(2)
+                if pid_img not in img_map and 'logo' not in img_url.lower():
+                    img_map[pid_img] = img_url
 
             for item in items:
                 pid = str(item.get("item_id", ""))

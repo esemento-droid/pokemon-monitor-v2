@@ -56,6 +56,22 @@ async def get_products():
         text = parent.get_text(" ", strip=True).lower() if parent else ""
         available = "niedost" not in text
         full_url = href if href.startswith("http") else BASE + href
-        products.append({"id": f"strefamarzen_{pid}", "name": name, "price": price, "shop": SHOP, "url": full_url, "image": "", "stock": None, "available": available})
+        # Image extraction
+        image = ""
+        img_container = wrapper.parent if wrapper.parent else wrapper
+        img_el = img_container.select_one("img[src*='/products/'], img[data-src*='/products/']")
+        if not img_el:
+            img_el = img_container.select_one("img")
+        if img_el:
+            image = img_el.get("data-src", "") or img_el.get("src", "") or ""
+            if image and not image.startswith("http"):
+                if image.startswith("/"):
+                    image = BASE + image
+                else:
+                    image = BASE + "/" + image
+            # Skip placeholder/logo images
+            if image and ("logo" in image.lower() or "placeholder" in image.lower() or image.startswith("data:")):
+                image = ""
+        products.append({"id": f"strefamarzen_{pid}", "name": name, "price": price, "shop": SHOP, "url": full_url, "image": image, "stock": None, "available": available})
     print(f"[STREFAMARZEN] {len(products)} produktow")
     return products

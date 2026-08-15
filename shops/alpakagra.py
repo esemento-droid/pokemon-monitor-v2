@@ -64,7 +64,9 @@ async def get_products():
             available = "koszyk" in text
             price_str = f"{price} PLN" if price else "brak"
             img = tile.select_one("img")
-            image = img.get("src", "") if img else ""
+            image = img.get("data-src", "") or img.get("src", "") if img else ""
+            if image and not image.startswith("http"):
+                image = f"https://alpakagra.pl{image}"
             link = tile.select_one("a")
             url_prod = ""
             if link:

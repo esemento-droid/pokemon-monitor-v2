@@ -126,7 +126,12 @@ async def get_products():
                 continue
             href = a["href"]
             url = BASE + href
-            img_url = img.get("src") or img.get("data-src") or ""
+            img_url = img.get("data-src") or ""
+            if not img_url:
+                src = img.get("src") or ""
+                # Skip preloader/placeholder images
+                if src and "preloader" not in src and not src.startswith("data:") and "placeholder" not in src:
+                    img_url = src
             if img_url and not img_url.startswith("http"):
                 img_url = BASE + img_url
             tasks.append((url, name, img_url, href))

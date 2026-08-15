@@ -58,9 +58,14 @@ async def get_products():
                 break
         img = ""
         for i in imgs:
-            src = i.get("src", "")
+            src = i.get("data-src", "") or i.get("src", "")
             if src and "1px" not in src and "gif" not in src:
-                img = src if src.startswith("http") else BASE + src
+                if src.startswith("http"):
+                    img = src
+                elif src.startswith("/"):
+                    img = BASE + src
+                else:
+                    img = BASE + "/" + src
                 break
         products.append({"id": f"flamberg_{pid}", "name": name, "price": price, "shop": SHOP, "url": link, "image": img, "stock": None, "available": available})
     print(f"[FLAMBERG] {len(products)} produktow")

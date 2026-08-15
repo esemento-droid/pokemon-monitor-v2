@@ -65,16 +65,22 @@ async def get_products():
             available = False
             if form:
                 available = "koszyk" in form.get_text(" ", strip=True).lower()
-            # Obrazek
+            # Obrazek - search up to 4 levels up for img
             image = ""
-            for anc in [l.parent, l.parent.parent]:
+            for anc in [l.parent, l.parent.parent, l.parent.parent.parent if l.parent.parent else None, l.parent.parent.parent.parent if l.parent.parent and l.parent.parent.parent else None]:
                 if not anc:
                     continue
                 img = anc.select_one("img")
                 if img:
-                    image = img.get("data-src") or img.get("src", "")
+                    image = img.get("data-src") or img.get("data-lazy-src") or img.get("src", "")
                     if image and image.startswith("/"):
                         image = "https://www.mironet.pl" + image
+                    elif image and not image.startswith("http"):
+                        image = "https://www.mironet.pl/" + image
+                    # Skip placeholders
+                    if image and ("placeholder" in image or image.startswith("data:") or "1x1" in image):
+                        image = ""
+                        continue
                     break
             url = f"https://www.mironet.pl{href}" if href.startswith("/") else href
             seen[pid] = True

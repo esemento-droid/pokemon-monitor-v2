@@ -74,7 +74,16 @@ async def get_products():
                 if pm:
                     price = pm.group(0).replace(",", ".") + " PLN"
             img = item.select_one("img")
-            image = img.get("src", "") or img.get("data-src", "") if img else ""
+            image = ""
+            if img:
+                # Prefer data-src/data-lazy-src over src (src is often placeholder)
+                image = img.get("data-src", "") or img.get("data-lazy-src", "") or ""
+                if not image:
+                    src = img.get("src", "")
+                    if src and not src.startswith("data:"):
+                        image = src
+                if image and not image.startswith("http"):
+                    image = f"https://przyczolek.pl{image}"
             products.append({
                 "id": f"przyczolek_{pid}",
                 "name": name,
