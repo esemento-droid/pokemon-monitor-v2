@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 SHOP = "wilczek"
 URL = "https://wilczek.poznan.pl/product/search?query=Pokemon+tcg+&filter=1"
 BASE = "https://wilczek.poznan.pl"
-EXCLUDE = ["japonsk", "japanese", "korean", "chinsk", "chinese", "sleeve", "koszulk", "toploader", "album"]
+EXCLUDE = ["japonsk", "japanese", "korean", "chinsk", "chinese", "sleeve", "koszulk", "toploader", "album", "brilliant fantasy", "dark crystal", "true mystery", "battle academy", "wcd", "world championship deck", "trainer's toolkit", "trainer toolkit"]
 
 async def get_products():
     products = []
