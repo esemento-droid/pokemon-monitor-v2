@@ -84,6 +84,10 @@ async def get_products():
             if any(ex in name_low for ex in EXCLUDE):
                 continue
 
+            # Must contain pokemon/pokémon
+            if "pokemon" not in name_low and "pokémon" not in name_low:
+                continue
+
             href = name_el.get("href", "")
             if href and not href.startswith("http"):
                 href = BASE_URL + href
