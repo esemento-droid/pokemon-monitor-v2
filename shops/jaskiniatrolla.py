@@ -75,7 +75,10 @@ async def get_products():
                     if m:
                         price = m.group(1).replace(",", ".") + " zl"
                 item_text = item.get_text(" ", strip=True).lower()
-                available = "koszyk" in item_text or "dostępn" in item_text
+                available = "koszyk" in item_text or "dodaj" in item_text or "dostępn" in item_text or "kupuj" in item_text
+                # Also check for out-of-stock indicators
+                if "niedostępn" in item_text or "brak" in item_text or "wyczerpan" in item_text:
+                    available = False
                 img = item.select_one("img")
                 image = ""
                 if img:

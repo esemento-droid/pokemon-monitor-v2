@@ -175,6 +175,17 @@ class DiscordSender:
 
         if image and image.startswith("http"):
             image = image.replace(" ", "%20")
+            # Use weserv.nl proxy for shops with hotlink protection or slow CDN
+            # This ensures Discord always loads the image (weserv.nl is fast & reliable)
+            PROXY_SHOPS = {
+                "pikashop", "bookland", "gameover", "basanti", "cardwolf",
+                "aleplanszowki", "dragoneye", "twojekarty", "poketrader",
+                "missaga", "karcianybunkier", "magiccafe", "hearts",
+                "jaskiniatrolla", "piwniczaki"
+            }
+            shop_name = product.get("shop", "")
+            if shop_name in PROXY_SHOPS and "weserv.nl" not in image:
+                image = f"https://images.weserv.nl/?url={image}&w=500&q=80"
             embed["image"] = {"url": image}
         return embed
 
