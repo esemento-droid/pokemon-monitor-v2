@@ -26,7 +26,7 @@ EXCLUDE = [
     "chiński", "chińsk", "chinese", "china", "(chi)", "s-chinese",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy",
-    "segregator", "alcove", "zeszyt", "puzzle", "figurk", "figure set",
+    "segregator", "alcove", "zeszyt", "puzzle", "figurk", "figure set", "turniej",
 ]
 
 
@@ -86,6 +86,8 @@ async def get_products():
             name = html_lib.unescape(item.get("name", ""))
             if not name:
                 continue
+            # Clean up any remaining HTML entities
+            name = name.replace("&#8211;", "–").replace("&#8217;", "'").replace("&amp;", "&")
 
             name_low = name.lower()
             if any(ex in name_low for ex in EXCLUDE):
