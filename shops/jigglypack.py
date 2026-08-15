@@ -87,7 +87,19 @@ def parse_page(html):
             price = "brak"
 
         img_el = item.select_one("img.wp-post-image")
-        image = img_el.get("src", "") if img_el else ""
+        image = ""
+        if img_el:
+            # WooCommerce lazy-loading: prefer data-src/data-lazy-src/srcset over src (which is often placeholder)
+            image = img_el.get("data-src", "") or img_el.get("data-lazy-src", "") or ""
+            if not image:
+                srcset = img_el.get("data-srcset", "") or img_el.get("srcset", "")
+                if srcset:
+                    image = srcset.split(",")[0].strip().split(" ")[0]
+            if not image:
+                src = img_el.get("src", "")
+                # Skip base64 placeholders
+                if src and not src.startswith("data:"):
+                    image = src
 
         stock_el = item.select_one(".ct-woo-card-stock .stock")
         if stock_el:
