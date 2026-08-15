@@ -8,7 +8,7 @@ BASE_URL = "https://www.sklep-piwniczaki.pl/pokemon-tcg"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 MAX_PAGES = 5
 
-JS_EXTRACT = "els => els.map(el => ({title: (el.querySelector('.c-product-box__title') || {}).textContent || '', price: (el.querySelector('.c-product-box__price-value') || {}).textContent || '', img: (el.querySelector('img') || {}).src || '', link: (el.querySelector('a[href*=piwniczaki]') || {}).href || '', avail: el.querySelector('.c-avaibility') ? el.querySelector('.c-avaibility').className : '', btn: el.querySelector('[data-product-id]') ? el.querySelector('[data-product-id]').getAttribute('data-product-id') : ''}))"
+JS_EXTRACT = "els => els.map(el => ({title: (el.querySelector('.c-product-box__title') || {}).textContent || '', price: (el.querySelector('.c-product-box__price-value') || {}).textContent || '', img: (el.querySelector('img') || {}).getAttribute('data-src') || (el.querySelector('img') || {}).getAttribute('data-lazy') || (el.querySelector('img') || {}).src || '', link: (el.querySelector('a[href*=piwniczaki]') || {}).href || '', avail: el.querySelector('.c-avaibility') ? el.querySelector('.c-avaibility').className : '', btn: el.querySelector('[data-product-id]') ? el.querySelector('[data-product-id]').getAttribute('data-product-id') : ''}))"
 
 
 async def get_products():
