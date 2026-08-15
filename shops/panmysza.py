@@ -8,7 +8,7 @@ BASE = "https://panmysza.pl"
 CATEGORY = "/pl/c/Pokemon-TCG/55"
 CAT_ID = "55"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-EXCLUDE = ["ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "mata ", "playmat", "one piece", "lorcana", "digimon", "naruto", "dragon ball"]
+EXCLUDE = ["ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "mata ", "playmat", "one piece", "lorcana", "digimon", "naruto", "dragon ball", "dragon shield", "(jp)", "(chi)", "japanese", "chinese", "world championship", "wcs deck", "league battle deck", "accessory bundle", "figure set", "dream painting", "brilliant fantasy", "gift box"]
 
 async def get_products():
     products = []
