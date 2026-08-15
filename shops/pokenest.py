@@ -3,6 +3,9 @@ import asyncio
 
 API_URL = "https://pokenest.pl/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+EXCLUDE = ["japońska karta", "karta pokémon", "karta pokemon", "ultra pro", "album",
+           "segregator", "battle deck", "league battle", "psa ", "x psa",
+           "koszulki", "toploader", "sleeve", "zestaw"]
 
 async def fetch_page(session, page):
     url = f"{API_URL}?per_page=100&page={page}"
@@ -24,7 +27,9 @@ async def get_products():
                 pid = str(p.get("id", ""))
                 if not pid or pid in seen: continue
                 seen.add(pid)
-                name = p.get("name", "").replace("&#8211;", "-").replace("&#8217;", "'").replace("&", "&")
+                name = p.get("name", "").replace("&#8211;", "-").replace("&#8217;", "'").replace("&amp;", "&").replace("&#038;", "&")
+                name_low = name.lower()
+                if any(ex in name_low for ex in EXCLUDE): continue
                 pr = p.get("prices", {}).get("price", "0")
                 price = f"{int(pr)/100:.2f} PLN" if pr else "brak"
                 imgs = p.get("images", [])
