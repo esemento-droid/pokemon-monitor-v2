@@ -34,6 +34,13 @@ grep -rn "filename" *.py main.py detector.py
 - Jeśli chcę zmienić/usunąć coś starego → PYTAM USERA WPROST → osobna operacja po potwierdzeniu
 - ZERO tolerancji na "ulepszenia" działającego kodu
 
+### 5a. JAK COŚ SIĘ JEBIE — ZACZYNAJ OD SWOJEJ ZMIANY!
+- **PIERWSZA rzecz do sprawdzenia**: co JA zmieniłem w tej sesji?
+- Jeśli zmiana koreluje z problemem → **COFNIJ OD RAZU**, nie szukaj winy gdzie indziej
+- NIE zakładaj że "sieć padła", "Android Doze", "Orange NAT" — to TY mogłeś rozjebać
+- Sesja 2026-08-15: zmiana `ClientAliveInterval 120→15` rozjebała proxy. 3 godziny szukania winnego w sieci, telefonie, Doze mode — a to moja zmiana w sshd_config
+- **ZASADA**: Jeśli coś działało przed sesją a teraz nie → problem jest w TYM co zmieniłeś. Cofnij. Potwierdź że wraca. Dopiero potem szukaj dalej.
+
 ### 6. NIGDY nie zmieniaj kodu triggerów/botów co DZIAŁA
 - Nawet jeśli widzisz "lepszy" sposób — jeśli działa, NIE RUSZAJ
 - Jedyne dozwolone zmiany:
@@ -230,3 +237,82 @@ Każdy scraper MUSI spełniać WSZYSTKIE poniższe kryteria. Bez wyjątków. Nie
 - Jeśli CF blokuje → FlareSolverr/proxy/WARP
 - Jeśli scraper daje 0 → debug natychmiast, nie "zostawiaj na później"
 - Jeśli proxy pada → napraw, nie omijaj
+
+
+
+---
+
+## 🔒 INFRASTRUKTURA — CO DZIAŁA, NIE RUSZAĆ
+
+### Mobile Proxy (127.0.0.1:8888)
+
+**Stan: DZIAŁA STABILNIE. NIE RUSZAĆ.**
+
+| Element | Wartość | NIE ZMIENIAJ |
+|---------|---------|--------------|
+| VPS sshd ClientAliveInterval | **120** | Było 120, działa. Zmiana na 15 rozjebała wszystko. |
+| VPS sshd ClientAliveCountMax | **3** | Było 3, działa. |
+| Phone autossh ServerAliveInterval | **30** | Sprawdzone, stabilne |
+| Phone autossh ServerAliveCountMax | **3** | Sprawdzone, stabilne |
+| Phone tinyproxy | 0.0.0.0:8888 (all interfaces) | Nasłuchuje na Tailscale + localhost |
+| Reverse tunnel | `-R 8888:127.0.0.1:8888` | Z telefonu do VPS |
+| Watchdog | v2 (proxy_watchdog.sh) | Cron co 1 min, 3-tier repair |
+| Failsafe | Tailscale direct (100.127.72.24:8888) | Fallback gdy tunnel martwy |
+
+**Jak to działa:**
+1. Telefon (Termux) → autossh → reverse tunnel → VPS port 8888
+2. Scrapery łączą się na 127.0.0.1:8888 → tunnel → tinyproxy → mobile IP
+3. Jeśli tunnel padnie → watchdog (co 1 min) naprawia:
+   - Tier 1: Tailscale direct OK? → restart autossh na telefonie
+   - Tier 2: Tailscale dead? → full repair (restart tinyproxy + autossh)
+   - Tier 3: Phone unreachable → log, exit
+
+**CO NIE WOLNO ZMIENIAĆ:**
+- sshd_config (ClientAlive*) — NIGDY
+- proxy_watchdog.sh — NIGDY bez powodu
+- autossh parametry na telefonie — NIGDY
+- Architektura (reverse tunnel) — NIGDY "bo socat byłby lepszy"
+
+### FlareSolverr
+- Docker container, port 8191
+- Stabilny (up days)
+- Używany przez: battlestash, sklepkleks, strefamtg, empik
+
+### Tailscale
+- VPS: 100.100.246.13
+- Mi 9T: 100.127.72.24 (direct 37.47.128.183:5175)
+- ZAWSZE stabilny — mesh VPN, auto-reconnect
+
+### SOCKS5 (127.0.0.1:1080)
+- SSH dynamic forward przez Tailscale
+- Cron co 5 min (start_socks5.sh)
+- Używany przez boty autobuy
+
+### Xvfb
+- Display :99
+- Wymagany przez nodriver/patchright (headless=False)
+- DISPLAY=:99 w systemd env
+
+---
+
+## ⚡ DEBUGGING PROTOCOL
+
+Kiedy coś się jebie na produkcji:
+
+```
+1. CO ZMIENIŁEM W TEJ SESJI?
+   → Lista zmian (pliki, config, komendy)
+   → Czy problem koreluje z moją zmianą?
+   → TAK → COFNIJ OD RAZU. Nie szukaj dalej.
+
+2. Dopiero jak cofnięcie NIE pomaga:
+   → Sprawdź logi (journalctl --since "5 min ago")
+   → Sprawdź procesy (ps aux, ss -tlnp)
+   → Sprawdź connectivity (ping, curl)
+
+3. NIGDY nie zakładaj przyczyny bez dowodu:
+   ❌ "To pewnie sieć Orange"
+   ❌ "Android Doze zabija"
+   ❌ "NAT timeout"
+   ✅ "Zmieniłem X, od tego momentu pada"
+```
