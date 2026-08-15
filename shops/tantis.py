@@ -5,7 +5,7 @@ from patchright.async_api import async_playwright
 
 SHOP = "tantis"
 BASE_URL = "https://tantis.pl"
-EXCLUDE = ["ultra-pro", "ultra pro", "playmat", "portfolio", "binder", "deck box", "sleeves", "toploader", "album", "lalie", "nihil"]
+EXCLUDE = ["ultra-pro", "ultra pro", "playmat", "portfolio", "binder", "deck box", "sleeves", "toploader", "album", "lalie", "nihil", "historia pokemon", "niezbędnik", "puzzle", "pokemon go", "karty do kolekc", "alcove", "symphonia", "synmphonia"]
 
 JS_FETCH_JSON = """
 async (path) => {
