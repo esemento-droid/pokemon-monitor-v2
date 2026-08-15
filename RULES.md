@@ -178,3 +178,55 @@ dict(**os.environ, DISPLAY=':99')
 ### LEGO routing:
 - LEGO_SHOPS = {"limango", "taniaksiazka_lego"} → kategoria "🧱 LEGO"
 - FOREIGN_SHOPS = {"efantasy"} → kategoria "🌍 Zagraniczne"
+
+
+
+---
+
+## 🚀 ŻELAZNA ZASADA SCRAPERÓW — QUALITY STANDARD
+
+Każdy scraper MUSI spełniać WSZYSTKIE poniższe kryteria. Bez wyjątków. Nie idziemy dalej dopóki nie działa.
+
+### OBOWIĄZKOWE (nie negocjowalne):
+
+| # | Kryterium | Wymóg |
+|---|-----------|-------|
+| 1 | **CENA** | MUSI być. Nigdy "brak". Szukaj: GA4 dataLayer, JSON w HTML, /wp-json/, /webapi/, API endpoint, strona produktu. |
+| 2 | **OBRAZEK** | MUSI się wyświetlać na Discord. Testuj HTTP HEAD. Jeśli 403/timeout → weserv.nl proxy. |
+| 3 | **LINK** | Prawidłowy URL do produktu. Musi prowadzić do właściwej strony. |
+| 4 | **STOCK** | MUSI zgadzać się ze stroną. Testuj na live: koszyk/dodaj = available, brak/niedost = unavailable. |
+| 5 | **RESTOCK** | Przejście OUT→AVAIL MUSI triggerować Discord alert. |
+| 6 | **NOWY PRODUKT** | Nowy produkt MUSI triggerować Discord alert. |
+| 7 | **ZMIANA CENY** | Zmiana ceny (>5 PLN i >3%) MUSI triggerować alert. |
+
+### SZYBKOŚĆ — priorytet metod (od najszybszej):
+
+1. **API endpoint** (WooCommerce /wp-json/, Shoper /webapi/, Shopify /products.json, Sellingo /ajax/)
+2. **JSON w HTML** (GA4 dataLayer items, embedded product JSON, script tags)
+3. **aiohttp + BeautifulSoup** (czysty HTTP, brak JS)
+4. **FlareSolverr** (dla Cloudflare)
+5. **nodriver/patchright** (last resort — wolne, zasobożerne)
+
+### STABILNOŚĆ:
+
+- Retry na timeout (min 2 próby)
+- Nie padać na jednym errorze
+- Max 6-10 req/min per shop (nie bombardować)
+- Proxy jeśli rate limit/ban
+
+### PROCESS budowania nowego scrapera:
+
+1. Sprawdź platformę (Shoper, WooCommerce, PrestaShop, Sky-Shop, custom)
+2. Szukaj najszybszego endpointu (API > JSON > HTML > browser)
+3. Napisz scraper z PEŁNYM exclude od startu
+4. Testuj na VPS (nie sandbox — inny IP/proxy/CF)
+5. Wyślij userowi PEŁNĄ listę produktów z cenami do akceptacji
+6. Dopiero po akceptacji → deploy + restart
+
+### NIE ODPUSZCZAJ:
+
+- Jeśli cena nie jest na listingu → szukaj w API/JSON/dataLayer/product page
+- Jeśli obrazek daje 403 → dodaj do weserv.nl proxy
+- Jeśli CF blokuje → FlareSolverr/proxy/WARP
+- Jeśli scraper daje 0 → debug natychmiast, nie "zostawiaj na później"
+- Jeśli proxy pada → napraw, nie omijaj
