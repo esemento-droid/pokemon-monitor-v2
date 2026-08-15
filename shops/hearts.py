@@ -94,7 +94,7 @@ async def get_products():
                 if m:
                     price = m.group(1).replace(",", ".") + " zl"
             text = item.get_text(" ", strip=True).lower()
-            available = "brak towar" not in text
+            available = "brak" not in text and "niedostępn" not in text and "out of stock" not in text
             img_el = item.select_one("img")
             image = ""
             if img_el:
