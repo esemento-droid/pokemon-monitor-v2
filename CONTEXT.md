@@ -1,4 +1,4 @@
-# Pokemon Monitor v2 — FULL STATE August 9, 2026 (21:30)
+# Pokemon Monitor v2 — FULL STATE August 15, 2026
 
 ## Location & Infrastructure
 - Path: /opt/pokemon-monitor-v2/ on OVHcloud VPS (8GB RAM, 4 cores, Debian)
@@ -9,129 +9,116 @@
 - DB: PostgreSQL localhost (user=pokemonitor, pass=mon2026pg, db=pokemonitor)
 - Restart: sudo systemctl restart pokemon-monitor-v2
 - Xvfb: :99 (for nodriver headless=False)
-- Capsolver: in .env (backup for CF, currently unused — nodriver works)
+- FlareSolverr: http://localhost:8191 (Docker, CF bypass)
+- Discord Router: discord-router.service at /opt/pokemon-monitor-v2/discord_router/
 
-## Architecture (MULTI-PROCESS — Aug 9 2026)
-### Entry: main.py (forks 3 processes)
+## Architecture (MULTI-PROCESS — Aug 15 2026)
+### Entry: main.py (forks 4 processes)
 
-**FAST process** (~100 HTTP shops)
+**FAST process** (111 HTTP shops)
 - Own asyncio event loop
 - Scan 1-15s, delay 5-15s + jitter
-- Max ~40 concurrent connections
-- Auto-retry on "Cannot connect" (1 retry, 2-5s delay)
+- Includes: strefakart (WooCommerce API), swiatkart (moved from SLOW for faster drops)
 
-**SLOW process** (~20 shops)
+**SLOW process** (19 shops)
 - Own asyncio event loop
 - Scan 30-120s, delay 45-120s
-- Max ~10 concurrent connections
-- Includes: SHOPIFY (180-300s), SLOW, VERY_SLOW shops
+- Includes: FlareSolverr shops (sklepkleks, battlestash, strefamtg), limango, efantasy
 
-**NODRIVER process** (9 Chrome shops)
+**NODRIVER process** (10 Chrome shops)
 - Subprocess via runner.py per shop
 - Each Chrome = own process, timeout 300s
-- Delay: 90-180s between scans
+- Includes: empik, proshop, boosterpoint, dragonus, piwniczaki, rgfk, strefamarzen, wilczek, tantis, mediaexpert
 
-### Why multi-process:
-- Single process (130 shops) → "Cannot connect" bursts from concurrent SSL handshakes
-- Multi-process: each group has OWN event loop → no interference
-- Auto-restart on crash (main.py monitors child processes)
+**ENGINES process** (1 engine)
+- tcgumisia_proxy_poller: polls /pre-order via mobile proxy every 10s
+- Old tcgumisia_api engine DISABLED (caused 429 spam from same IP)
 
-### Performance (measured):
-- RAM: 1.2 GB (3.9 GB free)
-- Throughput: 1270 scans / 10 min (635 OK / 5 min)
-- Success rate: 97%+ (22 ERR / 5 min)
-- 135 shops active
-- Scales to 300+: add FAST_B process when FAST exceeds 150
-
-### Baseline (Aug 9, 13:45):
-- OK: 635 / 5 min
-- ERR: 22 / 5 min
-- Shops: 135
-- RAM: 1.2 GB
-- Nodriver: 9 shops, all OK
-- Top ERR: zarc(2), pokebeast(2), lukillo(2), bastacentershop(2), alpakagra(2)
-
-### OS tuning (applied):
-- LimitNOFILE=65535 (was 1024!)
-- net.core.somaxconn=8192
-- net.ipv4.tcp_max_syn_backlog=8192
-- net.ipv4.tcp_fin_timeout=10
-- net.ipv4.ip_local_port_range=1024-65535
-- net.ipv4.tcp_tw_reuse=1
-- fs.file-max=500000
+### Total: 140 shops in 4 independent processes
 
 ## Mobile Proxy (ACTIVE)
-- Phone: Xiaomi, SIM Orange PL (800GB/mies)
-- Termux: tinyproxy (port 8888) + sshd (port 8022) + autossh
-- VPS access: 127.0.0.1:8888 (SSH tunnel)
-- SSH to phone: ssh -p 2222 localhost (pass: 123)
-- Mobile IP: 37.47.128.183
-- Used by: empik scraper, proshop scraper, all 6 autobuy bots
+- Phone: Xiaomi Mi 9T, SIM Orange PL (800GB/mies), static IP 37.47.128.183
+- Termux: tinyproxy (port 8888) + sshd (port 8022) + Tailscale
+- VPS access: 127.0.0.1:8888 (HTTP proxy via SSH tunnel)
+- SOCKS5: 127.0.0.1:1080 (SSH -D tunnel to phone)
+- Used by: empik, mediaexpert, strefakart, tcgumisia proxy poller, all autobuy bots
 
-## Active Auto-Buy Bots (ALL with proxy, ALL tested Aug 9)
+## Discord Image Proxy (weserv.nl)
+Shops with hotlink protection/slow CDN route images through images.weserv.nl:
+pikashop, bookland, gameover, basanti, cardwolf, aleplanszowki, dragoneye,
+twojekarty, poketrader, missaga, karcianybunkier, magiccafe, hearts,
+jaskiniatrolla, piwniczaki, sklepkleks
 
-| Bot | Method | Status | Test result |
-|-----|--------|--------|-------------|
-| kartexpol_autobuy | Patchright+proxy | ✅ | Autopay reached |
-| strefatcg_autobuy | Patchright+proxy | ✅ | Order #2042 placed |
-| japancollectibles_autobuy | Patchright+proxy | ✅ | Full flow, "Zamawiam" ready |
-| smyk_autobuy | Playwright+proxy | ✅ | Discord: "TEST OK - gotowy" |
-| tantis_autobuy | API+Patchright+proxy | ✅ | Payment OK, DRY RUN 1/1 |
-| empik_autobuy | nodriver+proxy | ✅ | 20 accounts ready |
+## Active Auto-Buy Bots:
+| Bot | Method | Status |
+|-----|--------|--------|
+| kartexpol_autobuy | Patchright+proxy | ✅ |
+| strefatcg_autobuy | Patchright+proxy | ✅ (trigger max_price 1580) |
+| japancollectibles_autobuy | Patchright+proxy | ✅ |
+| smyk_autobuy | Playwright+proxy | ✅ |
+| tantis_autobuy | API+Patchright+proxy | ✅ |
+| empik_autobuy | nodriver+proxy | ✅ |
+| tcgumisia_autobuy | Patchright+proxy | ⏸️ (paused since 2026-08-13) |
 
-### Trigger → Bot mapping:
-- kartexpol_trigger → kartexpol_autobuy (keywords: "30th", "30 celebration")
-- strefatcg_trigger → strefatcg_autobuy (keywords: "30th", "30 celebration")
-- tantis_trigger → tantis_autobuy ("first partner 3" ≤160, "30th" no limit)
-- smyk_trigger → smyk_autobuy ("first partner", "illustration collection")
-- empik_trigger → empik_autobuy (PID in WATCH_PIDS, stock="empik")
-- japancollectibles_trigger → japancollectibles_autobuy (PID 9419 or "pakiet")
-- japancollectibles_30th_trigger → batch ("30" in name)
+## Key Rules — SCRAPER STANDARDS:
+1. **SEALED ENGLISH ONLY** — booster boxes, ETBs, tins, collections, blisters, bundles
+2. **DOSTĘPNOŚĆ** — testuj na live site, użyj "koszyk"/"dodaj" jako primary indicator
+3. **RESTOCKI + ZMIANY CEN** — muszą działać (wykrywać przejścia available false→true)
+4. **OBRAZKI NA DISCORD** — testuj HTTP HEAD, dodaj do weserv.nl proxy jeśli 403/timeout
+5. **SZYBKO, STABILNIE, BEZ BANÓW** — API-first, max 6-10 req/min per shop, proxy jeśli rate limit
+6. **PRODUKTY DO AKCEPTACJI** — ZAWSZE pokaż userowi listę PRZED deploy
+7. **EXCLUDE KOMPLETNY** — decks, JP/KR/CHI, accessories, other games, LEGO, gry planszowe, singles
+8. **FILTR CENOWY** — <10 PLN = single, wycinaj
+9. **TESTUJ NA VPS** — nie sandbox (inny IP, proxy, CF)
+10. **NIGDY nie edytuj istniejącego działającego kodu** bez potrzeby
 
-### Accounts (shared across bots):
-- esemento@gmail.com / cR!9GW#x2wqJtGw
-- blackmat36@gmail.com / v2@pvDGt#ZuN3ui
-- tjbtaniojuzbylo@gmail.com / P9XAfQE.SCwFq5i
-- y24015411@gmail.com / huw!e.twdCmv9@B
-- Test: t11008543@gmail.com / mt!cSsphud4Zhnz
+## Session History:
 
-## Nodriver/PW Shops (all working, Aug 9):
-| Shop | Products | Time |
-|------|----------|------|
-| empik | 154 | ~30s |
-| boosterpoint | 308 | ~20s |
-| rgfk | 100 | ~14s |
-| piwniczaki | 34 | ~30s |
-| dragonus | 27 | ~13s |
-| wilczek | 60 | ~7s |
-| strefamarzen | 24 | ~12s |
-| tantis | 10 | ~7s |
-| proshop | 1 | ~17s |
+### Session 2026-08-15:
+- Image fixes: 15 scraperów + weserv.nl proxy (16 shops) + 3 HTTP error fixes
+- Nowy scraper: sklepkleks.com (FlareSolverr, 17 sealed)
+- Empik exclude: ' jap', kollection, portfolio, binder, talia
+- Tcgumisia: wyłączony engine 3s (429), dodany proxy poller 10s (mobile IP)
+- Hearts: fix availability ("brak towar" → "brak")
+- Swiatkart: fix availability (avail_tag nie istniał) + moved to FAST
+- Re-enabled: strefakart (API), battlestash (FlareSolverr), strefamtg (FlareSolverr), mediaexpert (nodriver)
+- Final: 140 shops
 
-## Key Rules
-1. ONLY sealed English products — NIE single, NIE japońskie, NIE akcesoria, NIE decks
-2. Przy budowie nowego scrapera: ZAWSZE raport co znalazł, potem ustalamy EXCLUDE
-3. NIGDY nie usuwać/zmieniać istniejących filtrów EXCLUDE bez potwierdzenia
-4. NIGDY nie rewritować działającego kodu bez potwierdzenia
-5. Komendy dla Termius: dawaj jako paste.rs, wyniki też przez paste.rs
-6. Nodriver shops MUST be in NODRIVER_SHOPS set in main.py
+### Session 2026-08-14:
+- Engine crash loop fix, gryujanusza scraper, strefamarzen URL fix
+- Mass exclude update (103 files), taniaksiazka LEGO routing
+- Image fixes: smyk, piwniczaki, pikashop
+- Bots enabled: japancollectibles + tcgumisia triggers
 
-## Commands
-- Restart: sudo systemctl restart pokemon-monitor-v2
-- Logs: journalctl -u pokemon-monitor-v2 --since "5 min ago" --no-pager
-- Test scraper: venv/bin/python3 -u runner.py SHOPNAME
-- Test bot: DISPLAY=:99 timeout 180 venv/bin/python3 -u BOTNAME.py --test ...
-- Git update: sudo git fetch origin && sudo git reset --hard origin/main && sudo systemctl restart pokemon-monitor-v2
-- Check proxy: curl -s -o /dev/null -w "%{http_code}" --proxy http://127.0.0.1:8888 --max-time 10 "https://www.google.com"
-- Full report: bash <(curl -s https://paste.rs/T4qdZ) 2>&1 | curl -s -d @- https://paste.rs/
-- Rollback: sudo git reset --hard HEAD~1 && sudo systemctl restart pokemon-monitor-v2
+### Session 2026-08-13:
+- Tcgumisia fully paused (bot issues)
+- Empik scraper rewritten (FlareSolverr + aiohttp + regex)
+- Strefatcg bot upgraded with bot_engine
+- Health alerts moved to stats channel
 
-## Session Aug 9 Summary
-- Rewritten from orchestrator (subprocess per shop, 7GB RAM) to MULTI-PROCESS (3 isolated processes, 1GB RAM)
-- Fixed 5 broken scrapers (pokebeast, proshop, empik, mangiusmoczejciotki, pokecollect)
-- Empik: nodriver + mobile proxy = 154 products (working!)
-- All 6 autobuy bots tested with real products — ALL pass full flow
-- Added proxy to smyk, strefatcg, japancollectibles bots
-- OS tuning: ulimit 1024→65535, TCP params optimized
-- Auto-retry on "Cannot connect" — reduced errors from 55 to 7-18
-- Final: 135 shops, 1.2GB RAM, 97% success rate, all bots ready
+### Session 2026-08-12:
+- PostgreSQL 4 new tables (event_log, price_history, orders, shop_intel)
+- Cross-shop turbo mode, adaptive timing, error recovery
+- Universal trigger system (trigger_config.json)
+- Limango LEGO scraper + price comparison
+- Daily stats (daily_stats.py)
+
+## Commands:
+- Deploy: `cd /opt/pokemon-monitor-v2 && git fetch origin && git reset --hard origin/main && sudo systemctl restart pokemon-monitor-v2`
+- Logs: `journalctl -u pokemon-monitor-v2 --since "5 min ago" --no-pager`
+- Test scraper: `./venv/bin/python3 -c "import asyncio; from shops.SHOP import get_products; asyncio.run(get_products())"`
+- Proxy check: `curl -s -o /dev/null -w "%{http_code}" --proxy http://127.0.0.1:8888 --max-time 10 "https://www.google.com"`
+
+## TODO next session:
+### New scrapers (user's list):
+libristo.pl, plastiq.pl, moriqal.pl, eduksiazka.pl, loficards.pl, dystryktzero,
+kiddin, gralnia.pl, maginarium, monsteriada, abondegames.pl, archivebyx.com,
+xjoy.pl, mepel.pl, posters.pl (CF)
+
+### Bots:
+- bookland.pl — autobuy bot (scraper gotowy, Magento 2 GraphQL)
+- bonito.pl — scraper + bot (IP banned, needs reset)
+
+### Infra:
+- Automatyzacja IP reset (Android airplane mode toggle)
+- FlareSolverr Docker na VPS (already running)
