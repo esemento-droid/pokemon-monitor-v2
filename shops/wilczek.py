@@ -7,12 +7,12 @@ SHOP = "wilczek"
 URL = "https://wilczek.poznan.pl/product/search?query=Pokemon+tcg+&filter=1"
 BASE = "https://wilczek.poznan.pl"
 EXCLUDE = [
-    "japonsk", "japanese", "korean", "chinsk", "chinese", "sleeve", "koszulk", "toploader",
+    "japonsk", "japanese", "korean", "chinsk", "chinese", "sleeves", "koszulk", "toploader",
     "album", "brilliant fantasy", "dark crystal", "true mystery", "battle academy", "wcd",
     "world championship deck", "trainer's toolkit", "trainer toolkit", "battle deck",
     "league battle", "rival battle", "v battle", "wcs deck", "wcs ", "japoński", "japońsk",
     "(jp)", "koreański", "koreańsk", "chiński", "chińsk", "(chi)", "ultra pro", "ultra-pro",
-    "playmat", "portfolio", "binder", "segregator", "deck box", "alcove", "lorcana",
+    "playmat", "portfolio", "pro-binder", "segregator", "deck box", "alcove", "lorcana",
     "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering",
     "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
     "riftbound", "zeszyt", "puzzle", "figurk", "figure set"

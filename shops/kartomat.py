@@ -6,11 +6,11 @@ SHOP = "kartomat"
 BASE_URL = "https://kartomat.sklep.pl/pl/c/Pokemon/45"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 EXCLUDE = [
-    "korean", "chinese", "chin", "sleeve", "koszulk", "toploader", "academy", "naruto",
+    "korean", "chinese", "chin", "sleeves", "koszulk", "toploader", "academy", "naruto",
     "riftbound", "lorcana", "one piece", "jap", "lego", "72168", "72160", "72150",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "(jp)", "koreański", "koreańsk", "chiński", "chińsk", "(chi)",
-    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder", "album", "segregator",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "pro-binder", "album", "segregator",
     "deck box", "alcove", "yu-gi-oh", "digimon", "star wars", "magic the gathering",
     "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
     "zeszyt", "puzzle", "figurk", "figure set"

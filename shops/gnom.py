@@ -23,7 +23,7 @@ QUERY = '''{
   }
 }'''
 EXCLUDE = [
-    "naruto", "ultra pro", "sleeve", "portfolio", "binder", "deck box", "toploader",
+    "naruto", "ultra pro", "sleeves", "portfolio", "pro-binder", "deck box", "toploader",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
     "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",

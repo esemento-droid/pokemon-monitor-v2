@@ -11,7 +11,7 @@ EXCLUDE = [
     "riftbound", "tying", "marvel", "fairy tail", "origin", "japan", "battle deck",
     "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
     "battle academy", "japoński", "japońsk", "(jp)", "(chi)", "ultra pro", "ultra-pro",
-    "playmat", "binder", "sleeve", "toploader", "album", "koszulk", "segregator", "deck box",
+    "playmat", "pro-binder", "sleeves", "toploader", "album", "koszulk", "segregator", "deck box",
     "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
     "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
     "weiss schwarz", "force of will", "zeszyt", "puzzle", "figurk", "figure set"

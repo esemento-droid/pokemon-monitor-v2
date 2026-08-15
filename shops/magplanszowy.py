@@ -8,7 +8,7 @@ BASE = "https://magplanszowy.pl"
 SEARCH_URL = BASE + "/pl/searchquery/POK+TCG/1/phot/5"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "UP -", "ultra pro",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "UP -", "ultra pro",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
     "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",

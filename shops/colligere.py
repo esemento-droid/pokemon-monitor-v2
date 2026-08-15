@@ -4,7 +4,7 @@ import asyncio
 BASE_URL = "https://colligere.pl/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 EXCLUDE = [
-    "singl", "psa ", "cgc ", "slab ", "sleeve", "koszulk", "toploader", "binder", "portfolio",
+    "singl", "psa ", "cgc ", "slab ", "sleeves", "koszulk", "toploader", "pro-binder", "portfolio",
     "ultra pro", "playmat", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",
     "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",

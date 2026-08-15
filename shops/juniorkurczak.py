@@ -5,11 +5,11 @@ API_URL = "https://app.ecwid.com/api/v3/111352604/products"
 TOKEN = "public_nt3ritVaCxYq4mZtH1cFzQpcjFzSqBy7"
 CATEGORY = 175912935
 EXCLUDE = [
-    "album", "koszulk", "sleeve", "deck box", "zawieszk", "lego", "planszow", "książk",
+    "album", "koszulk", "sleeves", "deck box", "zawieszk", "lego", "planszow", "książk",
     "ksiazk", "korea", "chiński", "chińsk", "chinese", "korean", "koreański", "koreansk",
     "japoński", "japońsk", "japanese", "japonsk", "battle deck", "league battle",
     "rival battle", "v battle", "world championship", "wcs deck", "wcs ", "battle academy",
-    "(jp)", "(chi)", "ultra pro", "ultra-pro", "playmat", "portfolio", "binder", "toploader",
+    "(jp)", "(chi)", "ultra pro", "ultra-pro", "playmat", "portfolio", "pro-binder", "toploader",
     "segregator", "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto",
     "star wars", "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
     "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"

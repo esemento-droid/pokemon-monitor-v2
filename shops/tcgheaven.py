@@ -9,8 +9,8 @@ EXCLUDE = [
     "singl", "psa ", "cgc ", "slab ", "losow", "china", "chinese", "chiński", "japonsk",
     "japanese", "japan", "korean", "koreańsk", "battle deck", "league battle", "rival battle",
     "v battle", "world championship", "wcs deck", "wcs ", "battle academy", "japoński",
-    "japońsk", "(jp)", "(chi)", "ultra pro", "ultra-pro", "playmat", "portfolio", "binder",
-    "sleeve", "toploader", "album", "koszulk", "segregator", "deck box", "alcove", "lorcana",
+    "japońsk", "(jp)", "(chi)", "ultra pro", "ultra-pro", "playmat", "portfolio", "pro-binder",
+    "sleeves", "toploader", "album", "koszulk", "segregator", "deck box", "alcove", "lorcana",
     "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering",
     "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
     "riftbound", "zeszyt", "puzzle", "figurk", "figure set"

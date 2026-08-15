@@ -4,7 +4,7 @@ SHOP = "lootquest"
 BASE = "https://lootquest.pl/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "one piece",
+    "sleeves", "koszulk", "toploader", "album", "pro-binder", "ultra pro", "playmat", "one piece",
     "lorcana", "yu-gi-oh", "digimon", "magic the", "japonsk", "japońsk", "japanese", "japan",
     "korean", "koreańsk", "korea", "chiński", "chinese", "china", "portfolio", "mata do gry",
     "pudełko", "deck box", "alcove", "kubek", "ultra rare", "battle deck", "league battle",

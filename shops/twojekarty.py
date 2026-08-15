@@ -9,7 +9,7 @@ CAT_URL_FIRST = f"{BASE}/pokemon-tcg-c-10.html"
 CAT_URL_PAGE = f"{BASE}/pokemon-tcg-c-10.html/s={{page}}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "figurk", "zabawk", "plusz", "japonsk", "japońsk", "japanese", "korean", "koreańsk",
     "chiński", "chińsk", "chinese", "jpn", "chn", "kor", "lorcana", "one piece", "magic the",
     "yu-gi-oh", "digimon", "dragon ball", "japan", "china", "jpn", "chn", "kor", "korea",

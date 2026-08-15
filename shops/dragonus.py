@@ -7,9 +7,9 @@ SHOP = "dragonus"
 BASE = "https://dragonus.pl"
 CAT_URL = f"{BASE}/pl/c/Pokemon/315"
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "playmat", "ultra pro", "one piece", "naruto",
+    "sleeves", "koszulk", "toploader", "playmat", "ultra pro", "one piece", "naruto",
     "dragon ball", "magic:", "mtg:", "lorcana", "yu-gi-oh", "portfolio", "pro-binder",
-    "binder", "album", "deck box", "energii", "ygo", "academy", "accessory", "flip out",
+    "pro-binder", "album", "deck box", "energii", "ygo", "academy", "accessory", "flip out",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
     "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra-pro", "segregator",

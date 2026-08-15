@@ -15,7 +15,7 @@ BASE = "https://boosterpoint.pl"
 PROXY = "http://" + open("/tmp/px").read().strip() if os.path.exists("/tmp/px") else ""
 
 EXCLUDE_KW = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder",
     "playmat", "mata do gry", "deck box", "ultra pro", "one piece", "lorcana",
     "yu-gi-oh", "digimon", "kostki gamegenic", "dobble",
     "squishmallows", "pluszak", "przytulanka", "plusz", "bidon", "kubek",

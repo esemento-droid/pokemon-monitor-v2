@@ -8,8 +8,8 @@ BASE = "https://aleplanszowki.pl"
 URL = BASE + "/search?controller=search&s=Pokemon+&order=product.date_add.desc"
 EXCLUDE = [
     "flesh and blood", "flesh & blood", "gamegenic", "clip'n'go", "clip n go", "plusz",
-    "figurk", "japonsk", "japanese", "korean", "chinese", "chinsk", "sleeve", "koszulk",
-    "toploader", "album", "ultra pro", "binder", "battle deck", "league battle",
+    "figurk", "japonsk", "japanese", "korean", "chinese", "chinsk", "sleeves", "koszulk",
+    "toploader", "album", "ultra pro", "pro-binder", "battle deck", "league battle",
     "rival battle", "v battle", "world championship", "wcs deck", "wcs ", "battle academy",
     "japoński", "japońsk", "(jp)", "koreański", "koreańsk", "chiński", "chińsk", "(chi)",
     "ultra-pro", "playmat", "portfolio", "segregator", "deck box", "alcove", "lorcana",

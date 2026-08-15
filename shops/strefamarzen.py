@@ -7,7 +7,7 @@ SHOP = "strefamarzen"
 BASE = "https://strefamarzen.pl"
 SEARCH_URL = f"{BASE}/pl/search?text=Pokemon+tcg"
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "japonsk", "japońsk", "japanese", "korean", "koreańsk", "one piece", "lorcana", "yu-gi-oh",
     "digimon", "magic the", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "(jp)", "chiński", "chińsk",

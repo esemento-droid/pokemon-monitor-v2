@@ -8,11 +8,11 @@ URL = "https://flamberg.com.pl/pl/menu/boostery-i-boxy-688"
 BASE = "https://flamberg.com.pl"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
 EXCLUDE = [
-    "japonsk", "japanese", "korean", "chinsk", "chinese", "sleeve", "koszulk", "toploader",
+    "japonsk", "japanese", "korean", "chinsk", "chinese", "sleeves", "koszulk", "toploader",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "(jp)", "koreański",
     "koreańsk", "chiński", "chińsk", "(chi)", "ultra pro", "ultra-pro", "playmat", "portfolio",
-    "binder", "album", "segregator", "deck box", "alcove", "lorcana", "one piece", "yu-gi-oh",
+    "pro-binder", "album", "segregator", "deck box", "alcove", "lorcana", "one piece", "yu-gi-oh",
     "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
     "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
     "zeszyt", "puzzle", "figurk", "figure set"

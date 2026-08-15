@@ -7,7 +7,7 @@ BASE = "https://www.krakow.gameover.pl"
 SEARCH_URL = f"{BASE}/sklep/index.php?d=szukaj&szukaj=Pokemon+tcg"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "battle deck",
+    "sleeves", "koszulk", "toploader", "album", "pro-binder", "ultra pro", "playmat", "battle deck",
     "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
     "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
     "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra-pro", "portfolio",

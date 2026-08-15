@@ -30,7 +30,7 @@ EXCLUDE_KEYWORDS = [
     "cbb", "gem pack", "(m1l)", "(m2)", "(m3)", "(m4)", "(m5)", "(sv1", "(sv2", "(sv3", "(sv4",
     "(sv5", "(sv6", "(sv7", "(sv8", "(sv9", "(csv", "lunar new year", "blade awakening",
     "ninja spinner", "nihil zero", "inferno x", "mega brave", "abyss eye", "clay burst",
-    "terastal festival", "battle partners", "sleeve", "toploader", "album", "binder", "klaser",
+    "terastal festival", "battle partners", "sleeves", "toploader", "album", "pro-binder", "klaser",
     "playmat", "figurk", "plusz", "maskotk", "kubek", "koszulk", "cgc ", "psa ", "one piece",
     "lorcana", "magic", "riftbound", "star wars", "yu-gi-oh", "flesh and blood", "mega dream",
     "code card", "crimson haze", "scarlet ex (sv", "mask of change", "paradise dragona",

@@ -15,7 +15,7 @@ CATEGORY_URL = f"{BASE}/Pokemon-TCG"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 EXCLUDE = [
-    "japonsk", "japanese", "chinese", "sleeve", "koszulk", "playmat", "album", "binder",
+    "japonsk", "japanese", "chinese", "sleeves", "koszulk", "playmat", "album", "pro-binder",
     "toploader", "akcesori", "skup kart", "battle deck", "league battle", "rival battle",
     "v battle", "world championship", "wcs deck", "wcs ", "battle academy", "japoński",
     "japońsk", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "(chi)",

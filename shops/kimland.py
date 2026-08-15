@@ -8,7 +8,7 @@ BASE = "https://www.kimland.pl"
 CAT_URL = f"{BASE}/pl/c/Pokemony/242"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 EXCLUDE = [
-    "ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "playmat", "binder",
+    "ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeves", "playmat", "pro-binder",
     "one piece", "japonsk", "japanese", "korean", "chinese", "figurk", "spinner", "maskotk",
     "pluszak", "puzzle", "klocki", "mega construx", "funko", "lampk", "zegar", "radio",
     "pas clip", "pokeball", "poke ball", "battle deck", "league battle", "rival battle",

@@ -8,7 +8,7 @@ CAT_URL_FIRST = f"{BASE}/Pokemon-c564"
 CAT_URL = f"{BASE}/Pokemon-c564/{{page}}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "japonsk", "japońsk", "japanese", "korean", "koreańsk", "figurk", "plusz", "mega construx",
     "mega pokemon", "funko", "puzzle", "kubek", "klocki", "zabawk", "gmd", "hhr",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",

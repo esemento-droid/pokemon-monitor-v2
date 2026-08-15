@@ -6,11 +6,11 @@ BASE_URL = "https://tubacards.pl/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 CATEGORIES = ["angielskie-pokemon-2", "mega-evolution-era", "scarlet-violet-era"]
 EXCLUDE = [
-    "japonsk", "japanese", "korean", "chinese", "sleeve", "koszulk", "turniej", "liga",
+    "japonsk", "japanese", "korean", "chinese", "sleeves", "koszulk", "turniej", "liga",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "(jp)", "koreański",
     "koreańsk", "chiński", "chińsk", "(chi)", "ultra pro", "ultra-pro", "playmat", "portfolio",
-    "binder", "toploader", "album", "segregator", "deck box", "alcove", "lorcana", "one piece",
+    "pro-binder", "toploader", "album", "segregator", "deck box", "alcove", "lorcana", "one piece",
     "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
     "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
     "zeszyt", "puzzle", "figurk", "figure set"

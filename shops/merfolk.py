@@ -11,7 +11,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 MAX_PAGES = 10
 
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "one piece", "lorcana", "yu-gi-oh", "digimon", "czapka", "funko", "figurk", "plusz", "jpn",
     "chn", "kor", "japanese", "chinese", "korean", "battle deck", "league battle",
     "rival battle", "v battle", "world championship", "wcs deck", "wcs ", "battle academy",

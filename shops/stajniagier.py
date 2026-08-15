@@ -17,7 +17,7 @@ CATEGORY_URLS = ["/178-pokemon-tcg", "/178-pokemon-tcg?page=2"]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 EXCLUDE_KEYWORDS = [
-    "sleeve", "koszulk", "toploader", "album", "binder", "klaser", "segregator", "ultra pro",
+    "sleeves", "koszulk", "toploader", "album", "pro-binder", "klaser", "segregator", "ultra pro",
     "riftbound", "yu-gi-oh", "yu gi oh", "magic the gathering", "mtg ", "one piece",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",

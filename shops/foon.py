@@ -14,7 +14,7 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 EXCLUDE = [
-    "album", "sleeves", "portfolio", "binder", "ultra pro", "toploader", "japonsk", "japońsk",
+    "album", "sleeves", "portfolio", "pro-binder", "ultra pro", "toploader", "japonsk", "japońsk",
     "japanese", "japan", "korean", "koreańsk", "chiński", "chińsk", "číns", "japonsk",
     "japanese", "japan", "korean", "koreańsk", "koszulki", "one piece", "star wars", "lorcana",
     "magic the", "korejsk", "cinski", "korean", "chinese", "koreanski", "koreansk", "mtg",

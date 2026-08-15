@@ -17,7 +17,7 @@ CATEGORIES = [
 ]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "japonsk", "japońsk", "japanese", "korean", "koreańsk", "chiński", "chinese",
     "mystery box", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "(jp)", "(chi)", "ultra-pro",

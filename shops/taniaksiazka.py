@@ -18,7 +18,7 @@ EXCLUDE = [
     "okładki", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",
     "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",
-    "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat", "binder", "sleeve", "toploader",
+    "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat", "pro-binder", "sleeves", "toploader",
     "album", "koszulk", "segregator", "deck box", "alcove", "one piece", "yu-gi-oh", "digimon",
     "naruto", "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz",
     "force of will", "riftbound", "puzzle", "figure set"

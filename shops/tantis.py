@@ -6,7 +6,7 @@ from patchright.async_api import async_playwright
 SHOP = "tantis"
 BASE_URL = "https://tantis.pl"
 EXCLUDE = [
-    "ultra-pro", "ultra pro", "playmat", "portfolio", "binder", "deck box", "sleeves",
+    "ultra-pro", "ultra pro", "playmat", "portfolio", "pro-binder", "deck box", "sleeves",
     "toploader", "album", "lalie", "nihil", "historia pokemon", "niezbędnik", "puzzle",
     "pokemon go", "karty do kolekc", "alcove", "symphonia", "synmphonia", "battle deck",
     "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",

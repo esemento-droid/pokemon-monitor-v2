@@ -7,7 +7,7 @@ BASE = "https://metookids.pl"
 CAT_URL = f"{BASE}/pol_m_POKEMON-i-KARTY-KOLEKCJONERSKIE_POKEMON-376.html"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "japonsk", "japońsk", "japanese", "korean", "koreańsk", "one piece", "lorcana", "yu-gi-oh",
     "digimon", "magic the", "figurk", "plusz", "zabawk", "chinese", "china", "chiński",
     "japan", "grading", "me too", "battle deck", "league battle", "rival battle", "v battle",

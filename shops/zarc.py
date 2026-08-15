@@ -7,7 +7,7 @@ BASE = "https://zarc.pl"
 URL = f"{BASE}/pl/c/Pokemon-TCG/92"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "japonsk", "japońsk", "japanese", "korean", "koreańsk", "one piece", "lorcana", "yu-gi-oh",
     "digimon", "magic the", "wcs", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "battle academy", "(jp)", "chiński", "chińsk", "chinese", "(chi)",

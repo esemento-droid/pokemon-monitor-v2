@@ -8,7 +8,7 @@ SHOP = "rgfk"
 BASE_URL = "https://rgfk.pl/k/51874/pokemon-tcg"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 EXCLUDE = [
-    "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro", "playmat", "energy",
+    "album", "sleeves", "koszulk", "toploader", "pro-binder", "ultra pro", "playmat", "energy",
     "energia", "gumk", "mata", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",
     "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",

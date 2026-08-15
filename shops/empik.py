@@ -20,7 +20,7 @@ EXCLUDE_KW = [
     "deck", "battle deck", "league battle",
     "magazyn", "trenuj ze mn",
     "mata do gry", "playmat", "playmaty",
-    "koszulki na karty", "sleeve", "battle box",
+    "koszulki na karty", "sleeves", "battle box",
     "minimalistyczna mata", "ultra pro", "ultra-pro",
     "album", "segregator",
     "gem pack", "single", "karta ",

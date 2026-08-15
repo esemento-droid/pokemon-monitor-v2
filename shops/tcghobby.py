@@ -8,7 +8,7 @@ API_URL = f"{BASE}/wp-json/wc/store/v1/products?per_page=100&category=pokemon"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "playmat", "album", "portfolio", "binder", "ultra pro",
+    "sleeves", "koszulk", "toploader", "playmat", "album", "portfolio", "pro-binder", "ultra pro",
     "single", "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
     "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",

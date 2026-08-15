@@ -18,7 +18,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 EXCLUDE_KEYWORDS = [
     "oversize", "talia", "battle deck", "szczoteczk", "signal", "figurk", "znacznik", "marker",
-    "album", "sleeve", "koszulk", "binder", "toploader", "klaser", "segregator", "pudelko",
+    "album", "sleeves", "koszulk", "pro-binder", "toploader", "klaser", "segregator", "pudelko",
     "pudełko", "deck box", "pluszak", "maskotka", "plakat", "torba", "pokeball deck", "outlet",
     "interaktywn", "gra ", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",

@@ -7,11 +7,11 @@ SHOP = "moriongames"
 URL = "https://www.moriongames.pl/pokemon-m-69.html"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 EXCLUDE = [
-    "wcd deck", "world championship", "album", "koszulki", "sleeve", "battle deck",
+    "wcd deck", "world championship", "album", "koszulki", "sleeves", "battle deck",
     "league battle", "rival battle", "v battle", "wcs deck", "wcs ", "battle academy",
     "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński",
     "chińsk", "chinese", "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat",
-    "portfolio", "binder", "toploader", "segregator", "deck box", "alcove", "lorcana",
+    "portfolio", "pro-binder", "toploader", "segregator", "deck box", "alcove", "lorcana",
     "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering",
     "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
     "riftbound", "zeszyt", "puzzle", "figurk", "figure set"

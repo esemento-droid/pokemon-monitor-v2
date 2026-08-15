@@ -16,11 +16,11 @@ SHOP = "mironet.pl"
 SEARCH_URL = "https://www.mironet.pl/ProductList/showSearch?EXPF=Pokemon+tcg"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 EXCLUDE_KEYWORDS = [
-    "album", "up:", "ultra pro", "ultra-pro", "koszulk", "sleeve", "playmat", "mata",
+    "album", "up:", "ultra pro", "ultra-pro", "koszulk", "sleeves", "playmat", "mata",
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
     "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
-    "portfolio", "binder", "toploader", "segregator", "deck box", "alcove", "lorcana",
+    "portfolio", "pro-binder", "toploader", "segregator", "deck box", "alcove", "lorcana",
     "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering",
     "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
     "riftbound", "zeszyt", "puzzle", "figurk", "figure set"

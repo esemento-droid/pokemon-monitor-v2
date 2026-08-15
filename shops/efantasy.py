@@ -18,8 +18,8 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 
 EXCLUDE_CATS = ["chinese", "japanese", "cards"]
 EXCLUDE_PRODUCTS = [
-    "sleeve", "playmat", "album", "portfolio",
-    "binder", "toploader", "holder", "protector",
+    "sleeves", "playmat", "album", "portfolio",
+    "pro-binder", "toploader", "holder", "protector",
     "japanese", "chinese",
 ]
 

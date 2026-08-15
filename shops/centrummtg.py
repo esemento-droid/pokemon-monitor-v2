@@ -18,7 +18,7 @@ CATEGORY_URL = f"{BASE}/pokemon"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 EXCLUDE = [
-    "ultra pro", "koszulk", "sleeve", "playmat", "album", "portfolio", "binder", "toploader",
+    "ultra pro", "koszulk", "sleeves", "playmat", "album", "portfolio", "pro-binder", "toploader",
     "holder", "deck box", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",
     "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",

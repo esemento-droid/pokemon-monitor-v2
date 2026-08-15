@@ -17,7 +17,7 @@ CATEGORY_URLS = ["/736-zestawy-eng?resultsPerPage=100"]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 EXCLUDE_KEYWORDS = [
-    "pluszak", "plush", "maskotka", "album", "binder", "klaser", "sleeve", "toploader",
+    "pluszak", "plush", "maskotka", "album", "pro-binder", "klaser", "sleeves", "toploader",
     "segregator", "mata", "playmat", "figurk", "kubek", "koszulk", "portfel", "piórnik",
     "puzzle", "poduszk", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",

@@ -7,7 +7,7 @@ BASE = "https://grymel.pl"
 SEARCH_URL = f"{BASE}/szukaj?controller=search&s=Pokemon+tcg"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder", "ultra pro", "playmat",
     "kubek", "figurk", "plusz", "puzzle", "alcove", "deck box", "one piece", "lorcana",
     "yu-gi-oh", "digimon", "zegarek", "scarlet", "violet", "switch", "nintendo", "let's go",
     "shining pearl", "brilliant diamond", "pokemon snap", "legends", "mystery dungeon",

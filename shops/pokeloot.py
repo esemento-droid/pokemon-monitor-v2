@@ -6,7 +6,7 @@ SHOP = "pokeloot"
 API_URL = "https://www.pokeloot.pl/collections/wszystkie-produkty/products.json?limit=250"
 
 EXCLUDE = [
-    "sleeve", "album", "binder", "portfolio", "toploader", "ultra pro", "deck box", "koszulk",
+    "sleeves", "album", "pro-binder", "portfolio", "toploader", "ultra pro", "deck box", "koszulk",
     "koreański", "korean", "s-chin", "chiński", "chinese", "figur", "japoński", "japońsk",
     "japanese", "battle deck", "league battle", "rival battle", "v battle",
     "world championship", "wcs deck", "wcs ", "battle academy", "(jp)", "(chi)", "ultra-pro",

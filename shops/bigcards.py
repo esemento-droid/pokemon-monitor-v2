@@ -5,7 +5,7 @@ SHOP = "bigcards"
 API_URL = "https://bigcards.pl/wp-json/wc/store/v1/products?per_page=100&category=pokemon"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 EXCLUDE = [
-    "sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "acrylic",
+    "sleeves", "koszulk", "toploader", "album", "pro-binder", "ultra pro", "playmat", "acrylic",
     "case for", "japan", "japanese", "japenese", "china", "chinese", "battle deck",
     "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
     "battle academy", "japoński", "japońsk", "(jp)", "koreański", "koreańsk", "korean",

@@ -25,7 +25,7 @@ EXCLUDE_KEYWORDS = [
     "lorcana", "one piece", "yu-gi-oh", "digimon", "weiss schwarz", "force of will",
     "rival battle", "v battle", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",
     "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",
-    "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat", "portfolio", "binder", "sleeve",
+    "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat", "portfolio", "pro-binder", "sleeves",
     "toploader", "album", "koszulk", "segregator", "deck box", "alcove", "dragon shield",
     "zeszyt", "puzzle", "figurk", "figure set"
 ]

@@ -11,7 +11,7 @@ CATS = [
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 EXCLUDE = [
     "china", "chinese", "japonsk", "japanese", "japan", "korean", "one piece", "ultra pro",
-    "album", "sleeve", "koszulk", "toploader", "binder", "playmat", "battle deck",
+    "album", "sleeves", "koszulk", "toploader", "pro-binder", "playmat", "battle deck",
     "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
     "battle academy", "japoński", "japońsk", "(jp)", "koreański", "koreańsk", "chiński",
     "chińsk", "(chi)", "ultra-pro", "portfolio", "segregator", "deck box", "alcove", "lorcana",
