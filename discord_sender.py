@@ -4,6 +4,16 @@ from datetime import datetime
 from collections import deque
 from config import DISCORD_WEBHOOK, DISCORD_MAX_PER_MINUTE
 
+# Price comparison for LEGO shops (auto-enrichment)
+try:
+    from price_compare import get_price_comparison, format_price_comparison
+    HAS_PRICE_COMPARE = True
+except ImportError:
+    HAS_PRICE_COMPARE = False
+
+# Shops whose products get automatic price comparison with promoklocki/klockoradar
+LEGO_SHOPS = {"limango", "taniaksiazka_lego"}
+
 
 class DiscordSender:
     def __init__(self):
@@ -24,7 +34,21 @@ class DiscordSender:
     async def _worker(self):
         while True:
             try:
-                embed = await self._queue.get()
+                event_type, product = await self._queue.get()
+
+                # Auto price comparison for LEGO shops
+                shop = product.get("shop", "")
+                if HAS_PRICE_COMPARE and shop in LEGO_SHOPS and not product.get("price_compare"):
+                    try:
+                        comparison = await get_price_comparison(
+                            product.get("name", ""), str(product.get("price", ""))
+                        )
+                        if comparison:
+                            product["price_compare"] = format_price_comparison(comparison)
+                    except Exception:
+                        pass
+
+                embed = self._build_embed(event_type, product)
                 await self._rate_limit()
                 session = await self._get_session()
                 try:
@@ -51,7 +75,6 @@ class DiscordSender:
                 print(f"[DISCORD WORKER] {e}")
                 await asyncio.sleep(1)
 
-
     async def _rate_limit(self):
         now = asyncio.get_event_loop().time()
         while self.timestamps and now - self.timestamps[0] > 60:
@@ -70,9 +93,8 @@ class DiscordSender:
             return
         if self._queue is None:
             return
-        embed = self._build_embed(event_type, product)
         try:
-            self._queue.put_nowait(embed)
+            self._queue.put_nowait((event_type, product))
         except asyncio.QueueFull:
             print("[DISCORD] Queue full, dropping message")
 
@@ -139,14 +161,14 @@ class DiscordSender:
         price_compare = product.get("price_compare")
         if price_compare:
             embed["fields"].append({
-                "name": "📊 Porownanie cen",
+                "name": "\U0001f4ca Porownanie cen",
                 "value": price_compare,
                 "inline": False,
             })
             kr_url = product.get("klockoradar_url", "")
             if kr_url:
                 embed["fields"].append({
-                    "name": "🔍 KlockoRadar",
+                    "name": "\U0001f50d KlockoRadar",
                     "value": kr_url,
                     "inline": False,
                 })
