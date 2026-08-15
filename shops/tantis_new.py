@@ -98,7 +98,7 @@ async def _scrape():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
-            # NO PROXY — VPS IP passes CF on tantis
+            proxy={"server": "http://127.0.0.1:8888"},
             args=['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-dev-shm-usage']
         )
         page = await browser.new_page(
