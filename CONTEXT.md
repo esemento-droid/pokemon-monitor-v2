@@ -1,5 +1,22 @@
 # Pokemon Monitor v2 — FULL STATE August 15, 2026
 
+## 📖 Dokumentacja Projektu
+
+Pełna dokumentacja rozbita na dedykowane pliki:
+
+| Plik | Zawartość |
+|------|-----------|
+| [CONTEXT.md](CONTEXT.md) | Ten plik — quick reference, architektura, komendy |
+| [HYDRA_PLAN.md](HYDRA_PLAN.md) | Plan Hydra v3 — architektura docelowa, 7 filarów, fazy budowy |
+| [INFRASTRUCTURE.md](INFRASTRUCTURE.md) | VPS, PostgreSQL, mobile proxy, FlareSolverr, Discord, systemd, git |
+| [BOTS.md](BOTS.md) | Boty autobuy, konta, triggery, platformy e-commerce |
+| [TODO.md](TODO.md) | Pełna lista TODO z priorytetami |
+| [RULES.md](RULES.md) | Krytyczne zasady pracy (NIGDY nie łamać!) |
+| [SESSION_HISTORY.md](SESSION_HISTORY.md) | Historia sesji, incydenty, lessons learned |
+| [SESSION_CONTEXT.md](SESSION_CONTEXT.md) | Kontekst bieżącej/ostatniej sesji |
+
+---
+
 ## Location & Infrastructure
 - Path: /opt/pokemon-monitor-v2/ on OVHcloud VPS (8GB RAM, 4 cores, Debian)
 - Python 3.11, venv at ./venv/
@@ -11,6 +28,8 @@
 - Xvfb: :99 (for nodriver headless=False)
 - FlareSolverr: http://localhost:8191 (Docker, CF bypass)
 - Discord Router: discord-router.service at /opt/pokemon-monitor-v2/discord_router/
+- Mobile proxy: 127.0.0.1:8888 (HTTP) / 127.0.0.1:1080 (SOCKS5) via phone tunnel
+- Szczegóły: → [INFRASTRUCTURE.md](INFRASTRUCTURE.md)
 
 ## Architecture (MULTI-PROCESS — Aug 15 2026)
 ### Entry: main.py (forks 4 processes)
@@ -61,47 +80,25 @@ jaskiniatrolla, piwniczaki, sklepkleks
 | tcgumisia_autobuy | Patchright+proxy | ⏸️ (paused since 2026-08-13) |
 
 ## Key Rules — SCRAPER STANDARDS:
+→ Pełne zasady: [RULES.md](RULES.md)
+
+Quick reference:
 1. **SEALED ENGLISH ONLY** — booster boxes, ETBs, tins, collections, blisters, bundles
-2. **DOSTĘPNOŚĆ** — testuj na live site, użyj "koszyk"/"dodaj" jako primary indicator
-3. **RESTOCKI + ZMIANY CEN** — muszą działać (wykrywać przejścia available false→true)
-4. **OBRAZKI NA DISCORD** — testuj HTTP HEAD, dodaj do weserv.nl proxy jeśli 403/timeout
-5. **SZYBKO, STABILNIE, BEZ BANÓW** — API-first, max 6-10 req/min per shop, proxy jeśli rate limit
-6. **PRODUKTY DO AKCEPTACJI** — ZAWSZE pokaż userowi listę PRZED deploy
-7. **EXCLUDE KOMPLETNY** — decks, JP/KR/CHI, accessories, other games, LEGO, gry planszowe, singles
-8. **FILTR CENOWY** — <10 PLN = single, wycinaj
-9. **TESTUJ NA VPS** — nie sandbox (inny IP, proxy, CF)
-10. **NIGDY nie edytuj istniejącego działającego kodu** bez potrzeby
+2. **NIGDY nie edytuj działającego kodu** bez potrzeby
+3. **NIGDY nie usuwaj plików** bez `grep -rn "filename" *.py`
+4. **Komendy przez paste.rs** (user na Termius mobile)
+5. **Pokaż listę produktów** userowi PRZED deploy
+6. **EXCLUDE per-shop** (nie centralny), "sleeves" nie "sleeve", "pro-binder" nie "binder"
 
 ## Session History:
+→ Pełna historia: [SESSION_HISTORY.md](SESSION_HISTORY.md)
 
-### Session 2026-08-15:
-- Image fixes: 15 scraperów + weserv.nl proxy (16 shops) + 3 HTTP error fixes
-- Nowy scraper: sklepkleks.com (FlareSolverr, 17 sealed)
-- Empik exclude: ' jap', kollection, portfolio, binder, talia
-- Tcgumisia: wyłączony engine 3s (429), dodany proxy poller 10s (mobile IP)
-- Hearts: fix availability ("brak towar" → "brak")
-- Swiatkart: fix availability (avail_tag nie istniał) + moved to FAST
-- Re-enabled: strefakart (API), battlestash (FlareSolverr), strefamtg (FlareSolverr), mediaexpert (nodriver)
-- Final: 140 shops
-
-### Session 2026-08-14:
-- Engine crash loop fix, gryujanusza scraper, strefamarzen URL fix
-- Mass exclude update (103 files), taniaksiazka LEGO routing
-- Image fixes: smyk, piwniczaki, pikashop
-- Bots enabled: japancollectibles + tcgumisia triggers
-
-### Session 2026-08-13:
-- Tcgumisia fully paused (bot issues)
-- Empik scraper rewritten (FlareSolverr + aiohttp + regex)
-- Strefatcg bot upgraded with bot_engine
-- Health alerts moved to stats channel
-
-### Session 2026-08-12:
-- PostgreSQL 4 new tables (event_log, price_history, orders, shop_intel)
-- Cross-shop turbo mode, adaptive timing, error recovery
-- Universal trigger system (trigger_config.json)
-- Limango LEGO scraper + price comparison
-- Daily stats (daily_stats.py)
+### Latest (2026-08-15):
+- Image fixes (21 shops + weserv.nl proxy)
+- Nowy scraper: sklepkleks.com
+- Empik exclude fix, tcgumisia proxy poller, hearts/swiatkart availability fix
+- Re-enabled: strefakart, battlestash, strefamtg, mediaexpert
+- Final: **140 shops active**
 
 ## Commands:
 - Deploy: `cd /opt/pokemon-monitor-v2 && git fetch origin && git reset --hard origin/main && sudo systemctl restart pokemon-monitor-v2`
@@ -110,15 +107,10 @@ jaskiniatrolla, piwniczaki, sklepkleks
 - Proxy check: `curl -s -o /dev/null -w "%{http_code}" --proxy http://127.0.0.1:8888 --max-time 10 "https://www.google.com"`
 
 ## TODO next session:
-### New scrapers (user's list):
-libristo.pl, plastiq.pl, moriqal.pl, eduksiazka.pl, loficards.pl, dystryktzero,
-kiddin, gralnia.pl, maginarium, monsteriada, abondegames.pl, archivebyx.com,
-xjoy.pl, mepel.pl, posters.pl (CF)
+→ Pełna lista: [TODO.md](TODO.md)
 
-### Bots:
-- bookland.pl — autobuy bot (scraper gotowy, Magento 2 GraphQL)
-- bonito.pl — scraper + bot (IP banned, needs reset)
-
-### Infra:
-- Automatyzacja IP reset (Android airplane mode toggle)
-- FlareSolverr Docker na VPS (already running)
+Quick summary:
+1. 🔴 Boty: bookland (bot), bonito (IP reset + scraper + bot), mediaexpert (seller filter + bot test)
+2. 🟠 Nowe scrapery: 15 sklepów z listy usera
+3. 🟡 API engines: kartexpol (Shoper)
+4. 🟡 Infra: IP reset automation, parallel account execution
