@@ -14,8 +14,8 @@ log = logging.getLogger("monitor")
 
 SHOP = "bonito"
 SEARCH_URL = "https://bonito.pl/szukaj?fraza=pokemon+tcg"
-# WARP SOCKS5 proxy (Cloudflare IP, not banned)
-WARP_PROXY = os.environ.get("WARP_PROXY", "socks5://127.0.0.1:40000")
+# WARP proxy (Cloudflare IP, not banned) - supports HTTP CONNECT
+WARP_PROXY = os.environ.get("WARP_PROXY", "http://127.0.0.1:40000")
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 EXCLUDE = [
