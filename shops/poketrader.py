@@ -6,7 +6,16 @@ import re
 SHOP = "poketrader"
 URL = "https://poketrader.eu/pokemon-tcg-c-16.html"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-EXCLUDE = ["one piece", "japonsk", "japanese", "chinese", "china", "sleeve", "koszulk", "toploader", "album"]
+EXCLUDE = [
+    "one piece", "japonsk", "japanese", "chinese", "china", "sleeve", "koszulk", "toploader",
+    "album", "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "(jp)", "koreański",
+    "koreańsk", "korean", "chiński", "chińsk", "(chi)", "ultra pro", "ultra-pro", "playmat",
+    "portfolio", "binder", "segregator", "deck box", "alcove", "lorcana", "yu-gi-oh",
+    "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch_page(session, page):
     url = URL if page == 1 else f"{URL}/s={page}"

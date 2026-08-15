@@ -8,7 +8,16 @@ CATEGORIES = [
     "https://grybezpradu.eu/pokemon-pitch-black",
 ]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["singl", "karta pokemon", "psa ", "cgc ", "slab ", "losow", "china", "chinese", "chiński", "japonsk", "japanese", "japan", "korean", "koreańsk", "ultra pro", "toploader", "sleeve"]
+EXCLUDE = [
+    "singl", "karta pokemon", "psa ", "cgc ", "slab ", "losow", "china", "chinese", "chiński",
+    "japonsk", "japanese", "japan", "korean", "koreańsk", "ultra pro", "toploader", "sleeve",
+    "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "(jp)", "(chi)", "ultra-pro",
+    "playmat", "portfolio", "binder", "album", "koszulk", "segregator", "deck box", "alcove",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 
 async def fetch_page(session, url):

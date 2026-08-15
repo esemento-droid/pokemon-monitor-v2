@@ -6,7 +6,15 @@ SHOP = "zarc"
 BASE = "https://zarc.pl"
 URL = f"{BASE}/pl/c/Pokemon-TCG/92"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat", "japonsk", "japońsk", "japanese", "korean", "koreańsk", "one piece", "lorcana", "yu-gi-oh", "digimon", "magic the", "wcs"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "japonsk", "japońsk", "japanese", "korean", "koreańsk", "one piece", "lorcana", "yu-gi-oh",
+    "digimon", "magic the", "wcs", "battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "battle academy", "(jp)", "chiński", "chińsk", "chinese", "(chi)",
+    "s-chinese", "ultra-pro", "segregator", "deck box", "alcove", "naruto", "star wars",
+    "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
+    "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def get_products():
     products = []

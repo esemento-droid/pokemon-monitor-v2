@@ -8,9 +8,16 @@ SHOP = "japancollectibles"
 BASE = "https://japancollectibles.shop"
 CAT_URL = f"{BASE}/Angielskie-Karty-Pokemon"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "playmat", "album", "portfolio", "binder",
-           "one piece", "dragon ball", "naruto", "lorcana", "energii", "mystery pack",
-           "deck box", "ultra pro"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "playmat", "album", "portfolio", "binder", "one piece",
+    "dragon ball", "naruto", "lorcana", "energii", "mystery pack", "deck box", "ultra pro",
+    "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra-pro", "segregator", "alcove", "yu-gi-oh", "digimon", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 
 def parse_gtag(page_html):

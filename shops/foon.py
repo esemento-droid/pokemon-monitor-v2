@@ -13,9 +13,17 @@ HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
     "Content-Type": "application/json",
 }
-EXCLUDE = ["album", "sleeves", "portfolio", "binder", "ultra pro", "toploader", "japonsk", "japońsk", "japanese", "japan", "korean", "koreańsk", "chiński", "chińsk", "číns", "japonsk", "japanese", "japan", "korean", "koreańsk",
-           "koszulki", "one piece", "star wars", "lorcana", "magic the", "korejsk", "cinski", "korean", "chinese", "koreanski", "koreansk",
-           "mtg", "yu-gi-oh", "digimon", "obaly", "deck box", "pokemon up", "pokémon up"]
+EXCLUDE = [
+    "album", "sleeves", "portfolio", "binder", "ultra pro", "toploader", "japonsk", "japońsk",
+    "japanese", "japan", "korean", "koreańsk", "chiński", "chińsk", "číns", "japonsk",
+    "japanese", "japan", "korean", "koreańsk", "koszulki", "one piece", "star wars", "lorcana",
+    "magic the", "korejsk", "cinski", "korean", "chinese", "koreanski", "koreansk", "mtg",
+    "yu-gi-oh", "digimon", "obaly", "deck box", "pokemon up", "pokémon up", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "(jp)", "(chi)", "ultra-pro", "playmat", "segregator", "alcove",
+    "naruto", "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch_product(session, url, name, img_url):
     try:

@@ -6,7 +6,17 @@ from bs4 import BeautifulSoup
 SHOP = "aleplanszowki"
 BASE = "https://aleplanszowki.pl"
 URL = BASE + "/search?controller=search&s=Pokemon+&order=product.date_add.desc"
-EXCLUDE = ["flesh and blood", "flesh & blood", "gamegenic", "clip'n'go", "clip n go", "plusz", "figurk", "japonsk", "japanese", "korean", "chinese", "chinsk", "sleeve", "koszulk", "toploader", "album", "ultra pro", "binder"]
+EXCLUDE = [
+    "flesh and blood", "flesh & blood", "gamegenic", "clip'n'go", "clip n go", "plusz",
+    "figurk", "japonsk", "japanese", "korean", "chinese", "chinsk", "sleeve", "koszulk",
+    "toploader", "album", "ultra pro", "binder", "battle deck", "league battle",
+    "rival battle", "v battle", "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "(jp)", "koreański", "koreańsk", "chiński", "chińsk", "(chi)",
+    "ultra-pro", "playmat", "portfolio", "segregator", "deck box", "alcove", "lorcana",
+    "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering",
+    "dragon shield", "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle",
+    "figure set"
+]
 
 
 async def fetch_page(session, page):

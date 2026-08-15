@@ -17,7 +17,16 @@ SHOP = "tcgumisia.pl"
 BASE_URL = "https://tcgumisia.pl"
 CATEGORY_URLS = ["/pokemon", "/pre-order"]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-EXCLUDE_KEYWORDS = ["lorcana", "one piece", "flesh and blood", "fab", "disney", "album", "sleeve", "koszulk", "binder", "toploader", "ultra pro", "ochraniacz", "plastikowy", "jpn", "(jpn", "deck", "pencil", "riftbound", "cyberpunk"]
+EXCLUDE_KEYWORDS = [
+    "lorcana", "one piece", "flesh and blood", "fab", "disney", "album", "sleeve", "koszulk",
+    "binder", "toploader", "ultra pro", "ochraniacz", "plastikowy", "jpn", "(jpn", "deck",
+    "pencil", "riftbound", "cyberpunk", "league battle", "rival battle", "v battle",
+    "world championship", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra-pro", "playmat", "portfolio", "segregator", "alcove", "yu-gi-oh", "digimon",
+    "naruto", "star wars", "magic the gathering", "flesh & blood", "dragon shield",
+    "weiss schwarz", "force of will", "zeszyt", "puzzle", "figurk", "figure set"
+]
 POKEMON_KEYWORDS = ["pokemon", "pokémon", "pikachu", "charizard", "booster", "etb", "trainer box"]
 
 

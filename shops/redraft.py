@@ -7,7 +7,16 @@ SHOP = "redraft"
 BASE = "https://redraft.pl"
 URL = BASE + "/pl/menu/pokemon-tcg-176.html?limit=100"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126"}
-EXCLUDE = ["china", "chinese", "japonsk", "japanese", "korean", "sleeve", "koszulk", "toploader", "album", "world championships deck"]
+EXCLUDE = [
+    "china", "chinese", "japonsk", "japanese", "korean", "sleeve", "koszulk", "toploader",
+    "album", "world championships deck", "battle deck", "league battle", "rival battle",
+    "v battle", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "(jp)",
+    "koreański", "koreańsk", "chiński", "chińsk", "(chi)", "ultra pro", "ultra-pro", "playmat",
+    "portfolio", "binder", "segregator", "deck box", "alcove", "lorcana", "one piece",
+    "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch_page(session, page):
     url = URL if page == 1 else f"{URL}&page={page}"

@@ -3,7 +3,18 @@ import aiohttp
 SHOP = "cardwolf"
 BASE = "https://cardwolf.pl/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "one piece", "lorcana", "yu-gi-oh", "digimon", "magic the", "japonsk", "japońsk", "japanese", "japoński", "korean", "koreańsk", "nihil zero", "gym heroes", "gym challenge", "base set", "fossil", "jungle", " neo ", "single", "graded", "psa ", "(sv8", "(sv7", "(sv6", "(s12", "295 pokemon", "mega dragonite ex 295", "kości i znaczniki", "karta pokémon", "karta pokemon"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "one piece",
+    "lorcana", "yu-gi-oh", "digimon", "magic the", "japonsk", "japońsk", "japanese",
+    "japoński", "korean", "koreańsk", "nihil zero", "gym heroes", "gym challenge", "base set",
+    "fossil", "jungle", " neo ", "single", "graded", "psa ", "(sv8", "(sv7", "(sv6", "(s12",
+    "295 pokemon", "mega dragonite ex 295", "kości i znaczniki", "karta pokémon",
+    "karta pokemon", "battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy", "(jp)", "chiński", "chińsk",
+    "chinese", "(chi)", "s-chinese", "ultra-pro", "portfolio", "segregator", "deck box",
+    "alcove", "naruto", "star wars", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def get_products():
     products = []

@@ -5,7 +5,16 @@ SHOP = "rozetka"
 SEARCH_URL = "https://search.rozetka.pl/search/api/v6/?text=Pokemon+tcg&lang=pl&page_size=60"
 PRODUCT_URL = "https://rozetka.pl/api/product-api/v4/goods/get-main?front-type=xl&country=PL&lang=pl&goodsId={}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-EXCLUDE = ["spanish", "espanol", "planszow", "gra planszowa", "board game"]
+EXCLUDE = [
+    "spanish", "espanol", "planszow", "gra planszowa", "board game", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
+    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra pro", "ultra-pro",
+    "playmat", "portfolio", "binder", "sleeve", "toploader", "album", "koszulk", "segregator",
+    "deck box", "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch_product(session, pid, sem):
     async with sem:

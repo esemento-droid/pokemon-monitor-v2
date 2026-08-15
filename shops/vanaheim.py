@@ -19,7 +19,16 @@ CATEGORIES = [
     "/pl/2095-pokemon-tcg",
     "/pl/1698-preorder-przedsprzedaz",
 ]
-EXCLUDE_KEYWORDS = ["world championships deck", "league battle deck", "flesh & blood", "flesh and blood", "magic the gathering", "magic:", "naruto", "riftbound", "league of legends", "star wars", "lorcana", "one piece", "yu-gi-oh", "digimon", "weiss schwarz", "force of will"]
+EXCLUDE_KEYWORDS = [
+    "world championships deck", "league battle deck", "flesh & blood", "flesh and blood",
+    "magic the gathering", "magic:", "naruto", "riftbound", "league of legends", "star wars",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "weiss schwarz", "force of will",
+    "rival battle", "v battle", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",
+    "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",
+    "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat", "portfolio", "binder", "sleeve",
+    "toploader", "album", "koszulk", "segregator", "deck box", "alcove", "dragon shield",
+    "zeszyt", "puzzle", "figurk", "figure set"
+]
 POKEMON_KEYWORDS = ["pokemon", "pokémon", "pikachu", "charizard", "booster", "etb", "trainer box"]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 MAX_PAGES = 5

@@ -15,7 +15,7 @@ async def get_products():
         price_raw = p.get("prices",{}).get("price","0")
         price = str(int(price_raw)/100) + " PLN" if price_raw else "brak"
         available = p.get("is_in_stock", False)
-        if any(x in name.lower() for x in ["portfolio","album","binder"]): continue
+        if any(x in name.lower() for x in ["portfolio","album","binder","ultra pro","ultra-pro","playmat","sleeve","toploader","koszulk","segregator","deck box","alcove","battle deck","league battle","rival battle","v battle","world championship","wcs deck","battle academy","japoński","japońsk","japanese","(jp)","koreański","korean","chiński","chinese","(chi)","lorcana","one piece","yu-gi-oh","digimon","naruto","star wars","magic the gathering","dragon shield","zeszyt","puzzle","figurk","figure set"]): continue
         link = p.get("permalink","")
         imgs = p.get("images",[])
         image = imgs[0]["src"] if imgs else ""

@@ -4,7 +4,16 @@ import re
 
 URL = "https://www.xzone.pl/pokemon-tcg-21?sort=date_desc&s=60&page=1"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["album", "binder", "sleeve", "koszulk", "portfolio", "toploader", "protector", "ultra pro"]
+EXCLUDE = [
+    "album", "binder", "sleeve", "koszulk", "portfolio", "toploader", "protector", "ultra pro",
+    "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra-pro", "playmat", "segregator", "deck box", "alcove", "lorcana", "one piece",
+    "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def get_products():
     products = []

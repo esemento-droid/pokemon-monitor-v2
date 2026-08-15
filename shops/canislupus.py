@@ -8,6 +8,21 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
+EXCLUDE = ["battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean",
+    "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder",
+    "sleeve", "toploader", "album", "koszulk", "segregator",
+    "deck box", "alcove",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto",
+    "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"]
+
+
 async def fetch_page(session, page):
     url = BASE_URL if page == 1 else f"{BASE_URL}/pa/{page}"
     try:
@@ -43,6 +58,8 @@ def parse_page(html):
                 image = "https://www.canislupus.com.pl" + image
         fig_text = fig.get_text(" ", strip=True).lower()
         available = "brak" not in fig_text and "niedost" not in fig_text
+        if any(ex in name.lower() for ex in EXCLUDE): continue
+
         products.append({
             "id": f"canislupus_{pid}",
             "name": name,

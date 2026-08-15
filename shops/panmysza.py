@@ -8,7 +8,17 @@ BASE = "https://panmysza.pl"
 CATEGORY = "/pl/c/Pokemon-TCG/55"
 CAT_ID = "55"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-EXCLUDE = ["ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "mata ", "playmat", "one piece", "lorcana", "digimon", "naruto", "dragon ball", "dragon shield", "(jp)", "(chi)", "japanese", "chinese", "world championship", "wcs deck", "league battle deck", "accessory bundle", "figure set", "dream painting", "brilliant fantasy", "gift box"]
+EXCLUDE = [
+    "ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "mata ", "playmat",
+    "one piece", "lorcana", "digimon", "naruto", "dragon ball", "dragon shield", "(jp)",
+    "(chi)", "japanese", "chinese", "world championship", "wcs deck", "league battle deck",
+    "accessory bundle", "figure set", "dream painting", "brilliant fantasy", "gift box",
+    "rival battle", "v battle", "battle academy", "japoński", "japońsk", "koreański",
+    "koreańsk", "korean", "chiński", "chińsk", "portfolio", "binder", "segregator", "deck box",
+    "alcove", "yu-gi-oh", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle",
+    "figurk"
+]
 
 async def get_products():
     products = []

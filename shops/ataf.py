@@ -4,7 +4,16 @@ from bs4 import BeautifulSoup
 URL = "https://www.ataf.pl/pl/c/Pokemon/464"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-EXCLUDE = ["capslab", "czapka", "trucker", "snapback", "pluszak", "plush", "figurka"]
+EXCLUDE = [
+    "capslab", "czapka", "trucker", "snapback", "pluszak", "plush", "figurka", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
+    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra pro", "ultra-pro",
+    "playmat", "portfolio", "binder", "sleeve", "toploader", "album", "koszulk", "segregator",
+    "deck box", "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figure set"
+]
 
 
 async def get_products():

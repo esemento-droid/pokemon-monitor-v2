@@ -7,7 +7,17 @@ BASE = "https://jaskiniatrolla.pl"
 CAT_URL_FIRST = f"{BASE}/Pokemon-c564"
 CAT_URL = f"{BASE}/Pokemon-c564/{{page}}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat", "japonsk", "japońsk", "japanese", "korean", "koreańsk", "figurk", "plusz", "mega construx", "mega pokemon", "funko", "puzzle", "kubek", "klocki", "zabawk", "gmd", "hhr"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "japonsk", "japońsk", "japanese", "korean", "koreańsk", "figurk", "plusz", "mega construx",
+    "mega pokemon", "funko", "puzzle", "kubek", "klocki", "zabawk", "gmd", "hhr",
+    "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "(jp)", "chiński", "chińsk", "chinese", "(chi)",
+    "s-chinese", "ultra-pro", "segregator", "deck box", "alcove", "lorcana", "one piece",
+    "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "figure set"
+]
 INCLUDE = ["tcg", "booster", "box", "tin", "etb", "trainer", "collection", "blister", "deck", "pack", "display", "promo"]
 
 async def get_products():

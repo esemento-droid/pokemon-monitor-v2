@@ -12,9 +12,17 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml",
 }
 
-EXCLUDE = ["lorcana", "ninjago", "star wars", "harry potter", "magic the",
-           "zeszyt", "figurk", "pluszak", "portfolio", "pudełko", "etui",
-           "multipack", "okladka", "okładka", "okladki", "okładki"]
+EXCLUDE = [
+    "lorcana", "ninjago", "star wars", "harry potter", "magic the", "zeszyt", "figurk",
+    "pluszak", "portfolio", "pudełko", "etui", "multipack", "okladka", "okładka", "okladki",
+    "okładki", "battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy", "japoński", "japońsk",
+    "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",
+    "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat", "binder", "sleeve", "toploader",
+    "album", "koszulk", "segregator", "deck box", "alcove", "one piece", "yu-gi-oh", "digimon",
+    "naruto", "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound", "puzzle", "figure set"
+]
 
 async def get_products():
     products = []

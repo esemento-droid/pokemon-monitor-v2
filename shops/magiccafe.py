@@ -3,7 +3,16 @@ import aiohttp
 SHOP = "magiccafe"
 BASE = "https://magiccafe.eu/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "one piece", "lorcana", "yu-gi-oh", "digimon", "magic the", "japonsk", "japońsk", "japanese", "japan", "korean", "koreańsk", "korea", "chiński", "chinese", "china", "portfolio", "mat", "deck box", "pudełko"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "one piece",
+    "lorcana", "yu-gi-oh", "digimon", "magic the", "japonsk", "japońsk", "japanese", "japan",
+    "korean", "koreańsk", "korea", "chiński", "chinese", "china", "portfolio", "mat",
+    "deck box", "pudełko", "battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy", "(jp)", "(chi)", "ultra-pro",
+    "segregator", "alcove", "naruto", "star wars", "flesh & blood", "flesh and blood",
+    "dragon shield", "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle",
+    "figurk", "figure set"
+]
 
 async def get_products():
     products = []

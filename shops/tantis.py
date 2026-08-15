@@ -5,7 +5,17 @@ from patchright.async_api import async_playwright
 
 SHOP = "tantis"
 BASE_URL = "https://tantis.pl"
-EXCLUDE = ["ultra-pro", "ultra pro", "playmat", "portfolio", "binder", "deck box", "sleeves", "toploader", "album", "lalie", "nihil", "historia pokemon", "niezbędnik", "puzzle", "pokemon go", "karty do kolekc", "alcove", "symphonia", "synmphonia"]
+EXCLUDE = [
+    "ultra-pro", "ultra pro", "playmat", "portfolio", "binder", "deck box", "sleeves",
+    "toploader", "album", "lalie", "nihil", "historia pokemon", "niezbędnik", "puzzle",
+    "pokemon go", "karty do kolekc", "alcove", "symphonia", "synmphonia", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
+    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "koszulk", "segregator",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "figurk", "figure set"
+]
 
 JS_FETCH_JSON = """
 async (path) => {

@@ -7,7 +7,16 @@ SHOP = "pegazgry"
 BASE = "https://pegaz-gry.pl"
 URL = BASE + "/22-pokemon-tcg-gra-karciana-sklep-bydgoszcz"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "UP -", "deck box", "playmat", "energy", "energia", "single", "karta pojedyncza"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "UP -",
+    "deck box", "playmat", "energy", "energia", "single", "karta pojedyncza", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
+    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra-pro", "segregator",
+    "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch_page(session, page):
     url = URL if page == 1 else f"{URL}?page={page}"

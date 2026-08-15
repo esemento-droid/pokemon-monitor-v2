@@ -3,9 +3,16 @@ import asyncio
 
 API_URL = "https://pokenest.pl/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-EXCLUDE = ["japońska karta", "karta pokémon", "karta pokemon", "ultra pro", "album",
-           "segregator", "battle deck", "league battle", "psa ", "x psa",
-           "koszulki", "toploader", "sleeve", "zestaw"]
+EXCLUDE = [
+    "japońska karta", "karta pokémon", "karta pokemon", "ultra pro", "album", "segregator",
+    "battle deck", "league battle", "psa ", "x psa", "koszulki", "toploader", "sleeve",
+    "zestaw", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japanese", "(jp)", "koreański", "koreańsk", "korean",
+    "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra-pro", "playmat", "portfolio",
+    "binder", "deck box", "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto",
+    "star wars", "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch_page(session, page):
     url = f"{API_URL}?per_page=100&page={page}"

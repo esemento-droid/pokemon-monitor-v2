@@ -12,6 +12,21 @@ CATEGORIES = [
     ("/pl/c/Pokemon-przedsprzedaz/156", 5),
 ]
 
+EXCLUDE = ["battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean",
+    "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder",
+    "sleeve", "toploader", "album", "koszulk", "segregator",
+    "deck box", "alcove",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto",
+    "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"]
+
+
 async def fetch_page(session, url):
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=15), allow_redirects=True, max_redirects=5, proxy="http://127.0.0.1:8888") as resp:
@@ -72,6 +87,9 @@ async def get_products():
 
             txt = tile.get_text(" ", strip=True).lower()
             available = "koszyk" in txt or "dodaj" in txt
+
+            if any(ex in name.lower() for ex in EXCLUDE): continue
+
 
             products.append({
                 "id": f"mrpuggy_{pid}",

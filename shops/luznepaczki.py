@@ -7,7 +7,16 @@ SHOP = "luznepaczki"
 BASE = "https://luznepaczki.pl"
 CAT_URL = BASE + "/pl/c/Pokemon/12"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "energia", "energy"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "binder", "ultra pro", "playmat", "energia",
+    "energy", "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra-pro", "portfolio", "segregator", "deck box", "alcove", "lorcana", "one piece",
+    "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch(session, url):
     try:

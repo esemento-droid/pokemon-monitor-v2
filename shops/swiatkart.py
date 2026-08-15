@@ -25,20 +25,22 @@ CATEGORIES = [
 ]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
-EXCLUDE_KEYWORDS = ["korea", "korean", "chiny", "chinese", "japonsk",
-    "japanese", "japan", "japonia", "(jp)", "cbb", "gem pack",
-    "(m1l)", "(m2)", "(m3)", "(m4)", "(m5)", "(sv1", "(sv2", "(sv3",
-    "(sv4", "(sv5", "(sv6", "(sv7", "(sv8", "(sv9", "(csv",
-    "lunar new year", "blade awakening", "ninja spinner",
-    "nihil zero", "inferno x", "mega brave", "abyss eye",
-    "clay burst", "terastal festival", "battle partners",
-    "sleeve", "toploader", "album", "binder", "klaser", "playmat",
-    "figurk", "plusz", "maskotk", "kubek", "koszulk",
-    "cgc ", "psa ", "one piece", "lorcana", "magic",
-    "riftbound", "star wars", "yu-gi-oh", "flesh and blood",
-    "mega dream", "code card", "crimson haze", "scarlet ex (sv",
-    "mask of change", "paradise dragona", "ruler of the black",
-    "super electric breaker", "shiny treasure"]
+EXCLUDE_KEYWORDS = [
+    "korea", "korean", "chiny", "chinese", "japonsk", "japanese", "japan", "japonia", "(jp)",
+    "cbb", "gem pack", "(m1l)", "(m2)", "(m3)", "(m4)", "(m5)", "(sv1", "(sv2", "(sv3", "(sv4",
+    "(sv5", "(sv6", "(sv7", "(sv8", "(sv9", "(csv", "lunar new year", "blade awakening",
+    "ninja spinner", "nihil zero", "inferno x", "mega brave", "abyss eye", "clay burst",
+    "terastal festival", "battle partners", "sleeve", "toploader", "album", "binder", "klaser",
+    "playmat", "figurk", "plusz", "maskotk", "kubek", "koszulk", "cgc ", "psa ", "one piece",
+    "lorcana", "magic", "riftbound", "star wars", "yu-gi-oh", "flesh and blood", "mega dream",
+    "code card", "crimson haze", "scarlet ex (sv", "mask of change", "paradise dragona",
+    "ruler of the black", "super electric breaker", "shiny treasure", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "chiński", "chińsk", "(chi)", "ultra pro",
+    "ultra-pro", "portfolio", "segregator", "deck box", "alcove", "digimon", "naruto",
+    "flesh & blood", "dragon shield", "weiss schwarz", "force of will", "zeszyt", "puzzle",
+    "figure set"
+]
 
 def _is_pokemon(name):
     nl = name.lower()

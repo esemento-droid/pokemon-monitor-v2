@@ -42,7 +42,7 @@ async def get_products():
             if not name:
                 continue
             name_lower = name.lower()
-            if any(ex in name_lower for ex in ["ultra pro", "sleeve", "album", "binder", "portfolio", "toploader", "deck box", "koszulk"]):
+            if any(ex in name_lower for ex in ["ultra pro", "ultra-pro", "sleeve", "album", "binder", "portfolio", "toploader", "deck box", "koszulk", "playmat", "alcove", "segregator", "battle deck", "league battle", "rival battle", "v battle", "world championship", "wcs deck", "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "korean", "chiński", "chinese", "(chi)", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood", "dragon shield", "zeszyt", "puzzle", "figurk", "figure set"]):
                 continue
             href = title_el.get("href", "") if title_el else ""
 

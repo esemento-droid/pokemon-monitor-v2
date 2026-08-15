@@ -16,9 +16,18 @@ BASE_URL = "https://zgrani.pl"
 CATEGORY_URLS = ["/pl/menu/pokemon-208", "/pl/menu/pokemon-208?counter=1"]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
-EXCLUDE_KEYWORDS = ["oversize", "talia", "battle deck", "szczoteczk", "signal", "figurk", "znacznik", "marker", "album", "sleeve", "koszulk", "binder", "toploader", "klaser",
-    "segregator", "pudelko", "pudełko", "deck box", "pluszak", "maskotka",
-    "plakat", "torba", "pokeball deck", "outlet", "interaktywn", "gra "]
+EXCLUDE_KEYWORDS = [
+    "oversize", "talia", "battle deck", "szczoteczk", "signal", "figurk", "znacznik", "marker",
+    "album", "sleeve", "koszulk", "binder", "toploader", "klaser", "segregator", "pudelko",
+    "pudełko", "deck box", "pluszak", "maskotka", "plakat", "torba", "pokeball deck", "outlet",
+    "interaktywn", "gra ", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "alcove", "lorcana", "one piece",
+    "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figure set"
+]
 
 async def get_products():
     products = []

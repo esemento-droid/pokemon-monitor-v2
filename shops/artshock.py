@@ -4,8 +4,17 @@ from bs4 import BeautifulSoup
 CATEGORY_URL = "https://artshock.pl/karciane,c671,96,1,pl.html"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-EXCLUDE = ["ultra pro", "album", "sleeves", "deck protector", "one-touch", "portfolio",
-           "wykrywacz", "interaktywna", "panini", "fifa", "minecraft", "poker", "kick-off"]
+EXCLUDE = [
+    "ultra pro", "album", "sleeves", "deck protector", "one-touch", "portfolio", "wykrywacz",
+    "interaktywna", "panini", "fifa", "minecraft", "poker", "kick-off", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
+    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra-pro", "playmat",
+    "binder", "toploader", "koszulk", "segregator", "deck box", "alcove", "lorcana",
+    "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering",
+    "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
+    "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def get_products():
     products = []

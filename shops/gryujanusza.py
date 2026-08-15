@@ -13,7 +13,13 @@ SHOP = "gryujanusza"
 URL = "https://gryujanusza.pl/collections/tcg-pokemon/products.json?limit=250"
 
 EXCLUDE_KEYWORDS = [
-    "deck",
+    "deck", "league battle", "rival battle", "v battle", "world championship", "wcs ",
+    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
+    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra pro", "ultra-pro",
+    "playmat", "portfolio", "binder", "sleeve", "toploader", "album", "koszulk", "segregator",
+    "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
 ]
 
 HEADERS = {

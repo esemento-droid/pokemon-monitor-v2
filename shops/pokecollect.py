@@ -32,7 +32,17 @@ CATEGORIES = [
     ("/pl/c/30th-Celebration/118", "118"),
     ("/pl/c/Karty-Japonskie/61", "61"),
 ]
-EXCLUDE = ["ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "mata ", "playmat", "przypink", "lego", "figurk", "maskotk", "pluszak", "pudelk", "pude\u0142k", "one piece"]
+EXCLUDE = [
+    "ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "mata ", "playmat",
+    "przypink", "lego", "figurk", "maskotk", "pluszak", "pudelk", "pude\u0142k", "one piece",
+    "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "portfolio", "binder", "segregator", "deck box", "alcove", "lorcana", "yu-gi-oh",
+    "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figure set"
+]
 
 
 def parse_page(s):

@@ -7,7 +7,17 @@ SHOP = "kimland"
 BASE = "https://www.kimland.pl"
 CAT_URL = f"{BASE}/pl/c/Pokemony/242"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-EXCLUDE = ["ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "playmat", "binder", "one piece", "japonsk", "japanese", "korean", "chinese", "figurk", "spinner", "maskotk", "pluszak", "puzzle", "klocki", "mega construx", "funko", "lampk", "zegar", "radio", "pas clip", "pokeball", "poke ball"]
+EXCLUDE = [
+    "ultra pro", "ultra-pro", "album", "koszulk", "toploader", "sleeve", "playmat", "binder",
+    "one piece", "japonsk", "japanese", "korean", "chinese", "figurk", "spinner", "maskotk",
+    "pluszak", "puzzle", "klocki", "mega construx", "funko", "lampk", "zegar", "radio",
+    "pas clip", "pokeball", "poke ball", "battle deck", "league battle", "rival battle",
+    "v battle", "world championship", "wcs deck", "wcs ", "battle academy", "japoński",
+    "japońsk", "(jp)", "koreański", "koreańsk", "chiński", "chińsk", "(chi)", "portfolio",
+    "segregator", "deck box", "alcove", "lorcana", "yu-gi-oh", "digimon", "naruto",
+    "star wars", "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "figure set"
+]
 INCLUDE = ["tcg", "kart", "booster", "blister", "tin", "etb", "display", "elite trainer", "saszetk"]
 
 

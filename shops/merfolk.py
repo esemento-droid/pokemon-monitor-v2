@@ -10,10 +10,16 @@ CAT_URL = BASE + "/category/POKEMON-TCG-345476?OfferPage={page}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
 MAX_PAGES = 10
 
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "portfolio", "binder",
-           "ultra pro", "playmat", "one piece", "lorcana", "yu-gi-oh", "digimon",
-           "czapka", "funko", "figurk", "plusz", "jpn", "chn", "kor",
-           "japanese", "chinese", "korean"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "one piece", "lorcana", "yu-gi-oh", "digimon", "czapka", "funko", "figurk", "plusz", "jpn",
+    "chn", "kor", "japanese", "chinese", "korean", "battle deck", "league battle",
+    "rival battle", "v battle", "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "(jp)", "chiński", "chińsk", "(chi)", "ultra-pro", "segregator",
+    "deck box", "alcove", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figure set"
+]
 
 
 async def fetch_page(session, page):

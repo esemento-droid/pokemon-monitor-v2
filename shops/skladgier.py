@@ -18,6 +18,21 @@ COLLECTIONS = [
 ]
 BASE = "https://skladgier.pl/collections/{}/products.json?limit=250"
 
+EXCLUDE = ["battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean",
+    "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder",
+    "sleeve", "toploader", "album", "koszulk", "segregator",
+    "deck box", "alcove",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto",
+    "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"]
+
+
 async def get_products():
     products = []
     seen_ids = set()
@@ -40,6 +55,8 @@ async def get_products():
             imgs = p.get("images",[])
             image = imgs[0]["src"] if imgs else ""
             purl = "https://skladgier.pl/products/" + p.get("handle","")
+            if any(ex in name.lower() for ex in EXCLUDE): continue
+
             products.append({"id":f"skladgier_{pid}","name":name,"price":price,"shop":"skladgier","url":purl,"image":image,"stock":1 if available else 0,"available":available})
         await asyncio.sleep(0.5)
     return products

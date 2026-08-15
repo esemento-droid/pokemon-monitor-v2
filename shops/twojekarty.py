@@ -8,7 +8,16 @@ BASE = "https://twojekarty.pl"
 CAT_URL_FIRST = f"{BASE}/pokemon-tcg-c-10.html"
 CAT_URL_PAGE = f"{BASE}/pokemon-tcg-c-10.html/s={{page}}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat", "figurk", "zabawk", "plusz", "japonsk", "japońsk", "japanese", "korean", "koreańsk", "chiński", "chińsk", "chinese", "jpn", "chn", "kor", "lorcana", "one piece", "magic the", "yu-gi-oh", "digimon", "dragon ball", "japan", "china", "jpn", "chn", "kor", "korea", "stadium", "deck"]
+EXCLUDE = [
+    "sleeve", "koszulk", "toploader", "album", "portfolio", "binder", "ultra pro", "playmat",
+    "figurk", "zabawk", "plusz", "japonsk", "japońsk", "japanese", "korean", "koreańsk",
+    "chiński", "chińsk", "chinese", "jpn", "chn", "kor", "lorcana", "one piece", "magic the",
+    "yu-gi-oh", "digimon", "dragon ball", "japan", "china", "jpn", "chn", "kor", "korea",
+    "stadium", "deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs ", "battle academy", "(jp)", "(chi)", "ultra-pro", "segregator", "alcove", "naruto",
+    "star wars", "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound", "zeszyt", "puzzle", "figure set"
+]
 
 async def get_products():
     products = []

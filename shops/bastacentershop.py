@@ -7,7 +7,16 @@ SHOP = "bastacentershop"
 BASE = "https://www.bastacentershop.pl"
 START_URL = f"{BASE}/pl/c/Pokemon-TCG/41/1/default/1"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-EXCLUDE = ["album", "koszulk", "toploader", "sleeve", "figurk", "pluszak", "klocki", "torb", "plecak", "ubrani"]
+EXCLUDE = [
+    "album", "koszulk", "toploader", "sleeve", "figurk", "pluszak", "klocki", "torb", "plecak",
+    "ubrani", "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder", "segregator", "deck box",
+    "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figure set"
+]
 
 async def get_products():
     products = []

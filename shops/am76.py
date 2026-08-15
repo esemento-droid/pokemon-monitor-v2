@@ -11,7 +11,16 @@ BASE = "https://am76.pl"
 SEARCH_URL = BASE + "/wyszukiwarka?komenda=wyszukiwarka&szukana=Pokemon%20tcg&sort=data_dodania%20DESC&p={page}"
 PREORDER_URL = BASE + "/przedsprzedaz"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["album", "sleeve", "koszulk", "toploader", "binder", "ultra pro", "playmat"]
+EXCLUDE = [
+    "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro", "playmat", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk",
+    "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese", "ultra-pro", "portfolio",
+    "segregator", "deck box", "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon",
+    "naruto", "star wars", "magic the gathering", "flesh & blood", "flesh and blood",
+    "dragon shield", "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle",
+    "figurk", "figure set"
+]
 
 async def fetch_page(session, url):
     async with session.get(url, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=30)) as resp:

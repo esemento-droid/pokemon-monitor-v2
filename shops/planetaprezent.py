@@ -14,10 +14,15 @@ logger = logging.getLogger(__name__)
 SHOP = "planetaprezent.pl"
 API_URL = "https://planetaprezent.pl/collections/pokemon-tcg/products.json?limit=250"
 EXCLUDE_KEYWORDS = [
-    "album", "deck box", "pudelko", "pudełko", "sleeve", "protector",
-    "koszulk", "toploader", "segregator", "binder", "folder",
-    "jap)", "(jap", "mini portfolio", "portfolio + booster",
-    "zestaw koszulek", "accessory bundle",
+    "album", "deck box", "pudelko", "pudełko", "sleeve", "protector", "koszulk", "toploader",
+    "segregator", "binder", "folder", "jap)", "(jap", "mini portfolio", "portfolio + booster",
+    "zestaw koszulek", "accessory bundle", "battle deck", "league battle", "rival battle",
+    "v battle", "world championship", "wcs deck", "wcs ", "battle academy", "japoński",
+    "japońsk", "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk",
+    "chinese", "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat", "alcove", "lorcana",
+    "one piece", "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering",
+    "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
+    "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
 ]
 COOLDOWN = 300
 _last_fetch = 0

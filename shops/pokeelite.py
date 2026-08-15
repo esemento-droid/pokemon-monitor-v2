@@ -7,6 +7,21 @@ import asyncio
 BASE = "https://pokeelite.pl/pokemon-c-26.html"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
 
+EXCLUDE = ["battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean",
+    "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder",
+    "sleeve", "toploader", "album", "koszulk", "segregator",
+    "deck box", "alcove",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto",
+    "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"]
+
+
 async def fetch_page(session, page):
     url = BASE if page == 1 else f"{BASE}/s={page}"
     try:
@@ -41,6 +56,8 @@ def parse_page(html):
         mag = b.select_one(".MagazynIlosc")
         mag_style = mag.get("style", "") if mag else ""
         available = "--ilosc: 0" not in mag_style and mag is not None and price_el is not None
+        if any(ex in name.lower() for ex in EXCLUDE): continue
+
         products.append({"id": f"pokeelite_{pid}", "name": name, "price": price, "shop": "pokeelite", "url": href, "image": image, "stock": 1 if available else 0, "available": available})
     return products
 

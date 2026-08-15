@@ -5,7 +5,17 @@ from bs4 import BeautifulSoup
 
 BASE_URL = "https://alpakagra.pl/pl/c/Pokemon/69/{}/full"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["singl", "karta pokemon", "psa ", "cgc ", "slab ", "losow", "china", "chinese", "chiński", "japonsk", "japanese", "korean", "koreańsk", "portfolio", "piórnik", "piornik", "riftbound", "tying", "marvel", "fairy tail", "origin", "japan"]
+EXCLUDE = [
+    "singl", "karta pokemon", "psa ", "cgc ", "slab ", "losow", "china", "chinese", "chiński",
+    "japonsk", "japanese", "korean", "koreańsk", "portfolio", "piórnik", "piornik",
+    "riftbound", "tying", "marvel", "fairy tail", "origin", "japan", "battle deck",
+    "league battle", "rival battle", "v battle", "world championship", "wcs deck", "wcs ",
+    "battle academy", "japoński", "japońsk", "(jp)", "(chi)", "ultra pro", "ultra-pro",
+    "playmat", "binder", "sleeve", "toploader", "album", "koszulk", "segregator", "deck box",
+    "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 
 async def fetch_page(session, url):

@@ -7,7 +7,16 @@ SHOP = "cardfan"
 BASE_URL = "https://www.cardfan.pl/pl/c/Zestawy/69"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 BASE = "https://www.cardfan.pl"
-EXCLUDE = ["japonsk", "japanese", "korean", "koreansk", "chinsk", "chinese", "sleeve", "koszulk", "toploader", "puste pude", "energy", "kart energy"]
+EXCLUDE = [
+    "japonsk", "japanese", "korean", "koreansk", "chinsk", "chinese", "sleeve", "koszulk",
+    "toploader", "puste pude", "energy", "kart energy", "battle deck", "league battle",
+    "rival battle", "v battle", "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "(jp)", "koreański", "koreańsk", "chiński", "chińsk", "(chi)",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder", "album", "segregator",
+    "deck box", "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def fetch_page(session, url):
     try:

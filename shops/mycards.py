@@ -9,7 +9,16 @@ CATEGORIES = [
     "https://mycards.pl/pl/c/Pokemon-zestawy-specjalne/7",
 ]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-EXCLUDE = ["singl", "karta pokemon", "psa ", "cgc ", "slab ", "losow"]
+EXCLUDE = [
+    "singl", "karta pokemon", "psa ", "cgc ", "slab ", "losow", "battle deck", "league battle",
+    "rival battle", "v battle", "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński",
+    "chińsk", "chinese", "(chi)", "s-chinese", "ultra pro", "ultra-pro", "playmat",
+    "portfolio", "binder", "sleeve", "toploader", "album", "koszulk", "segregator", "deck box",
+    "alcove", "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto", "star wars",
+    "magic the gathering", "flesh & blood", "flesh and blood", "dragon shield",
+    "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 
 async def fetch_page(session, url):

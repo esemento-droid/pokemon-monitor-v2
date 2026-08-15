@@ -10,9 +10,17 @@ log = logging.getLogger("monitor")
 SHOP = "proshop"
 URL = "https://www.proshop.pl/Pokemon/Pokemon?f~pokmon_tcg=bokse~booster-tin-og-tema~tin~tilbehor"
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
-EXCLUDE = ["portfolio", "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro",
-           "ultrapro", "plush", "figure", "figurk", "playset", "carry case", "clip", "play 'n",
-           "playmat", "mata ", "puzzle", "lego", "deck", "battle deck", "league battle"]
+EXCLUDE = [
+    "portfolio", "album", "sleeve", "koszulk", "toploader", "binder", "ultra pro", "ultrapro",
+    "plush", "figure", "figurk", "playset", "carry case", "clip", "play 'n", "playmat",
+    "mata ", "puzzle", "lego", "deck", "battle deck", "league battle", "rival battle",
+    "v battle", "world championship", "wcs ", "battle academy", "japoński", "japońsk",
+    "japanese", "(jp)", "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese",
+    "(chi)", "s-chinese", "ultra-pro", "segregator", "alcove", "lorcana", "one piece",
+    "yu-gi-oh", "digimon", "naruto", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt"
+]
 
 EXTRACT_JS = """
 JSON.stringify((function(){

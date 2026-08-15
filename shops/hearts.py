@@ -9,6 +9,21 @@ BASE = "https://hearts.pub"
 SEARCH_URL = f"{BASE}/sklep/szukaj?s=pokemon&resultsPerPage=200"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 
+EXCLUDE = ["battle deck", "league battle", "rival battle", "v battle",
+    "world championship", "wcs deck", "wcs ", "battle academy",
+    "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean",
+    "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra pro", "ultra-pro", "playmat", "portfolio", "binder",
+    "sleeve", "toploader", "album", "koszulk", "segregator",
+    "deck box", "alcove",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "naruto",
+    "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz",
+    "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"]
+
+
 def solve_pow(token, diff):
     nonce = 0
     while True:
@@ -84,6 +99,8 @@ async def get_products():
             image = ""
             if img_el:
                 image = (img_el.get("data-full-size-image") or img_el.get("src") or img_el.get("data-src") or "").replace("home_default", "large_default")
+            if any(ex in name.lower() for ex in EXCLUDE): continue
+
             products.append({"id": f"hearts_{pid}", "name": name, "price": price, "shop": SHOP, "url": href, "image": image, "stock": None, "available": available})
     print(f"[HEARTS] {len(products)} produktow")
     return products

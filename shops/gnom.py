@@ -22,7 +22,16 @@ QUERY = '''{
     }
   }
 }'''
-EXCLUDE = ["naruto", "ultra pro", "sleeve", "portfolio", "binder", "deck box", "toploader"]
+EXCLUDE = [
+    "naruto", "ultra pro", "sleeve", "portfolio", "binder", "deck box", "toploader",
+    "battle deck", "league battle", "rival battle", "v battle", "world championship",
+    "wcs deck", "wcs ", "battle academy", "japoński", "japońsk", "japanese", "(jp)",
+    "koreański", "koreańsk", "korean", "chiński", "chińsk", "chinese", "(chi)", "s-chinese",
+    "ultra-pro", "playmat", "album", "koszulk", "segregator", "alcove", "lorcana", "one piece",
+    "yu-gi-oh", "digimon", "star wars", "magic the gathering", "flesh & blood",
+    "flesh and blood", "dragon shield", "weiss schwarz", "force of will", "riftbound",
+    "zeszyt", "puzzle", "figurk", "figure set"
+]
 
 async def get_products():
     products = []
