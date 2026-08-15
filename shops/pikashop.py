@@ -98,7 +98,15 @@ async def get_products():
                         price = pm.group(1).replace(".", "").replace(",", ".") + " zl"
                 available = "instock" in cls
                 img = prod.select_one("img")
-                image = img.get("src", "") if img else ""
+                image = ""
+                if img:
+                    for attr in ("data-src", "data-lazy-src", "data-srcset", "srcset", "src"):
+                        val = img.get(attr, "")
+                        if val and (".jpg" in val or ".png" in val or ".webp" in val):
+                            image = val.split(",")[0].split(" ")[0].strip()
+                            break
+                    if not image:
+                        image = img.get("src", "")
                 products.append({"id": f"pikashop_{pid}", "name": name, "price": price, "shop": SHOP, "url": href, "image": image, "stock": None, "available": available})
     print(f"[PIKASHOP] {len(products)} produktow")
     return products
