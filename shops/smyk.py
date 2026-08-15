@@ -66,8 +66,16 @@ async def get_products():
                 img = item.find("img")
                 image = ""
                 if img:
-                    image = img.get("data-src") or img.get("src", "")
-                    if image.startswith("/"):
+                    # Try multiple attributes for full image URL
+                    for attr in ("data-srcset", "data-src", "srcset", "src"):
+                        val = img.get(attr, "")
+                        if val and (".jpg" in val or ".png" in val or ".webp" in val):
+                            # srcset may have multiple URLs, take first
+                            image = val.split(",")[0].split(" ")[0].strip()
+                            break
+                    if not image:
+                        image = img.get("data-src") or img.get("src", "")
+                    if image and image.startswith("/"):
                         image = "https://www.smyk.com" + image
 
                 available = "dodaj do koszyka" in low
