@@ -118,7 +118,16 @@ def _parse_page(html, products, seen_ids):
         price = _format_price(price_el.get_text(strip=True) if price_el else "")
 
         avail_tag = tile.select_one("[class*=avail]")
-        available = "niedost" not in (avail_tag.get_text().lower() if avail_tag else "")
+        # Primary: check for "koszyk"/"dodaj" button text (most reliable)
+        tile_text = tile.get_text(" ", strip=True).lower()
+        if "koszyk" in tile_text or "dodaj" in tile_text:
+            available = True
+        elif "brak" in tile_text or "niedost" in tile_text or "wyczerpan" in tile_text:
+            available = False
+        elif avail_tag:
+            available = "niedost" not in avail_tag.get_text().lower()
+        else:
+            available = False  # No indicator = assume unavailable (safe)
 
         img_el = tile.select_one("img")
         image = ""
