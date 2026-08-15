@@ -16,7 +16,7 @@ PROXY = "http://127.0.0.1:8888"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
 
 EXCLUDE = [
-    "sleeves", "koszulk", "toploader", "album", "pro-binder", "ultra pro", "ultra-pro",
+    "sleeves", "koszulk", "toploader", "album", "pro-binder", "pro binder", "ultra pro", "ultra-pro",
     "playmat", "mata", "portfolio", "deck box", "pudełko", "bulk", "grading", "psa ",
     "one piece", "lorcana", "yu-gi-oh", "digimon", "magic the", "naruto", "star wars",
     "flesh & blood", "flesh and blood", "dragon shield", "weiss schwarz", "force of will",
@@ -26,7 +26,7 @@ EXCLUDE = [
     "battle deck", "league battle", "rival battle", "v battle", "world championship",
     "wcs deck", "wcs ", "battle academy",
     "segregator", "alcove", "zeszyt", "puzzle", "figurk", "figure set",
-    "singl", "single",
+    "singl", "single", "lego",
 ]
 
 
