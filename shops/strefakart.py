@@ -12,6 +12,7 @@ SHOP = "strefakart"
 API_URL = "https://strefakart.pl/wp-json/wc/store/v1/products"
 PER_PAGE = 100
 MAX_PAGES = 5
+PROXY = "http://127.0.0.1:8888"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
 
 EXCLUDE = [
@@ -37,10 +38,19 @@ async def get_products():
         for page in range(1, MAX_PAGES + 1):
             url = f"{API_URL}?per_page={PER_PAGE}&search=pokemon&page={page}"
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                async with session.get(url, proxy=PROXY, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                     if resp.status != 200:
                         break
-                    data = await resp.json()
+                    ct = resp.headers.get("Content-Type", "")
+                    if "json" not in ct:
+                        print(f"[strefakart] Not JSON on page {page}, trying without proxy...")
+                        # Fallback: try without proxy
+                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp2:
+                            if resp2.status != 200 or "json" not in resp2.headers.get("Content-Type", ""):
+                                break
+                            data = await resp2.json()
+                    else:
+                        data = await resp.json()
             except Exception as e:
                 print(f"[strefakart] Error page {page}: {e}")
                 break
