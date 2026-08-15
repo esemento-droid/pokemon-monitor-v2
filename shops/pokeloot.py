@@ -5,7 +5,7 @@ import subprocess
 SHOP = "pokeloot"
 API_URL = "https://www.pokeloot.pl/collections/wszystkie-produkty/products.json?limit=250"
 
-EXCLUDE = ["sleeve", "album", "binder", "portfolio", "toploader", "ultra pro", "deck box", "koszulk", "koreański", "korean", "s-chin", "chiński", "chinese", "figur"]
+EXCLUDE = ["sleeve", "album", "binder", "portfolio", "toploader", "ultra pro", "deck box", "koszulk", "koreański", "korean", "s-chin", "chiński", "chinese", "figur", "japoński", "japońsk", "japanese"]
 
 async def get_products():
     products = []
