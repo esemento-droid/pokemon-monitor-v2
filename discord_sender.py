@@ -181,7 +181,7 @@ class DiscordSender:
                 "pikashop", "bookland", "gameover", "basanti", "cardwolf",
                 "aleplanszowki", "dragoneye", "twojekarty", "poketrader",
                 "missaga", "karcianybunkier", "magiccafe", "hearts",
-                "jaskiniatrolla", "piwniczaki"
+                "jaskiniatrolla", "piwniczaki", "sklepkleks"
             }
             shop_name = product.get("shop", "")
             if shop_name in PROXY_SHOPS and "weserv.nl" not in image:
