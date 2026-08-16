@@ -1,8 +1,8 @@
 """
 Scraper: libristo.pl (www.libristo.pl)
-Platform: Custom (Libristo)
-Method: aiohttp + BeautifulSoup (search page, server-side rendered)
-Category: search?t=Pokemon+tcg (multiple pages)
+Platform: Custom (Libristo) behind Cloudflare
+Method: FlareSolverr + BeautifulSoup (search page)
+Category: search?t=Pokemon+tcg
 """
 import aiohttp
 import asyncio
@@ -13,11 +13,8 @@ from bs4 import BeautifulSoup
 SHOP = "libristo"
 BASE = "https://www.libristo.pl"
 SEARCH_URL = f"{BASE}/pl/wyszukiwanie?t=Pokemon+tcg"
-MAX_PAGES = 5
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Accept-Language": "pl,en;q=0.9",
-}
+MAX_PAGES = 3
+FLARESOLVERR_URL = "http://localhost:8191/v1"
 
 EXCLUDE = [
     "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder",
@@ -39,7 +36,6 @@ def _parse_page(html: str) -> list:
     soup = BeautifulSoup(html, "lxml")
     products = []
 
-    # Product cards are div.shrink-0 (w-[170px]) with links to /pl/prasa/
     cards = soup.select("div.shrink-0")
 
     for card in cards:
@@ -51,13 +47,11 @@ def _parse_page(html: str) -> list:
         if "pokemon" not in href.lower():
             continue
 
-        # ID from URL: _XXXXX at the end
         pid_match = re.search(r"_(\d+)$", href.rstrip("/"))
         pid = pid_match.group(1) if pid_match else ""
         if not pid:
             continue
 
-        # Name from img alt or link text
         name = ""
         img = card.select_one("img[alt]")
         if img:
@@ -65,7 +59,6 @@ def _parse_page(html: str) -> list:
             if len(alt) > 5 and "tag" not in alt.lower() and "flag" not in alt.lower():
                 name = alt
         if not name:
-            # Get all meaningful text
             texts = [t.strip() for t in card.stripped_strings if len(t.strip()) > 5]
             name = texts[0] if texts else ""
         if not name:
@@ -73,12 +66,10 @@ def _parse_page(html: str) -> list:
 
         name = html_lib.unescape(name)
 
-        # Price
         card_text = card.get_text(" ", strip=True)
         price_match = re.search(r"(\d+[.,]\d{2})\s*zł", card_text)
         price = price_match.group(1).replace(",", ".") + " zl" if price_match else "brak"
 
-        # Image (skip tag/flag svgs)
         image = ""
         imgs = card.select("img")
         for im in imgs:
@@ -87,11 +78,9 @@ def _parse_page(html: str) -> list:
                 image = src
                 break
 
-        # Availability — libristo usually shows "niedostępny" or "wyprzedany"
         avail_text = card_text.lower()
-        available = "niedost" not in avail_text and "wyprzeda" not in avail_text and "brak" not in avail_text
+        available = "niedost" not in avail_text and "wyprzeda" not in avail_text
 
-        # Full URL
         url = href if href.startswith("http") else BASE + href
 
         products.append({
@@ -112,44 +101,45 @@ async def get_products():
     all_products = []
     seen = set()
 
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # Fetch pages in parallel
-        urls = [SEARCH_URL] + [f"{SEARCH_URL}&strona={p}" for p in range(2, MAX_PAGES + 1)]
+    async with aiohttp.ClientSession() as session:
+        for page in range(1, MAX_PAGES + 1):
+            url = SEARCH_URL if page == 1 else f"{SEARCH_URL}&strona={page}"
 
-        async def fetch(url):
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
+                async with session.post(
+                    FLARESOLVERR_URL, json=payload,
+                    timeout=aiohttp.ClientTimeout(total=45),
+                ) as resp:
                     if resp.status != 200:
-                        return ""
-                    return await resp.text()
-            except Exception:
-                return ""
+                        break
+                    result = await resp.json()
+                    if result.get("status") != "ok":
+                        break
+                    html = result.get("solution", {}).get("response", "")
+            except Exception as e:
+                print(f"[libristo] FlareSolverr error page {page}: {e}")
+                break
 
-        pages = await asyncio.gather(*[fetch(u) for u in urls])
-
-        for html in pages:
             if not html:
-                continue
+                break
+
             products = _parse_page(html)
+            if not products:
+                break
+
             for p in products:
                 name_low = p["name"].lower()
-
-                # Must be Pokemon
                 if "pokemon" not in name_low and "pokémon" not in name_low:
                     continue
-
-                # Exclude
                 if any(ex in name_low for ex in EXCLUDE):
                     continue
-
-                # Price filter
                 try:
                     pv = float(p["price"].replace(" zl", ""))
                     if 0 < pv < 10:
                         continue
                 except (ValueError, AttributeError):
                     pass
-
                 if p["id"] not in seen:
                     seen.add(p["id"])
                     all_products.append(p)

@@ -1,7 +1,7 @@
 """
 Scraper: morigal.pl
-Platform: osCommerce/Zen Cart variant
-Method: aiohttp + BeautifulSoup (data attributes on product links)
+Platform: osCommerce variant behind Cloudflare
+Method: FlareSolverr + BeautifulSoup (data attributes on product links)
 Category: pokemon-tcg-c-2313 (Pokémon TCG)
 """
 import aiohttp
@@ -13,11 +13,7 @@ from bs4 import BeautifulSoup
 SHOP = "morigal"
 BASE = "https://morigal.pl"
 CAT_URL = f"{BASE}/pokemon-tcg-c-2313/"
-MAX_PAGES = 5
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Accept-Language": "pl,en;q=0.9",
-}
+FLARESOLVERR_URL = "http://localhost:8191/v1"
 
 EXCLUDE = [
     "sleeves", "koszulk", "toploader", "album", "portfolio", "pro-binder",
@@ -32,7 +28,7 @@ EXCLUDE = [
     "singl", "single", "grading", "psa ", "cgc ",
     "zeszyt", "puzzle", "figurk", "figure set", "plush", "maskotka",
     "wydarzen", "event", "turniej", "bilet", "wpisowe",
-    "koszulki", "t-shirt", "lego",
+    "koszulki", "t-shirt", "lego", "figurka",
 ]
 
 
@@ -40,7 +36,6 @@ def _parse_page(html: str) -> list:
     soup = BeautifulSoup(html, "lxml")
     products = []
 
-    # Products are article.product-column with <a data-id data-name data-price>
     cards = soup.select("article.product-column")
 
     for card in cards:
@@ -58,7 +53,6 @@ def _parse_page(html: str) -> list:
 
         name = html_lib.unescape(name)
 
-        # Price
         try:
             price_val = float(price_raw)
             price = f"{price_val:.2f} zl"
@@ -66,19 +60,15 @@ def _parse_page(html: str) -> list:
             price = "brak"
             price_val = 0
 
-        # Image
         img = card.select_one("img.image")
         image = ""
         if img:
             image = img.get("src", "") or ""
 
-        # Availability — check for "brak" or out-of-stock indicators
         card_text = card.get_text(" ", strip=True).lower()
         unavail = "niedost" in card_text or "wyprzedane" in card_text or "brak" in card_text
-        # If price is 0, likely unavailable/placeholder
         available = not unavail and price_val > 0
 
-        # URL
         url = href if href.startswith("http") else BASE + href
 
         products.append({
@@ -99,47 +89,46 @@ async def get_products():
     all_products = []
     seen = set()
 
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # Fetch pages in parallel
-        urls = [CAT_URL] + [f"{CAT_URL}?category_id=2313&page={p}" for p in range(2, MAX_PAGES + 1)]
+    try:
+        async with aiohttp.ClientSession() as session:
+            payload = {"cmd": "request.get", "url": CAT_URL, "maxTimeout": 30000}
+            async with session.post(
+                FLARESOLVERR_URL, json=payload,
+                timeout=aiohttp.ClientTimeout(total=45),
+            ) as resp:
+                if resp.status != 200:
+                    print(f"[morigal] FlareSolverr HTTP {resp.status}")
+                    return []
+                result = await resp.json()
+                if result.get("status") != "ok":
+                    print(f"[morigal] FlareSolverr failed: {result.get('message', '')}")
+                    return []
+                html = result.get("solution", {}).get("response", "")
+    except Exception as e:
+        print(f"[morigal] FlareSolverr error: {e}")
+        return []
 
-        async def fetch(url):
-            try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-                    if resp.status != 200:
-                        return ""
-                    return await resp.text()
-            except Exception:
-                return ""
+    if not html:
+        print("[MORIGAL] 0 produktow (empty response)")
+        return []
 
-        pages = await asyncio.gather(*[fetch(u) for u in urls])
+    products = _parse_page(html)
 
-        for html in pages:
-            if not html:
+    for p in products:
+        name_low = p["name"].lower()
+        if "pokemon" not in name_low and "pokémon" not in name_low:
+            continue
+        if any(ex in name_low for ex in EXCLUDE):
+            continue
+        try:
+            pv = float(p["price"].replace(" zl", ""))
+            if 0 < pv < 10:
                 continue
-            products = _parse_page(html)
-            for p in products:
-                name_low = p["name"].lower()
-
-                # Must be Pokemon
-                if "pokemon" not in name_low and "pokémon" not in name_low:
-                    continue
-
-                # Exclude
-                if any(ex in name_low for ex in EXCLUDE):
-                    continue
-
-                # Price filter
-                try:
-                    pv = float(p["price"].replace(" zl", ""))
-                    if 0 < pv < 10:
-                        continue
-                except (ValueError, AttributeError):
-                    pass
-
-                if p["id"] not in seen:
-                    seen.add(p["id"])
-                    all_products.append(p)
+        except (ValueError, AttributeError):
+            pass
+        if p["id"] not in seen:
+            seen.add(p["id"])
+            all_products.append(p)
 
     print(f"[MORIGAL] {len(all_products)} produktow")
     return all_products
