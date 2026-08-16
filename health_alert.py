@@ -140,22 +140,34 @@ def main():
         "flaresolverr": ("🐳 FlareSolverr", check_flaresolverr, "WARNING"),
     }
 
-    # Proxy checks — track state but DON'T alert (self-heals, alerting is just spam)
-    proxy_checks = {
-        "proxy_tunnel": ("🔌 Proxy tunnel", check_proxy_tunnel),
-        "proxy_tailscale": ("🌐 Proxy Tailscale", check_proxy_tailscale),
-        "phone": ("📱 Phone (mi-9t)", check_phone_reachable),
-    }
+    # Proxy checks — only alert when ALL paths dead (single path flaps are normal)
+    proxy_tunnel_ok = check_proxy_tunnel()
+    proxy_tailscale_ok = check_proxy_tailscale()
+    new_state["proxy_tunnel"] = proxy_tunnel_ok
+    new_state["proxy_tailscale"] = proxy_tailscale_ok
 
-    # Track proxy state silently (for state file only, no Discord alerts)
-    for key, (name, check_fn) in proxy_checks.items():
-        is_ok = check_fn()
-        new_state[key] = is_ok
-        fail_count_key = f"{key}_fail_count"
-        if not is_ok:
-            new_state[fail_count_key] = state.get(fail_count_key, 0) + 1
-        else:
-            new_state[fail_count_key] = 0
+    all_proxy_dead = not proxy_tunnel_ok and not proxy_tailscale_ok
+    all_proxy_fail_key = "all_proxy_fail_count"
+    if all_proxy_dead:
+        fail_count = state.get(all_proxy_fail_key, 0) + 1
+        new_state[all_proxy_fail_key] = fail_count
+        # Only alert after 5 consecutive failures (15+ min with */3 cron)
+        if fail_count >= 5 and not state.get("all_proxy_dead", False):
+            now = time.time()
+            last_change = state.get("all_proxy_last_change", 0)
+            if now - last_change > MIN_ALERT_INTERVAL:
+                alerts.append("🔴 **ALL PROXIES DEAD (15+ min)** — boty nie mogą kupować przez mobile IP!")
+                new_state["all_proxy_last_change"] = now
+        new_state["all_proxy_dead"] = fail_count >= 5
+    else:
+        if state.get("all_proxy_dead", False):
+            now = time.time()
+            last_change = state.get("all_proxy_last_change", 0)
+            if now - last_change > MIN_ALERT_INTERVAL:
+                recoveries.append("✅ **Proxy RESTORED** — przynajmniej 1 path działa")
+                new_state["all_proxy_last_change"] = now
+        new_state[all_proxy_fail_key] = 0
+        new_state["all_proxy_dead"] = False
 
     for key, (name, check_fn, severity) in checks.items():
         is_ok = check_fn()
@@ -197,11 +209,7 @@ def main():
         else:
             new_state[last_change_key] = last_change  # no change
 
-    # Special: ALL proxies dead — track silently, no alert (self-heals via watchdog)
-    if not new_state.get("proxy_tunnel") and not new_state.get("proxy_tailscale"):
-        new_state["all_proxy_dead"] = True
-    else:
-        new_state["all_proxy_dead"] = False
+    # (all_proxy_dead handled above with proxy checks)
 
     # === SEND ALERTS ===
     if alerts:
