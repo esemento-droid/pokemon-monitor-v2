@@ -105,31 +105,16 @@ async def get_products() -> list[dict]:
     seen: set = set()
 
     async with aiohttp.ClientSession() as session:
-        # Fetch pages in batches of 5 until empty
-        page = 1
-        while page <= MAX_PAGES:
-            batch_end = min(page + 4, MAX_PAGES + 1)
-            tasks = []
-            for p in range(page, batch_end):
-                url = f"{BASE}/page/{p}/{SEARCH_PARAMS}" if p > 1 else f"{BASE}/{SEARCH_PARAMS}"
-                tasks.append(_fetch_flare(session, url))
-
-            results = await asyncio.gather(*tasks)
-
-            found_empty = False
-            for html in results:
-                if not html:
-                    found_empty = True
-                    break
-                new_products = _parse_page(html, seen)
-                if not new_products:
-                    found_empty = True
-                    break
-                products.extend(new_products)
-
-            if found_empty:
+        # Fetch pages sequentially (FlareSolverr handles 1 request at a time)
+        for page in range(1, MAX_PAGES + 1):
+            url = f"{BASE}/page/{page}/{SEARCH_PARAMS}" if page > 1 else f"{BASE}/{SEARCH_PARAMS}"
+            html = await _fetch_flare(session, url)
+            if not html:
                 break
-            page = batch_end
+            new_products = _parse_page(html, seen)
+            if not new_products:
+                break  # empty page = end of results
+            products.extend(new_products)
 
     print(f"[MAGINARIUM] {len(products)} produktow")
     return products
