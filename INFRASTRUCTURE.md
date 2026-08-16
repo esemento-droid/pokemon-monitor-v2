@@ -54,10 +54,15 @@ SELECT event_type, count(*) FROM event_log WHERE ts > now() - interval '24h' GRO
 ## Mobile Proxy (Xiaomi Mi 9T)
 
 ### Hardware:
-- Telefon: Xiaomi Mi 9T
+- Telefon: Xiaomi Mi 9T (DRUGI telefon — dedykowany proxy)
 - SIM: Orange PL (800GB/miesiąc)
 - IP: **37.47.128.183** (STATIC! Airplane mode NIE rotuje)
 - Dual SIM slot wolny — plan: druga SIM (Play/T-Mobile prepaid ~5 PLN) dla dynamicznego IP
+
+### User phone:
+- Samsung Galaxy S23 Ultra (główny telefon usera — Termius + chat)
+- Tailscale IP: 100.67.200.62
+- NIE jest proxy — służy tylko do zarządzania (SSH do VPS przez Termius)
 
 ### Software na telefonie (Termux):
 | Serwis | Port | Opis |
@@ -239,10 +244,15 @@ sudo systemctl restart discord-router
   │     └── ENGINES (1 engine, proxy poller)
   └── discord-router.service
 
-[Xiaomi Mi 9T]
+[Xiaomi Mi 9T — PROXY PHONE]
   ├── Orange PL SIM (800GB, static IP 37.47.128.183)
-  ├── Termux: tinyproxy:8888 + sshd:8022
+  ├── Termux: tinyproxy:8888 + sshd:8022 + autossh + crond
   └── Tailscale (100.127.72.24)
+
+[Samsung Galaxy S23 Ultra — USER PHONE]
+  ├── Termius (SSH client → VPS)
+  ├── Kiro chat
+  └── Tailscale (100.67.200.62)
 
 [GitHub]
   └── esemento-droid/pokemon-monitor-v2 (main branch)
