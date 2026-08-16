@@ -44,8 +44,8 @@ async def get_products():
 
     try:
         browser = await uc.start(
-            headless=False, no_sandbox=True,
-            browser_args=["--disable-gpu", "--disable-dev-shm-usage"]
+            headless=False, sandbox=False,
+            browser_args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--disable-setuid-sandbox"]
         )
     except Exception as e:
         log.error(f"[libristo] Failed to start browser: {e}")
