@@ -291,6 +291,26 @@ Każdy scraper MUSI spełniać WSZYSTKIE poniższe kryteria. Bez wyjątków. Nie
 - **pokespot**: brak `seen_ids` = duplikaty (251→112). ZAWSZE dedup.
 - **loficards**: sekwencyjny fetch 7 stron = timeout. Parallel = 0.3s.
 - **mediaexpert**: relatywne href + `getAttribute('href')` → pusty URL. Użyj `.href` w JS.
+- **maginarium**: Search daje 12 produktów na stronie, ALE jest 15 stron (pagination nie widoczna na page 1!). ZAWSZE sprawdź /page/2/ ręcznie. Trailing space w query (`Pokemon+tcg+`) daje więcej wyników niż bez.
+- **stapis**: Category URL (`?product_cat=`) renderuje produkty w HTML mimo że web_fetch tool nie widzi ich (tool != curl). TESTUJ curlem.
+- **gildiagrodzisk**: Obrazki w `<img src>` SĄ pełne URL-e, nie obcinaj w testach.
+- **elfiagrota**: Obrazki z schema.org `link[itemprop=image]` działają (200 OK), mimo że `data-src-original` daje relatywne miniaturki.
+
+### KRYTYCZNE ZASADY PAGINACJI:
+
+1. **ZAWSZE sprawdź /page/2/ (lub ?page=2) ręcznie** — strona 1 może nie pokazywać linków paginacji!
+2. **Jeśli search daje <20 wyników** — nie zakładaj że to wszystko. Sprawdź ręcznie wyższą stronę.
+3. **Trailing space w query** — może wpływać na wyniki (WooCommerce: `Pokemon+tcg+` ≠ `Pokemon+tcg`).
+4. **Parallel fetch WSZYSTKICH stron** — nigdy sekwencyjnie, `asyncio.gather()` zawsze.
+5. **Dedup po URL** — `seen = set()`, bo produkty mogą się powtarzać między stronami.
+
+### KRYTYCZNE ZASADY OBRAZKÓW:
+
+1. **Sprawdź HTTP HEAD** na pełnym URL — nie obcinaj URL w testach.
+2. **Priorytet źródeł**: `data-full-size-image-url` > `data-src` > `src` > `link[itemprop=image]`
+3. **Jeśli 404/403** — sprawdź czy URL nie jest obcięty (truncated w konsoli ≠ faktyczny URL).
+4. **weserv.nl proxy** jeśli Discord nie ładuje (hotlink protection, slow CDN, unicode chars).
+5. **WooCommerce placeholder** (`woocommerce-placeholder` w URL) = SKIP, nie dodawaj jako image.
 
 ### NIE ODPUSZCZAJ:
 
