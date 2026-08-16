@@ -40,7 +40,7 @@ from engines.engine_runner import run_engines_process
 NODRIVER_SHOPS = {
     "empik", "proshop", "boosterpoint",
     "dragonus", "piwniczaki", "rgfk", "strefamarzen", "wilczek", "tantis",
-    "battlestash", "bonito",
+    "battlestash", "bonito", "libristo",
 }
 
 SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
@@ -48,7 +48,7 @@ SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
 SLOW_SHOPS = {
     "am76", "blindbox", "flamberg", "mrpuggy", "pikashop",
     "paladynat", "czytam", "kuzniakart", "sklepkleks",
-    "battlestash", "strefamtg", "tcg-zielona", "libristo", "morigal",
+    "battlestash", "strefamtg", "tcg-zielona", "morigal",
 }
 
 VERY_SLOW_SHOPS = {
