@@ -1,5 +1,28 @@
 # Historia Sesji — Pokemon Monitor v2
 
+## Sesja 2026-08-16
+
+### Co zrobiono:
+1. **Nowy scraper: tcg-zielona.pl** — WooCommerce Store API via FlareSolverr, 17 produktów, SLOW group
+2. **NEW_LISTING event** — powiadomienie o nowych niedostępnych produktach (preorder/upcoming), żółty embed 📋
+3. **Fix: mediaexpert URL** — selektor JS nie matchował relative hrefs, zmieniono na `a[href*="/"]` + `.href`
+4. **Fix: sklepkleks obrazki** — URL-encode unicode chars (`é` → `%C3%A9`) w image URLs
+5. **Fix: pokespot obrazki + duplikaty** — weserv.nl proxy + dedup (251→112 produktów)
+6. **Fix: health alert spam** — debounce 3 consecutive fails (9+ min), timeout 8s+12s, cron */3
+7. **Boosterland verified** — działa OK, Pitch Black BB nie ma na stronie (nie bug)
+8. **Infra verified** — proxy/tunnel/FlareSolverr/Tailscale/mi-9t all healthy
+9. **Docs** — RULES.md (paste.rs workflow), INFRASTRUCTURE.md (phone roles), SESSION_CONTEXT.md
+
+### Ważne decyzje:
+- tcg-zielona API jest za CF z datacenter IP → FlareSolverr required (nie proxy)
+- NEW_LISTING nie triggeruje botów (to tylko info) — RESTOCK triggeruje jak przejdzie na available
+- Health alert: mobile proxy ma normalne 3-6 min outages → debounce 9 min eliminuje spam
+- Pokespot: produkty w wielu wariantach powodowały duplikaty (product-id dedup fix)
+
+### Stan: 145 shopów aktywnych (FAST 115, SLOW 19, NODRIVER 10, ENGINE 1)
+
+---
+
 ## Sesja 2026-08-15
 
 ### Co zrobiono:

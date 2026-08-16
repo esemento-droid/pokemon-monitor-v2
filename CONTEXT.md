@@ -53,7 +53,7 @@ Pełna dokumentacja rozbita na dedykowane pliki:
 - tcgumisia_proxy_poller: polls /pre-order via mobile proxy every 10s
 - Old tcgumisia_api engine DISABLED (caused 429 spam from same IP)
 
-### Total: 140 shops in 4 independent processes
+### Total: 145 shops in 4 independent processes
 
 ## Mobile Proxy (ACTIVE)
 - Phone: Xiaomi Mi 9T, SIM Orange PL (800GB/mies), static IP 37.47.128.183
@@ -93,12 +93,12 @@ Quick reference:
 ## Session History:
 → Pełna historia: [SESSION_HISTORY.md](SESSION_HISTORY.md)
 
-### Latest (2026-08-15):
-- Image fixes (21 shops + weserv.nl proxy)
-- Nowy scraper: sklepkleks.com
-- Empik exclude fix, tcgumisia proxy poller, hearts/swiatkart availability fix
-- Re-enabled: strefakart, battlestash, strefamtg, mediaexpert
-- Final: **140 shops active**
+### Latest (2026-08-16):
+- Nowy scraper: tcg-zielona.pl (FlareSolverr, SLOW, 17 produktów)
+- NEW_LISTING event — powiadomienia o niedostępnych nowych produktach (preorder)
+- Fixy: mediaexpert URL, sklepkleks/pokespot obrazki, pokespot duplikaty
+- Health alert debounce (3 fails / 9 min — koniec spamu)
+- Final: **145 shops active** (FAST 115, SLOW 19, NODRIVER 10, ENGINE 1)
 
 ## Commands:
 - Deploy: `cd /opt/pokemon-monitor-v2 && git fetch origin && git reset --hard origin/main && sudo systemctl restart pokemon-monitor-v2`
