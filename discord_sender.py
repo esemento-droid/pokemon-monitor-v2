@@ -105,6 +105,7 @@ class DiscordSender:
     def _build_embed(self, event_type, product):
         title_map = {
             "NEW_PRODUCT": "\U0001f195 NOWY PRODUKT",
+            "NEW_LISTING": "\U0001f4cb NOWA WRZUTKA",
             "RESTOCK": "\U0001f504 RESTOCK",
             "SOLD_OUT": "\u274c WYPRZEDANE",
             "PRICE_CHANGE": "\U0001f4b0 ZMIANA CENY",
@@ -113,6 +114,7 @@ class DiscordSender:
         title = title_map.get(event_type, event_type)
         color_map = {
             "NEW_PRODUCT": 16777215,
+            "NEW_LISTING": 16776960,
             "RESTOCK": 65280,
             "SOLD_OUT": 16711680,
             "PRICE_CHANGE": 16753920,
@@ -121,6 +123,8 @@ class DiscordSender:
         color = color_map.get(event_type, 5814783)
         if event_type in ("SNAPSHOT", "NEW_PRODUCT"):
             color = 65280 if product.get("available") else 16711680
+        elif event_type == "NEW_LISTING":
+            color = 16776960  # Yellow — upcoming/preorder
 
         name = product.get("name", "?")
         shop = product.get("shop", "?")

@@ -59,6 +59,11 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                         check_tcgumisia_trigger("NEW_PRODUCT", product)
                         check_mediaexpert_trigger("NEW_PRODUCT", product)
                         restock_detected = True
+                    else:
+                        # New product but unavailable (preorder/upcoming) — notify for bot preparation
+                        discord.send_nowait("NEW_LISTING", product)
+                        await log_event(shop_name, "NEW_LISTING", pid, product.get("name"),
+                                        product.get("price"), product.get("url"))
                 continue
 
             old = old_by_id[pid]
