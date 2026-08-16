@@ -45,9 +45,8 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                     await log_event(shop_name, "SNAPSHOT", pid, product.get("name"),
                                     product.get("price"), product.get("url"))
                 elif is_first and not product.get("available", False):
-                    # First scan, unavailable product — notify as NEW_LISTING
-                    discord.send_nowait("NEW_LISTING", product)
-                    await log_event(shop_name, "NEW_LISTING", pid, product.get("name"),
+                    # First scan, unavailable product — silent (not a new drop, just existing OOS)
+                    await log_event(shop_name, "SNAPSHOT", pid, product.get("name"),
                                     product.get("price"), product.get("url"))
                 elif snapshot_done or len(old_by_id) > 0:
                     if product.get("available", False):
