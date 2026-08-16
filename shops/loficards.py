@@ -15,7 +15,7 @@ log = logging.getLogger("monitor")
 SHOP = "loficards"
 BASE_URL = "https://loficards.pl"
 CATEGORY_URL = f"{BASE_URL}/pokemon-Karty-Angielskie"
-MAX_PAGES = 10
+MAX_PAGES = 8
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -123,28 +123,30 @@ def _parse_page(html: str) -> list[dict]:
 
 
 async def get_products() -> list[dict]:
-    """Scrape all pages of Pokemon TCG English cards."""
+    """Scrape all pages of Pokemon TCG English cards (parallel fetch)."""
     all_products = []
     seen_ids = set()
 
     try:
         async with aiohttp.ClientSession(headers=HEADERS) as session:
-            for page in range(1, MAX_PAGES + 1):
-                url = CATEGORY_URL if page == 1 else f"{CATEGORY_URL}/pa/{page}"
+            # Fetch all pages in parallel (7 pages, 12 products each)
+            urls = [CATEGORY_URL] + [f"{CATEGORY_URL}/pa/{p}" for p in range(2, MAX_PAGES + 1)]
 
+            async def fetch_page(url):
                 try:
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                         if resp.status != 200:
-                            break
-                        html = await resp.text()
-                except Exception as e:
-                    log.warning(f"[loficards] Page {page} fetch error: {e}")
-                    break
+                            return ""
+                        return await resp.text()
+                except Exception:
+                    return ""
 
+            pages_html = await asyncio.gather(*[fetch_page(u) for u in urls])
+
+            for html in pages_html:
+                if not html:
+                    continue
                 products = _parse_page(html)
-
-                if not products:
-                    break
 
                 for p in products:
                     name_lower = p["name"].lower()
@@ -162,10 +164,6 @@ async def get_products() -> list[dict]:
                     if p["id"] not in seen_ids:
                         seen_ids.add(p["id"])
                         all_products.append(p)
-
-                # Small delay between pages
-                if page < MAX_PAGES:
-                    await asyncio.sleep(1)
 
     except Exception as e:
         log.error(f"[loficards] Error: {str(e)[:80]}")
