@@ -1,16 +1,14 @@
 """
-Scraper: gralnia.pl (redirects to aftermarket.pl — FlareSolverr needed)
-Method: FlareSolverr → follow redirects → parse
+Scraper: gralnia.org (WooCommerce + Cloudflare)
+Method: FlareSolverr → HTML parse
 Category: SLOW (FlareSolverr)
-NOTE: Must be added to SLOW_SHOPS in main.py. Test on VPS!
-URL may need update after checking actual redirect target with FlareSolverr.
 """
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "gralnia"
-URL = "https://gralnia.pl/?s=pokemon+tcg&post_type=product"
+URL = "https://gralnia.org/?s=pokemon+tcg&post_type=product"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 
 EXCLUDE = [
@@ -100,7 +98,7 @@ async def get_products() -> list[dict]:
         classes = item.get("class", [])
         available = "outofstock" not in classes
 
-        full_url = url if url.startswith("http") else f"https://gralnia.pl{url}"
+        full_url = url if url.startswith("http") else f"https://gralnia.org{url}"
         pid = url.rstrip("/").split("/")[-1]
 
         products.append({

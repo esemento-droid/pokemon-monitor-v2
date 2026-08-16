@@ -32,7 +32,7 @@ EXCLUDE = [
 def _parse_page(html: str, seen: set) -> list[dict]:
     products = []
     soup = BeautifulSoup(html, "lxml")
-    items = soup.select(".product-miniature, article.product-miniature")
+    items = soup.select("article, .product-miniature, article.product-miniature")
 
     for item in items:
         name_el = item.select_one(".product-title a, h2 a, h3 a")

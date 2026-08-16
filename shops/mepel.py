@@ -9,7 +9,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "mepel"
-URL = "https://mepel.pl/?s=pokemon+tcg&post_type=product"
+URL = "https://mepel.pl/product-category/pokemon-tcg/"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 
 EXCLUDE = [
