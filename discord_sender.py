@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 from datetime import datetime
 from collections import deque
+from urllib.parse import quote
 from config import DISCORD_WEBHOOK, DISCORD_MAX_PER_MINUTE
 
 # Price comparison for LEGO shops (auto-enrichment)
@@ -179,6 +180,8 @@ class DiscordSender:
 
         if image and image.startswith("http"):
             image = image.replace(" ", "%20")
+            # Encode non-ASCII chars in URL (e.g. é, ó, ą) for Discord compatibility
+            image = quote(image, safe=':/?#[]@!$&\'()*+,;=-_.~%')
             # Use weserv.nl proxy for shops with hotlink protection or slow CDN
             # This ensures Discord always loads the image (weserv.nl is fast & reliable)
             PROXY_SHOPS = {
@@ -189,7 +192,7 @@ class DiscordSender:
             }
             shop_name = product.get("shop", "")
             if shop_name in PROXY_SHOPS and "weserv.nl" not in image:
-                image = f"https://images.weserv.nl/?url={image}&w=500&q=80"
+                image = f"https://images.weserv.nl/?url={quote(image, safe='')}&w=500&q=80"
             embed["image"] = {"url": image}
         return embed
 
