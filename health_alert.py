@@ -153,8 +153,8 @@ def main():
         if not is_ok:
             fail_count = state.get(fail_count_key, 0) + 1
             new_state[fail_count_key] = fail_count
-            # Only consider DOWN after 2+ consecutive failures (4+ min with */2 cron)
-            if fail_count < 2:
+            # Only consider DOWN after 3+ consecutive failures (9+ min with */3 cron)
+            if fail_count < 3:
                 new_state[key] = was_ok  # Keep previous state, not yet confirmed DOWN
                 is_ok = was_ok
         else:
