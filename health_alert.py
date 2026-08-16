@@ -28,8 +28,8 @@ STATE_FILE = BASE_DIR / "data" / "health_state.json"
 WEBHOOK_FILE = BASE_DIR / "discord_webhook_stats.txt"  # dedicated stats/health channel
 WEBHOOK_FALLBACK = BASE_DIR / "discord_webhook_jc.txt"
 
-# Anti-spam: don't alert if state changed less than 5 min ago
-MIN_ALERT_INTERVAL = 300  # seconds
+# Anti-spam: don't alert if state changed less than 10 min ago
+MIN_ALERT_INTERVAL = 600  # seconds
 
 
 def load_state() -> Dict:
@@ -83,8 +83,8 @@ def check_proxy_tunnel() -> bool:
     try:
         r = subprocess.run(
             ["curl", "-x", "http://127.0.0.1:8888", "-s", "-o", "/dev/null",
-             "-w", "%{http_code}", "--connect-timeout", "5", "https://google.com"],
-            capture_output=True, text=True, timeout=8
+             "-w", "%{http_code}", "--connect-timeout", "8", "--max-time", "12", "https://google.com"],
+            capture_output=True, text=True, timeout=15
         )
         return r.stdout.strip() in ("200", "301", "302")
     except Exception:
@@ -96,8 +96,8 @@ def check_proxy_tailscale() -> bool:
     try:
         r = subprocess.run(
             ["curl", "-x", "http://100.127.72.24:8888", "-s", "-o", "/dev/null",
-             "-w", "%{http_code}", "--connect-timeout", "5", "https://google.com"],
-            capture_output=True, text=True, timeout=8
+             "-w", "%{http_code}", "--connect-timeout", "8", "--max-time", "12", "https://google.com"],
+            capture_output=True, text=True, timeout=15
         )
         return r.stdout.strip() in ("200", "301", "302")
     except Exception:
@@ -147,6 +147,18 @@ def main():
         is_ok = check_fn()
         was_ok = state.get(key, True)
         new_state[key] = is_ok
+
+        # Debounce: require 2 consecutive failures before declaring DOWN
+        fail_count_key = f"{key}_fail_count"
+        if not is_ok:
+            fail_count = state.get(fail_count_key, 0) + 1
+            new_state[fail_count_key] = fail_count
+            # Only consider DOWN after 2+ consecutive failures (4+ min with */2 cron)
+            if fail_count < 2:
+                new_state[key] = was_ok  # Keep previous state, not yet confirmed DOWN
+                is_ok = was_ok
+        else:
+            new_state[fail_count_key] = 0
 
         # Anti-spam: check when this key last changed
         last_change_key = f"{key}_last_change"
