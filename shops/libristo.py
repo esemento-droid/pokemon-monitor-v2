@@ -94,16 +94,11 @@ async def get_products():
                 continue
             seen.add(pid)
 
-            # Name — from product image alt (most reliable)
+            # Name — from card text (first meaningful string > 15 chars)
             name = ""
-            # Find the product-specific img (not tag/flag icons)
-            for img in card.select("img[alt]"):
-                alt = img.get("alt", "").strip()
-                if len(alt) > 15 and "tag" not in alt.lower() and "flag" not in alt.lower():
-                    src = img.get("src", "")
-                    if "tag" not in src and "flag" not in src:
-                        name = alt
-                        break
+            texts = [t.strip() for t in card.stripped_strings if len(t.strip()) > 15]
+            if texts:
+                name = texts[0]
 
             if not name:
                 # Fallback: link title
@@ -123,23 +118,25 @@ async def get_products():
             if any(ex in name_low for ex in EXCLUDE):
                 continue
 
-            # Price — look for number pattern in card text
+            # Price — from card texts (number like "25.98" or "149.00")
             card_text = card.get_text(" ", strip=True)
             price = "brak"
-            # Try "XX.XX zł" or "XX,XX zł"
-            price_match = re.search(r"(\d+[.,]\d{2})\s*zł", card_text)
-            if price_match:
-                price = price_match.group(1).replace(",", ".") + " zl"
-            else:
-                # Try standalone number (libristo sometimes shows just number)
-                price_match2 = re.search(r"(\d{2,5}[.,]\d{2})", card_text)
-                if price_match2:
-                    val = price_match2.group(1).replace(",", ".")
+            all_texts = [t.strip() for t in card.stripped_strings]
+            for t in all_texts:
+                price_m = re.match(r"^(\d+[.,]\d{2})$", t)
+                if price_m:
+                    val = price_m.group(1).replace(",", ".")
                     try:
-                        if 10 < float(val) < 5000:
+                        if float(val) > 0:
                             price = val + " zl"
+                            break
                     except ValueError:
                         pass
+            # Fallback: regex on full text
+            if price == "brak":
+                price_match = re.search(r"(\d+[.,]\d{2})\s*zł", card_text)
+                if price_match:
+                    price = price_match.group(1).replace(",", ".") + " zl"
 
             # Skip if price < 10 PLN (singles)
             try:
