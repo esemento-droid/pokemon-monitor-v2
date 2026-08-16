@@ -1,7 +1,8 @@
 """
-Scraper: monsteriada.pl (PrestaShop)
+Scraper: monsteriada.pl (PrestaShop + Cloudflare)
 Kategoria: /93-pokemon-tcg-karty-kolekjonerskie
-Pagination: ?page=N (4 pages). Static HTML.
+Pagination: ?page=N (4 pages). FlareSolverr.
+Category: SLOW (FlareSolverr)
 """
 
 import asyncio
@@ -12,7 +13,7 @@ from bs4 import BeautifulSoup
 SHOP = "monsteriada"
 BASE = "https://monsteriada.pl"
 CATEGORY_URL = f"{BASE}/93-pokemon-tcg-karty-kolekjonerskie"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+FLARESOLVERR_URL = "http://localhost:8191/v1"
 MAX_PAGES = 8
 
 EXCLUDE = [
@@ -25,17 +26,20 @@ EXCLUDE = [
     "japanese", "japoński", "japońsk", "(jp)", "koreański", "korean",
     "chiński", "chinese", "(chi)", "figurk", "puzzle", "zeszyt",
     "pluszak", "brelok", "kubek", "szklank", "maskotk",
+    "władca pierścieni", "lord of the ring", "tales of middle",
 ]
 
 
-async def _fetch(session: aiohttp.ClientSession, url: str) -> str:
+async def _fetch_flare(session: aiohttp.ClientSession, url: str) -> str:
+    payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-            if resp.status != 200:
-                return ""
-            return await resp.text()
+        async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=45)) as resp:
+            data = await resp.json()
+        if data.get("status") == "ok":
+            return data.get("solution", {}).get("response", "")
     except Exception:
-        return ""
+        pass
+    return ""
 
 
 def _parse_page(html: str, seen: set) -> list[dict]:
@@ -44,7 +48,6 @@ def _parse_page(html: str, seen: set) -> list[dict]:
     items = soup.select(".product-miniature, article.product-miniature")
 
     for item in items:
-        # Name & URL
         name_el = item.select_one(".product-title a, h2 a, h3 a, .product-name a")
         if not name_el:
             continue
@@ -54,35 +57,30 @@ def _parse_page(html: str, seen: set) -> list[dict]:
             continue
         seen.add(url)
 
-        # Exclude
         name_lower = name.lower()
         if any(ex in name_lower for ex in EXCLUDE):
             continue
 
-        # Price
         price_el = item.select_one(".product-price, .price, [itemprop=price]")
         price = price_el.get_text(strip=True) if price_el else "brak"
 
-        # Price filter
         try:
-            pv = float(price.replace("zł", "").replace("\xa0", "").replace(",", ".").replace(" ", ""))
+            import re
+            pv = float(re.search(r"(\d+[\s\xa0]?\d*[.,]\d+)", price.replace("\xa0", "")).group(1).replace(",", ".").replace(" ", ""))
             if pv < 10:
                 continue
-        except (ValueError, AttributeError):
+        except (AttributeError, ValueError):
             pass
 
-        # Image
         img = item.select_one("img")
         image = ""
         if img:
             image = img.get("data-full-size-image-url") or img.get("data-src") or img.get("src") or ""
 
-        # Availability
         avail_el = item.select_one(".product-availability, .availability")
         avail_text = avail_el.get_text(strip=True).lower() if avail_el else ""
         available = avail_text in ("dostępny", "dostepny", "przedsprzedaż", "przedsprzedaz", "w magazynie")
 
-        # ID from URL
         pid = url.rstrip("/").split("/")[-1].split(".html")[0]
 
         products.append({
@@ -103,9 +101,9 @@ async def get_products() -> list[dict]:
     products = []
     seen: set = set()
 
-    async with aiohttp.ClientSession(headers={"User-Agent": UA}) as session:
+    async with aiohttp.ClientSession() as session:
         # Page 1
-        html1 = await _fetch(session, CATEGORY_URL)
+        html1 = await _fetch_flare(session, CATEGORY_URL)
         if not html1:
             print(f"[MONSTERIADA] blad pobierania")
             return []
@@ -114,7 +112,7 @@ async def get_products() -> list[dict]:
 
         # Detect pagination
         soup = BeautifulSoup(html1, "lxml")
-        page_links = soup.select(".pagination a, a.next")
+        page_links = soup.select(".pagination a, a[rel=next]")
         page_nums = set()
         for link in page_links:
             href = link.get("href", "")
@@ -128,13 +126,13 @@ async def get_products() -> list[dict]:
         max_page = max(page_nums) if page_nums else 1
         max_page = min(max_page, MAX_PAGES)
 
-        # Fetch remaining pages
-        if max_page > 1:
-            tasks = [_fetch(session, f"{CATEGORY_URL}?page={p}") for p in range(2, max_page + 1)]
-            results = await asyncio.gather(*tasks)
-            for html in results:
-                if html:
-                    products.extend(_parse_page(html, seen))
+        # Fetch remaining pages sequentially (FlareSolverr = 1 req at a time)
+        for page in range(2, max_page + 1):
+            html = await _fetch_flare(session, f"{CATEGORY_URL}?page={page}")
+            if html:
+                new = _parse_page(html, seen)
+                if new:
+                    products.extend(new)
 
     print(f"[MONSTERIADA] {len(products)} produktow")
     return products
