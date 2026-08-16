@@ -21,6 +21,7 @@ EXCLUDE = [
 
 async def get_products():
     products = []
+    seen = set()
     async with aiohttp.ClientSession(headers=HEADERS, connector=aiohttp.TCPConnector(ssl=False)) as session:
         async with session.get(CAT_URL, timeout=aiohttp.ClientTimeout(total=30)) as r:
             html = await r.text()
@@ -44,8 +45,9 @@ async def get_products():
             soup = BeautifulSoup(page_html, "lxml")
             for t in soup.select("product-tile"):
                 pid = t.get("product-id", "")
-                if not pid:
+                if not pid or pid in seen:
                     continue
+                seen.add(pid)
 
                 name = t.get("name", "")
                 if not name:
