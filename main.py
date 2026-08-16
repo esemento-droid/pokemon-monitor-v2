@@ -48,7 +48,7 @@ SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
 SLOW_SHOPS = {
     "am76", "blindbox", "flamberg", "mrpuggy", "pikashop",
     "paladynat", "czytam", "kuzniakart", "sklepkleks",
-    "battlestash", "strefamtg",
+    "battlestash", "strefamtg", "tcg-zielona",
 }
 
 VERY_SLOW_SHOPS = {

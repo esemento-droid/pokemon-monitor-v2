@@ -1,11 +1,13 @@
 """
 Scraper: tcg-zielona.pl
-Platform: WooCommerce Store API (no CF on API endpoint)
-Method: aiohttp /wp-json/wc/store/v1/products?category=pokemon-tcg
+Platform: WooCommerce Store API behind Cloudflare
+Method: FlareSolverr → /wp-json/wc/store/v1/products?category=pokemon-tcg
 Category: 122 (Pokémon TCG)
+Note: API endpoint IS behind CF from datacenter IPs — need FlareSolverr bypass
 """
 import aiohttp
 import asyncio
+import json
 import html as html_lib
 
 SHOP = "tcg-zielona"
@@ -13,7 +15,7 @@ API_URL = "https://tcg-zielona.pl/wp-json/wc/store/v1/products"
 CATEGORY = "pokemon-tcg"
 PER_PAGE = 100
 MAX_PAGES = 3
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
+FLARESOLVERR_URL = "http://localhost:8191/v1"
 
 EXCLUDE = [
     "sleeves", "koszulk", "toploader", "album", "pro-binder", "ultra pro", "ultra-pro",
@@ -35,22 +37,52 @@ async def get_products():
     products = []
     seen = set()
 
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
+    async with aiohttp.ClientSession() as session:
         for page in range(1, MAX_PAGES + 1):
             url = f"{API_URL}?per_page={PER_PAGE}&category={CATEGORY}&page={page}"
+
+            # Use FlareSolverr to bypass Cloudflare
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
+                async with session.post(
+                    FLARESOLVERR_URL, json=payload,
+                    timeout=aiohttp.ClientTimeout(total=45),
+                ) as resp:
                     if resp.status != 200:
+                        print(f"[tcg-zielona] FlareSolverr HTTP {resp.status} page {page}")
                         break
-                    ct = resp.headers.get("Content-Type", "")
-                    if "json" not in ct:
+                    result = await resp.json()
+                    if result.get("status") != "ok":
+                        print(f"[tcg-zielona] FlareSolverr failed page {page}: {result.get('message', '')}")
                         break
-                    data = await resp.json()
+                    raw_response = result.get("solution", {}).get("response", "")
             except Exception as e:
-                print(f"[tcg-zielona] Error page {page}: {e}")
+                print(f"[tcg-zielona] FlareSolverr error page {page}: {e}")
                 break
 
-            if not data:
+            if not raw_response:
+                break
+
+            # Parse JSON from FlareSolverr response
+            try:
+                # FlareSolverr wraps response in HTML sometimes for API calls
+                # Try direct JSON parse first
+                data = json.loads(raw_response)
+            except (json.JSONDecodeError, TypeError):
+                # If wrapped in HTML (e.g. <pre> tag), extract JSON
+                import re
+                json_match = re.search(r'[\[\{].*[\]\}]', raw_response, re.DOTALL)
+                if json_match:
+                    try:
+                        data = json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        print(f"[tcg-zielona] Cannot parse JSON page {page}")
+                        break
+                else:
+                    print(f"[tcg-zielona] No JSON in response page {page}, len={len(raw_response)}")
+                    break
+
+            if not data or not isinstance(data, list):
                 break
 
             for item in data:
