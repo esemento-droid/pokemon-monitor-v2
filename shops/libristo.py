@@ -53,19 +53,25 @@ async def get_products():
 
     try:
         page = await browser.get(SEARCH_URL)
+        print(f"[libristo] Page loaded, waiting 12s...", flush=True)
         await asyncio.sleep(12)
 
         # Check CF
         title = await page.evaluate("document.title")
+        print(f"[libristo] Title: {title}", flush=True)
         if "moment" in (title or "").lower() or "checking" in (title or "").lower():
             log.warning("[libristo] CF challenge, waiting...")
             await asyncio.sleep(15)
+            title = await page.evaluate("document.title")
+            print(f"[libristo] Title after wait: {title}", flush=True)
 
         html = await page.evaluate("document.documentElement.outerHTML")
         if not html or len(html) < 5000:
-            log.error("[libristo] Empty/short HTML response")
-            print("[LIBRISTO] 0 produktow (CF block)")
+            log.error(f"[libristo] Empty/short HTML response: {len(html) if html else 0}")
+            print(f"[LIBRISTO] 0 produktow (CF block, html={len(html) if html else 0})")
             return []
+
+        print(f"[libristo] HTML OK: {len(html)} chars", flush=True)
 
         soup = BeautifulSoup(html, "lxml")
 
