@@ -158,9 +158,10 @@ async def get_products():
                     image = src
                     break
 
-            # Availability
-            avail_text = card_text.lower()
-            available = "niedost" not in avail_text and "wyprzeda" not in avail_text
+            # Availability (only if not already set to False by price check)
+            if available is not False:
+                avail_text = card_text.lower()
+                available = "niedost" not in avail_text and "wyprzeda" not in avail_text
 
             # Full URL
             url = href if href.startswith("http") else BASE + href
