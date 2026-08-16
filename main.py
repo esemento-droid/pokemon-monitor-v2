@@ -49,6 +49,7 @@ SLOW_SHOPS = {
     "am76", "blindbox", "flamberg", "mrpuggy", "pikashop",
     "paladynat", "czytam", "kuzniakart", "sklepkleks",
     "battlestash", "strefamtg", "tcg-zielona", "morigal",
+    "eduksiazka", "dystryktzero", "kiddin", "gralnia", "xjoy", "mepel",
 }
 
 VERY_SLOW_SHOPS = {
