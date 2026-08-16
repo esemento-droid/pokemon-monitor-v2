@@ -66,11 +66,13 @@ curl -sL paste.rs/XXXXX | bash 2>&1 | curl -s --data-binary @- https://paste.rs/
 ```
 
 **ZASADY:**
-- NIGDY nie wklejaj komend bezpośrednio w tekst odpowiedzi
-- ZAWSZE upload do paste.rs i daj URL
+- NIGDY nie wklejaj komend bezpośrednio w tekst odpowiedzi — ZAWSZE upload do paste.rs i daj URL
 - Output z VPS MUSI iść do paste.rs (user nie może kopiować z terminala)
+- WYNIK ZWROTNY TEŻ PRZEZ paste.rs — user wkleja URL paste z outputem do chatu
 - Nawet proste komendy — ZAWSZE przez paste.rs
 - Żeby zobaczyć wynik: `curl -sL paste.rs/WYNIK_URL`
+- Format dla usera: `curl -sL paste.rs/XXXXX | bash 2>&1 | curl -s --data-binary @- https://paste.rs/`
+- User kopiuje WYNIKOWY URL paste.rs i wkleja do chatu — to jedyny sposób komunikacji wyników
 
 ---
 
