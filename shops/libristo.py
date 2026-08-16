@@ -143,6 +143,10 @@ async def get_products():
                 pv = float(price.replace(" zl", ""))
                 if 0 < pv < 10:
                     continue
+                # Price 0 = no price listed = unavailable preorder
+                if pv == 0:
+                    price = "brak"
+                    available = False
             except (ValueError, AttributeError):
                 pass
 
