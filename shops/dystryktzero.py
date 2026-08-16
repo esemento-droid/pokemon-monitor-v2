@@ -9,7 +9,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "dystryktzero"
-URL = "https://dystryktzero.pl/search?q=pokemon+tcg"
+URL = "https://www.dystryktzero.pl/karty-pokemon/"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 
 EXCLUDE = [
