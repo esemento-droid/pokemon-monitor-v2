@@ -1,7 +1,8 @@
 """
-Scraper: maginarium.pl (WooCommerce)
+Scraper: maginarium.pl (WooCommerce + Cloudflare)
 Search URL: /?s=Pokemon+tcg+&post_type=product
-15 pages, ~164 products. Parallel fetch.
+15+ pages, parallel fetch via FlareSolverr.
+Category: SLOW (FlareSolverr)
 """
 
 import asyncio
@@ -11,8 +12,8 @@ from bs4 import BeautifulSoup
 
 SHOP = "maginarium"
 BASE = "https://maginarium.pl"
-SEARCH_URL = f"{BASE}/?s=Pokemon+tcg+&post_type=product"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+SEARCH_PARAMS = "?s=Pokemon+tcg+&post_type=product"
+FLARESOLVERR_URL = "http://localhost:8191/v1"
 MAX_PAGES = 30
 
 EXCLUDE = [
@@ -28,14 +29,16 @@ EXCLUDE = [
 ]
 
 
-async def _fetch(session: aiohttp.ClientSession, url: str) -> str:
+async def _fetch_flare(session: aiohttp.ClientSession, url: str) -> str:
+    payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-            if resp.status != 200:
-                return ""
-            return await resp.text()
+        async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=45)) as resp:
+            data = await resp.json()
+        if data.get("status") == "ok":
+            return data.get("solution", {}).get("response", "")
     except Exception:
-        return ""
+        pass
+    return ""
 
 
 def _parse_page(html: str, seen: set) -> list[dict]:
@@ -55,22 +58,18 @@ def _parse_page(html: str, seen: set) -> list[dict]:
             continue
         seen.add(url)
 
-        # Name
         title = item.select_one("h2, h3, .woocommerce-loop-product__title")
         name = title.get_text(" ", strip=True) if title else ""
         if not name:
             continue
 
-        # Exclude
         name_lower = name.lower()
         if any(ex in name_lower for ex in EXCLUDE):
             continue
 
-        # Price
         price_el = item.select_one(".woocommerce-Price-amount")
         price = price_el.get_text(strip=True) if price_el else "brak"
 
-        # Price filter <10
         try:
             pv = float(price.replace("zł", "").replace("\xa0", "").replace(",", ".").replace(" ", ""))
             if pv < 10:
@@ -78,7 +77,6 @@ def _parse_page(html: str, seen: set) -> list[dict]:
         except (ValueError, AttributeError):
             pass
 
-        # Image
         img = item.find("img")
         image = ""
         if img:
@@ -86,7 +84,6 @@ def _parse_page(html: str, seen: set) -> list[dict]:
             if "woocommerce-placeholder" in image:
                 image = ""
 
-        # ID from URL
         pid = url.rstrip("/").split("/")[-1]
 
         products.append({
@@ -107,19 +104,15 @@ async def get_products() -> list[dict]:
     products = []
     seen: set = set()
 
-    async with aiohttp.ClientSession(headers={"User-Agent": UA}) as session:
-        search_params = "?s=Pokemon+tcg+&post_type=product"
-
-        # This site doesn't show full pagination — fetch pages until empty.
-        # Parallel fetch in batches to balance speed and not overshoot.
+    async with aiohttp.ClientSession() as session:
+        # Fetch pages in batches of 5 until empty
         page = 1
         while page <= MAX_PAGES:
-            # Fetch batch of 5 pages at once
             batch_end = min(page + 4, MAX_PAGES + 1)
             tasks = []
             for p in range(page, batch_end):
-                url = f"{BASE}/page/{p}/{search_params}" if p > 1 else f"{BASE}/{search_params}"
-                tasks.append(_fetch(session, url))
+                url = f"{BASE}/page/{p}/{SEARCH_PARAMS}" if p > 1 else f"{BASE}/{SEARCH_PARAMS}"
+                tasks.append(_fetch_flare(session, url))
 
             results = await asyncio.gather(*tasks)
 
