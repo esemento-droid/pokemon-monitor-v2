@@ -137,11 +137,25 @@ def main():
     # === CHECKS ===
     checks = {
         "monitor": ("🖥️ Monitor", check_monitor, "CRITICAL"),
-        "proxy_tunnel": ("🔌 Proxy tunnel", check_proxy_tunnel, "WARNING"),
-        "proxy_tailscale": ("🌐 Proxy Tailscale", check_proxy_tailscale, "WARNING"),
         "flaresolverr": ("🐳 FlareSolverr", check_flaresolverr, "WARNING"),
-        "phone": ("📱 Phone (mi-9t)", check_phone_reachable, "WARNING"),
     }
+
+    # Proxy checks — track state but DON'T alert (self-heals, alerting is just spam)
+    proxy_checks = {
+        "proxy_tunnel": ("🔌 Proxy tunnel", check_proxy_tunnel),
+        "proxy_tailscale": ("🌐 Proxy Tailscale", check_proxy_tailscale),
+        "phone": ("📱 Phone (mi-9t)", check_phone_reachable),
+    }
+
+    # Track proxy state silently (for state file only, no Discord alerts)
+    for key, (name, check_fn) in proxy_checks.items():
+        is_ok = check_fn()
+        new_state[key] = is_ok
+        fail_count_key = f"{key}_fail_count"
+        if not is_ok:
+            new_state[fail_count_key] = state.get(fail_count_key, 0) + 1
+        else:
+            new_state[fail_count_key] = 0
 
     for key, (name, check_fn, severity) in checks.items():
         is_ok = check_fn()
@@ -183,15 +197,10 @@ def main():
         else:
             new_state[last_change_key] = last_change  # no change
 
-    # Special: ALL proxies dead = CRITICAL
+    # Special: ALL proxies dead — track silently, no alert (self-heals via watchdog)
     if not new_state.get("proxy_tunnel") and not new_state.get("proxy_tailscale"):
-        all_proxy_was_dead = state.get("all_proxy_dead", False)
         new_state["all_proxy_dead"] = True
-        if not all_proxy_was_dead:
-            alerts.insert(0, "🔴 **ALL PROXIES DEAD** — boty nie mogą kupować przez mobile IP!")
     else:
-        if state.get("all_proxy_dead", False):
-            recoveries.append("✅ **Proxy RESTORED** — przynajmniej 1 path działa")
         new_state["all_proxy_dead"] = False
 
     # === SEND ALERTS ===
