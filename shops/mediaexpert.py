@@ -54,8 +54,8 @@ JSON.stringify(Array.from(document.querySelectorAll('.offer-box')).map(box => {
     const cls = box.className || '';
     const idMatch = cls.match(/offer-(\\d+)/);
     const pid = idMatch ? idMatch[1] : '';
-    const link = box.querySelector('a[href*="mediaexpert"]');
-    const href = link ? link.getAttribute('href') : '';
+    const link = box.querySelector('a[href*="/"]');
+    const href = link ? link.href : '';
     const priceEl = box.querySelector('[class*="price"], [class*="Price"]');
     const priceText = priceEl ? priceEl.innerText.trim().replace(/[^0-9]/g, '') : '';
     const imgEl = box.querySelector('img');
