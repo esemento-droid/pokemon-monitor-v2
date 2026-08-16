@@ -13,7 +13,7 @@ SHOP = "maginarium"
 BASE = "https://maginarium.pl"
 SEARCH_URL = f"{BASE}/?s=Pokemon+tcg+&post_type=product"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-MAX_PAGES = 20
+MAX_PAGES = 30
 
 EXCLUDE = [
     "sleeves", "koszulk", "playmat", "album", "pro-binder", "toploader",
@@ -108,22 +108,35 @@ async def get_products() -> list[dict]:
     seen: set = set()
 
     async with aiohttp.ClientSession(headers={"User-Agent": UA}) as session:
-        # Fetch all pages in parallel (pagination not visible on page 1)
         search_params = "?s=Pokemon+tcg+&post_type=product"
-        tasks = []
-        for page in range(1, MAX_PAGES + 1):
-            url = f"{BASE}/page/{page}/{search_params}" if page > 1 else f"{BASE}/{search_params}"
-            tasks.append(_fetch(session, url))
 
-        results = await asyncio.gather(*tasks)
+        # This site doesn't show full pagination — fetch pages until empty.
+        # Parallel fetch in batches to balance speed and not overshoot.
+        page = 1
+        while page <= MAX_PAGES:
+            # Fetch batch of 5 pages at once
+            batch_end = min(page + 4, MAX_PAGES + 1)
+            tasks = []
+            for p in range(page, batch_end):
+                url = f"{BASE}/page/{p}/{search_params}" if p > 1 else f"{BASE}/{search_params}"
+                tasks.append(_fetch(session, url))
 
-        for html in results:
-            if not html:
-                continue
-            new_products = _parse_page(html, seen)
-            if not new_products:
-                break  # empty page = end of results
-            products.extend(new_products)
+            results = await asyncio.gather(*tasks)
+
+            found_empty = False
+            for html in results:
+                if not html:
+                    found_empty = True
+                    break
+                new_products = _parse_page(html, seen)
+                if not new_products:
+                    found_empty = True
+                    break
+                products.extend(new_products)
+
+            if found_empty:
+                break
+            page = batch_end
 
     print(f"[MAGINARIUM] {len(products)} produktow")
     return products
