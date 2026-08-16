@@ -1,16 +1,19 @@
 """
 Scraper: maginarium.pl (WooCommerce)
-Search URL: /?s=pokemon+tcg&post_type=product
-Single page, ~12 products. Static HTML.
+Search URL: /?s=Pokemon+tcg+&post_type=product
+15 pages, ~164 products. Parallel fetch.
 """
+
+import asyncio
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "maginarium"
 BASE = "https://maginarium.pl"
-SEARCH_URL = f"{BASE}/?s=pokemon+tcg&post_type=product"
+SEARCH_URL = f"{BASE}/?s=Pokemon+tcg+&post_type=product"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+MAX_PAGES = 20
 
 EXCLUDE = [
     "sleeves", "koszulk", "playmat", "album", "pro-binder", "toploader",
@@ -19,21 +22,24 @@ EXCLUDE = [
     "naruto", "star wars", "magic the gathering", "flesh & blood",
     "dragon shield", "weiss schwarz", "battle deck", "league battle",
     "v battle", "world championship", "wcs deck", "battle academy",
+    "battle arena", "theme deck",
     "japanese", "japoński", "japońsk", "(jp)", "koreański", "korean",
     "chiński", "chinese", "(chi)", "figurk", "puzzle", "zeszyt",
 ]
 
 
-async def get_products() -> list[dict]:
-    products = []
-
-    async with aiohttp.ClientSession(headers={"User-Agent": UA}) as session:
-        async with session.get(SEARCH_URL, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+async def _fetch(session: aiohttp.ClientSession, url: str) -> str:
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
             if resp.status != 200:
-                print(f"[MAGINARIUM] HTTP {resp.status}")
-                return []
-            html = await resp.text()
+                return ""
+            return await resp.text()
+    except Exception:
+        return ""
 
+
+def _parse_page(html: str, seen: set) -> list[dict]:
+    products = []
     soup = BeautifulSoup(html, "lxml")
     items = soup.select("li.product, li.type-product")
 
@@ -45,8 +51,9 @@ async def get_products() -> list[dict]:
         if not a:
             continue
         url = a.get("href", "")
-        if not url:
+        if not url or url in seen:
             continue
+        seen.add(url)
 
         # Name
         title = item.select_one("h2, h3, .woocommerce-loop-product__title")
@@ -63,9 +70,9 @@ async def get_products() -> list[dict]:
         price_el = item.select_one(".woocommerce-Price-amount")
         price = price_el.get_text(strip=True) if price_el else "brak"
 
-        # Price filter
+        # Price filter <10
         try:
-            pv = float(price.replace("zł", "").replace("\xa0", "").replace(",", ".").replace(" ", "").replace(".", "", price.count(".") - 1) if price.count(".") > 1 else price.replace("zł", "").replace("\xa0", "").replace(",", ".").replace(" ", ""))
+            pv = float(price.replace("zł", "").replace("\xa0", "").replace(",", ".").replace(" ", ""))
             if pv < 10:
                 continue
         except (ValueError, AttributeError):
@@ -93,12 +100,36 @@ async def get_products() -> list[dict]:
             "available": available,
         })
 
+    return products
+
+
+async def get_products() -> list[dict]:
+    products = []
+    seen: set = set()
+
+    async with aiohttp.ClientSession(headers={"User-Agent": UA}) as session:
+        # Fetch all pages in parallel (pagination not visible on page 1)
+        search_params = "?s=Pokemon+tcg+&post_type=product"
+        tasks = []
+        for page in range(1, MAX_PAGES + 1):
+            url = f"{BASE}/page/{page}/{search_params}" if page > 1 else f"{BASE}/{search_params}"
+            tasks.append(_fetch(session, url))
+
+        results = await asyncio.gather(*tasks)
+
+        for html in results:
+            if not html:
+                continue
+            new_products = _parse_page(html, seen)
+            if not new_products:
+                break  # empty page = end of results
+            products.extend(new_products)
+
     print(f"[MAGINARIUM] {len(products)} produktow")
     return products
 
 
 if __name__ == "__main__":
-    import asyncio
     import time
     start = time.time()
     prods = asyncio.run(get_products())
