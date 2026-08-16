@@ -43,12 +43,13 @@
 
 ### Fix: health alert spam (proxy flapping)
 - **Problem**: Alert "ALL PROXIES DEAD" co 2 min mimo że proxy wraca po 1-3 min (normalna fluktuacja mobile)
-- **Fix 1**: Debounce — wymagane 3 consecutive fails (9+ min) zanim ogłosi DOWN
-- **Fix 2**: Timeout curl 5s → 8s connect + 12s max (mobile bywa wolne)
-- **Fix 3**: MIN_ALERT_INTERVAL 300s → 600s (10 min)
-- **Fix 4**: Cron co 2 min → co 3 min
-- **Plik**: `health_alert.py`, crontab
-- **Stan**: */3 cron, debounce=3, state z fail_count polami
+- **Root cause 1**: Tinyproxy na telefonie bindował na 127.0.0.1 — Tailscale direct (100.127.72.24:8888) NIGDY nie działało!
+- **Root cause 2**: Reverse tunnel flap (normal mobile behavior, 3-6 min outages)
+- **Fix tinyproxy**: `Listen 0.0.0.0` + `Allow 100.64.0.0/10` (Tailscale subnet) — teraz 3 ścieżki działają
+- **Fix alert**: Alert TYLKO gdy OBA tunnel+tailscale martwe 15+ min (5 consecutive fails × */3 cron)
+- **Fix cron**: co 2 min → co 3 min
+- **Plik**: `health_alert.py`, crontab, tinyproxy.conf na telefonie
+- **Stan**: 3 working paths (tunnel + tailscale direct + socks5), alert only on real outage
 
 ### Boosterland — weryfikacja
 - **Status**: Działa prawidłowo, 9 produktów z kategorii `pokemon`
@@ -73,18 +74,21 @@
 
 ---
 
-## Stan końcowy: 145 shopów (FAST 115 + SLOW 19 + NODRIVER 10 + ENGINE 1)
+## Stan końcowy: 147 shopów (FAST 115 + SLOW 20 + NODRIVER 11 + ENGINE 1)
 
 ### Nowe/zmienione pliki:
-- `shops/tcgzielona.py` — NOWY
+- `shops/tcgzielona.py` — NOWY (FlareSolverr, SLOW)
+- `shops/morigal.py` — NOWY (FlareSolverr, SLOW)
+- `shops/libristo.py` — NOWY (nodriver, NODRIVER)
 - `shops/mediaexpert.py` — fix URL selector
 - `shops/pokespot.py` — dedup fix
+- `shops/loficards.py` — parallel fetch (48s→2.9s)
 - `detector.py` — NEW_LISTING event
 - `discord_sender.py` — NEW_LISTING + URL-encode + pokespot proxy
-- `health_alert.py` — debounce 3 fails + longer timeouts
-- `main.py` — tcg-zielona w SLOW_SHOPS
-- `RULES.md` — paste.rs workflow
-- `INFRASTRUCTURE.md` — phone roles + topology
+- `health_alert.py` — only alert when ALL proxies dead 15+ min
+- `main.py` — tcg-zielona/morigal w SLOW_SHOPS, libristo w NODRIVER_SHOPS
+- `RULES.md` — paste.rs workflow + scraper building guide
+- `INFRASTRUCTURE.md` — phone roles + topology + tinyproxy fix
 
 ---
 
@@ -106,9 +110,8 @@
 ## TODO następna sesja:
 
 ### Nowe scrapery (z listy usera):
-libristo.pl, plastiq.pl, moriqal.pl, eduksiazka.pl, loficards.pl, dystryktzero,
-kiddin, gralnia.pl, maginarium, monsteriada, abondegames.pl, archivebyx.com,
-xjoy.pl, mepel.pl
+~~libristo.pl~~ ✅, ~~plastiq.pl~~ ✅ (already existed), ~~morigal.pl~~ ✅, ~~loficards.pl~~ ✅ (already existed, fixed)
+Remaining: eduksiazka.pl, dystryktzero, kiddin, gralnia.pl, maginarium, monsteriada, abondegames.pl, archivebyx.com, xjoy.pl, mepel.pl
 
 ### Boty:
 - bookland.pl — autobuy bot (scraper gotowy)

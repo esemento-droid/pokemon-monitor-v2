@@ -225,12 +225,72 @@ Każdy scraper MUSI spełniać WSZYSTKIE poniższe kryteria. Bez wyjątków. Nie
 
 ### PROCESS budowania nowego scrapera:
 
-1. Sprawdź platformę (Shoper, WooCommerce, PrestaShop, Sky-Shop, custom)
-2. Szukaj najszybszego endpointu (API > JSON > HTML > browser)
-3. Napisz scraper z PEŁNYM exclude od startu
-4. Testuj na VPS (nie sandbox — inny IP/proxy/CF)
-5. Wyślij userowi PEŁNĄ listę produktów z cenami do akceptacji
-6. Dopiero po akceptacji → deploy + restart
+1. **Rozpoznanie** (30s):
+   - Sprawdź platformę: view-source, generator meta, URL patterns
+   - Platformy: WooCommerce (`/wp-json/`), Shoper (`/webapi/`, `,id*.html`), PrestaShop, Sky-Shop (`/api/`), Shopify (`/products.json`), osCommerce (`-c-`, `-p-`), IdoSell, RedCart, custom
+   
+2. **Szukaj API** (priorytet!):
+   - WooCommerce: `curl /wp-json/wc/store/v1/products?per_page=1`
+   - Shoper: `curl /webapi/front/products?limit=1`
+   - Shopify: `curl /products.json?limit=1`
+   - Sky-Shop: `curl /api/products?limit=1` (uwaga: może zwrócić stronę z docs)
+   - Szukaj też: GA4 dataLayer, JSON w `<script>` tagach
+
+3. **Test CF/blokady z VPS**:
+   - Direct curl z VPS: jeśli 403 "Just a moment" → CF
+   - Via proxy (127.0.0.1:8888): jeśli też 403 → FlareSolverr
+   - FlareSolverr: jeśli przejdzie → SLOW group
+   - FlareSolverr fail → nodriver (NODRIVER group)
+   - **UWAGA**: sandbox IP ≠ VPS IP! Scraper może działać w sandbox ale fail na VPS!
+
+4. **Parallel fetch** (gdy wiele stron):
+   - ZAWSZE `asyncio.gather()` na stronach zamiast sekwencyjnego loop+sleep
+   - Eliminuje timeouty (7 stron: 48s sequential → 0.3s parallel)
+   - Limit: max 10 concurrent requests per shop
+
+5. **Parsowanie — pułapki**:
+   - Cena 0 / brak ceny → `price = "brak"`, `available = False` (preorder)
+   - Relatywne URL → dodaj BASE_URL prefix
+   - `img alt` może nie zawierać nazwy → fallback na `stripped_strings`, `link title`
+   - Unicode w URL obrazków (é, ó) → `urllib.parse.quote()` w discord_sender
+   - `.href` (absolute) vs `.getAttribute('href')` (relative) w nodriver/JS
+
+6. **Dostępność — jak sprawdzić**:
+   - "koszyk", "dodaj", "add to cart" = available
+   - "niedost", "brak", "wyprzedane", "wycofan" = unavailable
+   - Cena 0 bez buttona "dodaj" = unavailable (preorder)
+   - `is_in_stock` w WooCommerce API
+   - TESTUJ NA LIVE SITE przed deploy!
+
+7. **Obrazki — checklist**:
+   - HTTP HEAD → 200 + image content-type = OK
+   - 403/timeout → dodaj shop do PROXY_SHOPS w discord_sender (weserv.nl)
+   - Unicode w URL → quote() automatycznie (naprawione w discord_sender.py)
+   - `.webp` format → Discord obsługuje, ale hotlink protection może blokować
+
+8. **Deploy flow**:
+   - Test na VPS via paste.rs
+   - Pokaż pełną listę userowi
+   - User akceptuje → git push → pull na VPS → restart
+   - Dodaj do odpowiedniej grupy: FAST (default), SLOW_SHOPS (FlareSolverr), NODRIVER_SHOPS (Chrome)
+
+### Grupy procesów — kiedy co:
+
+| Metoda | Grupa | Dodaj do | Delay |
+|--------|-------|----------|-------|
+| aiohttp (HTTP/API) | FAST | (default, nie dodawaj nigdzie) | 5-15s |
+| FlareSolverr | SLOW | `SLOW_SHOPS` w main.py | 45-120s |
+| nodriver (Chrome) | NODRIVER | `NODRIVER_SHOPS` w main.py | subprocess via runner.py |
+| Shopify /products.json | SLOW | `SHOPIFY_SHOPS` w main.py | 45-120s |
+
+### Lessons learned (sesja 2026-08-16):
+
+- **tcg-zielona**: API endpoint z sandboxa działa, z VPS = CF 403. ZAWSZE testuj na VPS!
+- **libristo**: FlareSolverr nie przechodzi ich CF, tylko nodriver. Sprawdź obie opcje.
+- **morigal**: osCommerce z `data-id`, `data-name`, `data-price` w atrybutach `<a>` — super łatwe parsowanie
+- **pokespot**: brak `seen_ids` = duplikaty (251→112). ZAWSZE dedup.
+- **loficards**: sekwencyjny fetch 7 stron = timeout. Parallel = 0.3s.
+- **mediaexpert**: relatywne href + `getAttribute('href')` → pusty URL. Użyj `.href` w JS.
 
 ### NIE ODPUSZCZAJ:
 
