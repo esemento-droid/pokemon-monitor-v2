@@ -21,13 +21,15 @@ async def get_products():
     seen = set()
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120")
-        await page.goto(SEARCH_URL, wait_until="networkidle", timeout=30000)
-        await page.wait_for_timeout(5000)
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await page.wait_for_timeout(3000)
-        html = await page.content()
-        await browser.close()
+        try:
+            page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120")
+            await page.goto(SEARCH_URL, wait_until="networkidle", timeout=30000)
+            await page.wait_for_timeout(5000)
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(3000)
+            html = await page.content()
+        finally:
+            await browser.close()
     soup = BeautifulSoup(html, "lxml")
     for wrapper in soup.select(".product__content_wrapper"):
         link = wrapper.select_one("a.product__name")

@@ -282,7 +282,7 @@ RUNNER = os.path.join(DIR, "runner.py")
 
 
 async def nodriver_worker(name, logger):
-    """Subprocess worker for Chrome shops."""
+    """Subprocess worker for Chrome shops. Kills ENTIRE process tree on timeout."""
     await asyncio.sleep(random.uniform(5, 30))
     stats = {"ok": 0, "err": 0}
 
@@ -300,8 +300,18 @@ async def nodriver_worker(name, logger):
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT_NODRIVER)
             except asyncio.TimeoutError:
                 logger.warning(f"[{name}] TIMEOUT {TIMEOUT_NODRIVER}s (subprocess)")
+                # Kill ENTIRE process group (catches Chrome children)
                 try:
-                    os.killpg(proc.pid, signal.SIGKILL)
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
+                await asyncio.sleep(2)
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+                try:
+                    proc.kill()
                 except ProcessLookupError:
                     pass
                 await proc.wait()

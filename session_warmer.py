@@ -261,7 +261,7 @@ async def _warm_shoper(shop_url: str, email: str, password: str, proxy: Optional
 
 
 async def warm_all():
-    """Warm all accounts on all shops."""
+    """Warm all accounts on all shops. Hard timeout per account to prevent hangs."""
     from proxy_router import get_playwright_proxy
 
     results = {"ok": 0, "fail": 0}
@@ -295,13 +295,20 @@ async def warm_all():
 
             log.info(f"[{shop_name}] Warming {email}...")
             try:
-                cookies = await warm_fn(shop_url, email, password, proxy)
+                # Hard 60s timeout per account — prevents infinite hangs
+                cookies = await asyncio.wait_for(
+                    warm_fn(shop_url, email, password, proxy),
+                    timeout=60
+                )
                 if cookies:
                     save_cookies(shop_name, email, cookies)
                     results["ok"] += 1
                 else:
                     log.warning(f"[{shop_name}] No cookies for {email}")
                     results["fail"] += 1
+            except asyncio.TimeoutError:
+                log.error(f"[{shop_name}] TIMEOUT warming {email} (60s)")
+                results["fail"] += 1
             except Exception as e:
                 log.error(f"[{shop_name}] Warm error {email}: {e}")
                 results["fail"] += 1

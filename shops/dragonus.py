@@ -33,34 +33,35 @@ async def _do_scrape():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
 
-        async def fetch_page(pg):
-            ctx = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
-            page = await ctx.new_page()
-            url = f"{CAT_URL}/{pg}" if pg > 1 else CAT_URL
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(4)
-                html = await page.content()
-                return html
-            finally:
-                await page.close()
-                await ctx.close()
+        try:
+            async def fetch_page(pg):
+                ctx = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+                page = await ctx.new_page()
+                url = f"{CAT_URL}/{pg}" if pg > 1 else CAT_URL
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    await asyncio.sleep(4)
+                    html = await page.content()
+                    return html
+                finally:
+                    await page.close()
+                    await ctx.close()
 
-        # First page to detect max
-        html1 = await fetch_page(1)
-        max_page = 1
-        for m in re.findall(r'/pl/c/Pokemon/315/(\d+)', html1):
-            pg = int(m)
-            if pg > max_page:
-                max_page = pg
+            # First page to detect max
+            html1 = await fetch_page(1)
+            max_page = 1
+            for m in re.findall(r'/pl/c/Pokemon/315/(\d+)', html1):
+                pg = int(m)
+                if pg > max_page:
+                    max_page = pg
 
-        pages_html = [html1]
-        # Parallel fetch remaining pages
-        if max_page > 1:
-            results = await asyncio.gather(*[fetch_page(pg) for pg in range(2, max_page + 1)])
-            pages_html += results
-
-        await browser.close()
+            pages_html = [html1]
+            # Parallel fetch remaining pages
+            if max_page > 1:
+                results = await asyncio.gather(*[fetch_page(pg) for pg in range(2, max_page + 1)])
+                pages_html += results
+        finally:
+            await browser.close()
 
     for page_html in pages_html:
         soup = BeautifulSoup(page_html, "lxml")
