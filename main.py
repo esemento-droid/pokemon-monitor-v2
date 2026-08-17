@@ -461,12 +461,25 @@ def main():
         return
 
     # Split into categories
+    # Priority: module.SHOP_GROUP attribute > hardcoded sets (legacy)
+    # SHOP_GROUP values: "NODRIVER", "SLOW", "VERY_SLOW", "SHOPIFY", "FAST" (default)
     fast_shops = []
     slow_shops = []
     nodriver_names = []
 
     for name, module in all_shops:
-        if name in NODRIVER_SHOPS:
+        # New: check module-level SHOP_GROUP (auto-classification)
+        group = getattr(module, "SHOP_GROUP", None)
+        if group:
+            group = group.upper()
+            if group == "NODRIVER":
+                nodriver_names.append(name)
+            elif group in ("SLOW", "VERY_SLOW", "SHOPIFY"):
+                slow_shops.append((name, module))
+            else:
+                fast_shops.append((name, module))
+        # Legacy: hardcoded sets (backward compatible)
+        elif name in NODRIVER_SHOPS:
             nodriver_names.append(name)
         elif name in ALL_SLOW:
             slow_shops.append((name, module))
