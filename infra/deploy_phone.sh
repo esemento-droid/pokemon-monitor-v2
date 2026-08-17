@@ -38,7 +38,7 @@ DefaultErrorFile "/data/data/com.termux/files/usr/share/tinyproxy/default.html"
 StatFile "/data/data/com.termux/files/usr/share/tinyproxy/stats.html"
 LogLevel Warning
 LogFile "/data/data/com.termux/files/home/logs/tinyproxy.log"
-MaxClients 50
+MaxClients 200
 ViaProxyName "tinyproxy"
 ConnectPort 443
 ConnectPort 563
