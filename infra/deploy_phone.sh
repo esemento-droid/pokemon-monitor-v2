@@ -92,10 +92,19 @@ export PATH="/data/data/com.termux/files/usr/bin:$PATH"
 export HOME="/data/data/com.termux/files/home"
 LOG="$HOME/logs/ip_rotation.log"
 VPS_HOST="debian@146.59.45.228"
+KNOWN_STATIC_IP="37.47.128.183"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"; }
 
 OLD_IP=$(curl -s --connect-timeout 10 ifconfig.me 2>/dev/null || echo "unknown")
+
+# Skip if Orange PL static IP (airplane mode won't change it)
+# Remove this check after swapping to dynamic SIM (Play/T-Mobile)
+if [ "$OLD_IP" = "$KNOWN_STATIC_IP" ] && [ "$1" != "--force" ]; then
+    log "ROTATION SKIPPED — Orange PL static IP ($OLD_IP). Swap SIM or use --force."
+    exit 0
+fi
+
 log "ROTATE START - old IP: $OLD_IP"
 
 pkill autossh 2>/dev/null

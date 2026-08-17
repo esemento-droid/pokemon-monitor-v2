@@ -17,6 +17,7 @@ Usage:
 import subprocess
 import time
 import logging
+from pathlib import Path
 from typing import Optional, Dict, Tuple
 
 log = logging.getLogger("proxy_router")
@@ -36,10 +37,10 @@ PROXIES = {
         "description": "Mobile IP via Tailscale direct",
     },
     "mobile_socks": {
-        "url": "socks5://127.0.0.1:1080",
+        "url": "socks5h://127.0.0.1:1080",
         "type": "socks5",
         "residential": True,
-        "description": "Mobile IP via SOCKS5 (SSH dynamic)",
+        "description": "Mobile IP via SOCKS5 (SSH dynamic, socks5h = DNS via proxy)",
     },
     "direct": {
         "url": None,
@@ -92,8 +93,10 @@ def check_proxy_health(proxy_name: str) -> bool:
     proxy_url = proxy_info["url"]
     try:
         if proxy_info["type"] == "socks5":
+            # Strip socks5:// or socks5h:// prefix for curl --socks5-hostname
+            socks_addr = proxy_url.replace("socks5h://", "").replace("socks5://", "")
             cmd = [
-                "curl", "--socks5-hostname", proxy_url.replace("socks5://", ""),
+                "curl", "--socks5-hostname", socks_addr,
                 "-s", "-o", "/dev/null", "-w", "%{http_code}",
                 "--connect-timeout", "4", "https://www.google.com",
             ]
@@ -161,11 +164,18 @@ def get_playwright_proxy(shop: str = "", account_email: str = "") -> Optional[Di
     """
     Get proxy in Playwright format. Returns None for direct (no proxy).
     Usage: browser = await p.chromium.launch(proxy=get_playwright_proxy(...))
+    NOTE: Chromium resolves DNS through SOCKS5 proxy by default,
+          so socks5h:// is converted to socks5:// for Playwright compatibility.
     """
     proxy = get_proxy(shop, account_email)
     if not proxy or proxy["type"] in ("direct", "flaresolverr") or proxy["server"] is None:
         return None
-    return {"server": proxy["server"]}
+    server = proxy["server"]
+    # Playwright/Chromium doesn't understand socks5h:// scheme but resolves DNS
+    # through SOCKS5 proxy by default — convert for compatibility
+    if server.startswith("socks5h://"):
+        server = server.replace("socks5h://", "socks5://", 1)
+    return {"server": server}
 
 
 def invalidate_proxy(proxy_name: str):
@@ -175,7 +185,22 @@ def invalidate_proxy(proxy_name: str):
 
 
 def request_ip_rotation():
-    """Trigger IP rotation on mobile phone (async, non-blocking)."""
+    """Trigger IP rotation on mobile phone (async, non-blocking).
+    NOTE: With Orange PL static IP, the script will self-skip (no disruption).
+    After SIM swap to dynamic IP, this will work normally.
+    """
+    # Check if rotation would be skipped (static IP)
+    known_static = "37.47.128.183"
+    try:
+        ip_file = Path("/opt/pokemon-monitor-v2/mobile_proxy_ip.txt")
+        current_ip = ip_file.read_text().strip() if ip_file.exists() else ""
+    except Exception:
+        current_ip = ""
+
+    if current_ip == known_static:
+        log.info("IP rotation skipped — Orange PL static IP (no point disrupting connectivity)")
+        return
+
     try:
         subprocess.Popen(
             ["/opt/pokemon-monitor-v2/rotate_mobile_ip.sh"],
