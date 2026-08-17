@@ -55,21 +55,27 @@ VPS_HOST="debian@146.59.45.228"
 
 termux-wake-lock 2>/dev/null
 
-# Tinyproxy
+# Tinyproxy — restart if dead
 if ! pgrep -x tinyproxy >/dev/null 2>&1; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') TINYPROXY DEAD" >> "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') TINYPROXY DEAD - restarting" >> "$LOG"
     tinyproxy -c $PREFIX/etc/tinyproxy/tinyproxy.conf 2>/dev/null || tinyproxy 2>/dev/null
+    sleep 1
+    pgrep -x tinyproxy >/dev/null && echo "$(date '+%Y-%m-%d %H:%M:%S') TINYPROXY RESTORED" >> "$LOG"
 fi
 
-# Autossh
+# Autossh — restart ONLY if process dead (NOT if tunnel flaps)
+# VPS-side proxy_watchdog.sh handles tunnel repair from the other end
 if ! pgrep -x autossh >/dev/null 2>&1; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') AUTOSSH DEAD" >> "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') AUTOSSH DEAD - restarting" >> "$LOG"
     pkill -f "ssh.*8888" 2>/dev/null
-    sleep 1
+    sleep 2
     autossh -M 0 -f -N \
         -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" \
         -o "ExitOnForwardFailure=yes" -o "StrictHostKeyChecking=no" \
         -R 8888:127.0.0.1:8888 -R 2222:127.0.0.1:8022 $VPS_HOST 2>> "$LOG"
+    sleep 2
+    pgrep -x autossh >/dev/null && echo "$(date '+%Y-%m-%d %H:%M:%S') AUTOSSH RESTORED" >> "$LOG" \
+        || echo "$(date '+%Y-%m-%d %H:%M:%S') AUTOSSH FAILED TO START" >> "$LOG"
 fi
 
 # On-demand rotation trigger
@@ -78,7 +84,7 @@ if [ -f "$HOME/.rotate_ip_now" ]; then
     $HOME/bin/rotate_ip.sh &
 fi
 
-# Log rotation
+# Log rotation (keep last 500 lines)
 if [ -f "$LOG" ] && [ $(wc -l < "$LOG" 2>/dev/null || echo 0) -gt 2000 ]; then
     tail -500 "$LOG" > "${LOG}.tmp" && mv "${LOG}.tmp" "$LOG"
 fi
