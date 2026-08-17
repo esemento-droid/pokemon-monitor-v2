@@ -61,8 +61,8 @@ VERY_SLOW_SHOPS = {
 # All non-fast shops (go to SLOW process)
 ALL_SLOW = SLOW_SHOPS | VERY_SLOW_SHOPS | SHOPIFY_SHOPS
 
-TIMEOUT_NODRIVER = 300
-TIMEOUT_SLOW = 180
+TIMEOUT_NODRIVER = 120
+TIMEOUT_SLOW = 120
 TIMEOUT_DEFAULT = 60
 
 # ============================================================
@@ -249,16 +249,20 @@ def _get_delay(name, stats, error=False, scan_time=0.0):
         return random.randint(5, 10)
 
     if name in VERY_SLOW_SHOPS:
-        base = random.randint(60, 120)
-    elif name in SLOW_SHOPS:
         base = random.randint(45, 90)
+    elif name in SLOW_SHOPS:
+        base = random.randint(30, 60)
     elif name in SHOPIFY_SHOPS:
         base = random.randint(180, 300)
     else:
         base = random.randint(CHECK_MIN, CHECK_MAX)
 
-    if scan_time > base:
-        return int(scan_time * 1.2)
+    # If scan was fast, don't penalize with long delay
+    # If scan was slow, give proportional rest (50% of scan time)
+    if scan_time > 0:
+        min_rest = max(10, int(scan_time * 0.3))
+        if min_rest < base:
+            return min_rest
     return base
 
 
@@ -284,7 +288,7 @@ RUNNER = os.path.join(DIR, "runner.py")
 async def nodriver_worker(name, logger):
     """Subprocess worker for Chrome shops. Kills ENTIRE process tree on timeout."""
     await asyncio.sleep(random.uniform(5, 30))
-    stats = {"ok": 0, "err": 0}
+    stats = {"ok": 0, "err": 0, "consecutive_err": 0}
 
     while True:
         start = datetime.now()
@@ -316,7 +320,18 @@ async def nodriver_worker(name, logger):
                     pass
                 await proc.wait()
                 stats["err"] += 1
-                await asyncio.sleep(_get_delay(name, stats, error=True))
+                stats["consecutive_err"] += 1
+
+                # Progressive cooldown for dead shops
+                consec = stats["consecutive_err"]
+                if consec >= 10:
+                    logger.warning(f"[{name}] 10+ timeouts — cooldown 30min")
+                    await asyncio.sleep(1800)
+                elif consec >= 5:
+                    logger.warning(f"[{name}] 5+ timeouts — cooldown 10min")
+                    await asyncio.sleep(600)
+                else:
+                    await asyncio.sleep(random.randint(30, 60))
                 continue
 
             output = stdout.decode().strip()
@@ -329,17 +344,26 @@ async def nodriver_worker(name, logger):
                 err_msg = stderr.decode().strip()[-200:] if stderr else "unknown"
                 logger.error(f"[{name}] EXIT {proc.returncode}: {err_msg}")
                 stats["err"] += 1
+                stats["consecutive_err"] += 1
             else:
                 stats["ok"] += 1
                 stats["err"] = 0
+                stats["consecutive_err"] = 0
 
         except asyncio.CancelledError:
             return
         except Exception as e:
             logger.error(f"[{name}] SUBPROCESS ERROR: {e}")
             stats["err"] += 1
+            stats["consecutive_err"] += 1
 
-        delay = random.randint(90, 180) if stats["err"] == 0 else random.randint(60, 120)
+        # Fast cycle for healthy shops, slower for erroring ones
+        if stats["consecutive_err"] == 0:
+            delay = random.randint(30, 60)  # Healthy: 30-60s between scans
+        elif stats["consecutive_err"] < 5:
+            delay = random.randint(60, 120)  # Some errors: back off
+        else:
+            delay = random.randint(300, 600)  # Many errors: heavy backoff
         await asyncio.sleep(delay)
 
 
