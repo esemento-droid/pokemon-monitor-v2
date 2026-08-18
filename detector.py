@@ -54,14 +54,14 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                         await log_event(shop_name, "NEW_PRODUCT", pid, product.get("name"),
                                         product.get("price"), product.get("url"))
                         check_smyk_autobuy(shop_name, "NEW_PRODUCT", product)
-                        # check_kartexpol_trigger("NEW_PRODUCT", product)  # DISABLED — only empik/smyk/japan active
-                        # check_tantis_trigger("NEW_PRODUCT", product)  # DISABLED
+                        check_kartexpol_trigger("NEW_PRODUCT", product)
+                        check_tantis_trigger("NEW_PRODUCT", product)
                         check_empik_trigger("NEW_PRODUCT", product)
-                        # check_strefatcg_trigger("NEW_PRODUCT", product)  # DISABLED
+                        # check_strefatcg_trigger("NEW_PRODUCT", product)  # DISABLED — bought at 1750 when max 1510
                         check_japancollectibles_trigger("NEW_PRODUCT", product)
                         check_jc_30th_trigger("NEW_PRODUCT", product)
-                        # check_tcgumisia_trigger("NEW_PRODUCT", product)  # DISABLED
-                        # check_mediaexpert_trigger("NEW_PRODUCT", product)  # DISABLED
+                        # check_tcgumisia_trigger("NEW_PRODUCT", product)  # PAUSED since 2026-08-13
+                        check_mediaexpert_trigger("NEW_PRODUCT", product)
                         restock_detected = True
                     else:
                         # New product but unavailable (preorder/upcoming) — notify for bot preparation
@@ -101,14 +101,14 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                     await log_price_change(shop_name, pid, product.get("name", ""),
                                            old_price, new_price)
                     check_smyk_autobuy(shop_name, "PRICE_CHANGE", product)
-                    # check_kartexpol_trigger("PRICE_CHANGE", product)  # DISABLED
-                    # check_tantis_trigger("PRICE_CHANGE", product)  # DISABLED
+                    check_kartexpol_trigger("PRICE_CHANGE", product)
+                    check_tantis_trigger("PRICE_CHANGE", product)
                     check_empik_trigger("PRICE_CHANGE", product)
                     # check_strefatcg_trigger("PRICE_CHANGE", product)  # DISABLED
                     check_japancollectibles_trigger("PRICE_CHANGE", product)
                     check_jc_30th_trigger("PRICE_CHANGE", product)
-                    # check_tcgumisia_trigger("PRICE_CHANGE", product)  # DISABLED
-                    # check_mediaexpert_trigger("PRICE_CHANGE", product)  # DISABLED
+                    # check_tcgumisia_trigger("PRICE_CHANGE", product)  # PAUSED
+                    check_mediaexpert_trigger("PRICE_CHANGE", product)
 
             # Zmiana dostepnosci
             old_available = old.get("available", False)
@@ -131,14 +131,14 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                 await record_restock(shop_name)
                 restock_detected = True
                 check_smyk_autobuy(shop_name, "RESTOCK", product)
-                # check_kartexpol_trigger("RESTOCK", product)  # DISABLED
-                # check_tantis_trigger("RESTOCK", product)  # DISABLED
+                check_kartexpol_trigger("RESTOCK", product)
+                check_tantis_trigger("RESTOCK", product)
                 check_empik_trigger("RESTOCK", product)
                 # check_strefatcg_trigger("RESTOCK", product)  # DISABLED
                 check_japancollectibles_trigger("RESTOCK", product)
                 check_jc_30th_trigger("RESTOCK", product)
-                # check_tcgumisia_trigger("RESTOCK", product)  # DISABLED
-                # check_mediaexpert_trigger("RESTOCK", product)  # DISABLED
+                # check_tcgumisia_trigger("RESTOCK", product)  # PAUSED
+                check_mediaexpert_trigger("RESTOCK", product)
             elif sold_out:
                 new_p = str(product.get("price", "")).strip().lower()
                 if new_p not in ("brak", "none", ""):
@@ -161,9 +161,9 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
             except Exception:
                 pass
 
-    # flush_kartexpol_batch()  # DISABLED
-    # flush_tantis_batch()  # DISABLED
+    flush_kartexpol_batch()
+    flush_tantis_batch()
     flush_jc_30th_batch()
-    # flush_tcgumisia_batch()  # DISABLED
+    # flush_tcgumisia_batch()  # PAUSED
     # flush_strefatcg_batch()  # DISABLED
     return is_first
