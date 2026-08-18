@@ -65,18 +65,36 @@ async def get_products():
     # Step 1: Playwright to pass Anubis and get cookies
     cookies_dict = {}
     first_html = ""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        try:
-            page = await browser.new_page(user_agent=UA)
-            await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=90000)
-            await page.wait_for_selector("a.product-thumbnail", timeout=90000)
-            first_html = await page.content()
-            cookies = await page.context.cookies()
-            for c in cookies:
-                cookies_dict[c["name"]] = c["value"]
-        finally:
-            await browser.close()
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(user_agent=UA)
+                await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
+                # Wait for Anubis challenge to resolve (shorter timeout)
+                try:
+                    await page.wait_for_selector("a.product-thumbnail", timeout=30000)
+                except Exception:
+                    # Anubis may redirect or show challenge — try waiting longer
+                    await asyncio.sleep(5)
+                    # Check if we got products anyway
+                    content = await page.content()
+                    if "tc-product-tile-data" not in content:
+                        print("[RGFK] Anubis challenge not resolved")
+                        return []
+                first_html = await page.content()
+                cookies = await page.context.cookies()
+                for c in cookies:
+                    cookies_dict[c["name"]] = c["value"]
+            finally:
+                await browser.close()
+    except Exception as e:
+        print(f"[RGFK] Browser error: {e}")
+        return []
+
+    if not first_html or "tc-product-tile-data" not in first_html:
+        print("[RGFK] No product data in page")
+        return []
     # Parse page 1
     page_prods = parse_page(first_html)
     for pr in page_prods:

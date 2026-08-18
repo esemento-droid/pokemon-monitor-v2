@@ -23,11 +23,14 @@ EXCLUDE = [
 ]
 
 async def fetch_page(session, url):
-    async with session.get(url, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-        if resp.status != 200:
-            return ""
-        raw = await resp.read()
-        return raw.decode("windows-1250", errors="ignore")
+    try:
+        async with session.get(url, allow_redirects=True, proxy="http://127.0.0.1:8888", timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            if resp.status != 200:
+                return ""
+            raw = await resp.read()
+            return raw.decode("windows-1250", errors="ignore")
+    except Exception:
+        return ""
 
 def parse_products(html, seen_ids):
     products = []
@@ -89,6 +92,8 @@ def parse_products(html, seen_ids):
 async def get_products():
     products = []
     seen_ids = set()
+    # Use mobile proxy to avoid rate-limit on VPS IP
+    proxy = "http://127.0.0.1:8888"
     async with aiohttp.ClientSession(headers=HEADERS) as session:
         # Fetch pages sequentially to avoid rate-limit
         for pg in range(1, 4):
@@ -98,9 +103,9 @@ async def get_products():
                     print('[AM76] Rate-limited, stopping')
                     break
                 products.extend(parse_products(html, seen_ids))
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
         # Also fetch preorder page
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         pre_html = await fetch_page(session, PREORDER_URL)
         if pre_html:
             products.extend(parse_products(pre_html, seen_ids))
