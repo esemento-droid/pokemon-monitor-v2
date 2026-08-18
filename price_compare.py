@@ -223,13 +223,15 @@ def _normalize_name(name):
 
 
 def match_set_number(product_name, sitemap):
-    """Fuzzy match product name against sitemap slugs. Returns set number or None."""
+    """Fuzzy match product name against sitemap slugs.
+    Returns set number (best match) or None.
+    If ambiguous (multiple candidates same score) → returns list of up to 3 candidates.
+    """
     name_words = _normalize_name(product_name)
     if not name_words:
         return None
-    best_num = None
-    best_score = 0
-    best_coverage = 0.0
+    
+    candidates = []  # [(score, coverage, num)]
     for num, slug in sitemap.items():
         slug_words = set(slug.split('-')) - STOP_WORDS
         slug_words = {w for w in slug_words if len(w) > 1}
@@ -237,23 +239,36 @@ def match_set_number(product_name, sitemap):
             continue
         common = name_words & slug_words
         score = len(common)
+        if score == 0:
+            continue
         coverage = score / len(name_words) if name_words else 0
-        # Better score wins. Tiebreaker: higher coverage, then lower set number (older = more likely on outlet)
-        if score > best_score or (score == best_score and coverage > best_coverage) or \
-           (score == best_score and coverage == best_coverage and best_num and num < best_num):
-            best_score = score
-            best_num = num
-            best_coverage = coverage
-    # Require: 2+ matching words AND at least 40% of product name words matched
-    if best_score >= 2 and best_coverage >= 0.4:
-        return best_num
-    # Single long unique word (8+ chars) — still OK (e.g. "koenigsegg", "chrysanthemum")
-    if best_score == 1 and best_coverage >= 0.3:
-        matching_words = name_words & set(sitemap.get(best_num, '').split('-'))
-        for w in matching_words:
-            if len(w) >= 8:
-                return best_num
-    return None
+        candidates.append((score, coverage, num))
+
+    if not candidates:
+        return None
+
+    # Sort: best score first, then coverage, then lower number
+    candidates.sort(key=lambda x: (-x[0], -x[1], x[2]))
+    best_score = candidates[0][0]
+    best_coverage = candidates[0][1]
+
+    # Filter to only best-scoring candidates
+    top = [(s, c, n) for s, c, n in candidates if s == best_score]
+
+    # Require minimum: score>=1 AND coverage>=30%
+    if best_score < 1 or best_coverage < 0.3:
+        return None
+
+    # Single clear winner
+    if len(top) == 1:
+        return top[0][2]
+
+    # Multiple candidates with same score — check if clearly one is better (higher coverage)
+    if top[0][1] > top[1][1] + 0.1:
+        return top[0][2]
+
+    # Ambiguous — return top 3 as list (caller handles multi-match)
+    return [n for _, _, n in top[:3]]
 
 
 async def _fetch_klockoradar_price(session, set_number):

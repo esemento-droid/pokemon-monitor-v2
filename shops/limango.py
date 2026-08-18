@@ -278,7 +278,7 @@ async def get_products():
                     return None
 
                 # Match set numbers first
-                product_sets = []  # [(product, set_num, price_val)]
+                product_sets = []  # [(product, set_nums, price_val)] — set_nums can be str or list
                 for p in available_products:
                     price_val = 0
                     if p['price']:
@@ -303,7 +303,15 @@ async def get_products():
                             await asyncio.sleep(0.2)
                             return result
 
-                    unique_sets = list(set(sn for _, sn, _ in product_sets))
+                    # Collect all unique set numbers (flatten lists)
+                    all_set_nums = set()
+                    for _, set_num, _ in product_sets:
+                        if isinstance(set_num, list):
+                            all_set_nums.update(set_num)
+                        else:
+                            all_set_nums.add(set_num)
+
+                    unique_sets = list(all_set_nums)
                     async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
                         tasks = [_bounded_fetch(session, sn) for sn in unique_sets]
                         results = await asyncio.gather(*tasks)
@@ -314,49 +322,56 @@ async def get_products():
                         if result:
                             price_map[sn] = result
 
-                    # Apply to products (with name verification)
+                    # Apply to products
                     for p, set_num, price_val in product_sets:
-                        kr_data = price_map.get(set_num)
-                        if not kr_data:
-                            continue
+                        # Single match
+                        if isinstance(set_num, str):
+                            kr_data = price_map.get(set_num)
+                            if not kr_data:
+                                continue
+                            lowest = kr_data["lowest_price"]
+                            diff = price_val - lowest
+                            pct = (diff / lowest) * 100 if lowest > 0 else 0
+                            comp = {
+                                "set_number": set_num,
+                                "lowest_price": lowest,
+                                "shop": kr_data.get("shop", ""),
+                                "difference": round(diff, 2),
+                                "percentage": round(pct, 1),
+                                "is_cheaper": diff < 0,
+                            }
+                            p['price_compare'] = _fmt(comp)
+                            p['set_number'] = set_num
+                            p['promoklocki_url'] = f"{PROMOKLOCKI_BASE}/{set_num}"
+                            p['klockoradar_url'] = kr_data.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}")
+                            matched_count += 1
 
-                        # Verify: check that klockoradar product name matches our product
-                        # Key: if klockoradar name has words NOT in our product → likely wrong match
-                        kr_name = kr_data.get("kr_name", "").lower()
-                        p_name_lower = re.sub(r'[^a-z0-9\s]', ' ', p['name'].lower())
-                        p_name_words = set(p_name_lower.split()) - {"lego", "the", "and", "with", "in", "of", "for", "r", "od", "lat"}
-                        p_name_words = {w for w in p_name_words if len(w) > 2}
-
-                        if kr_name and p_name_words:
-                            kr_name_clean = re.sub(r'[^a-z0-9\s]', ' ', kr_name)
-                            kr_words = set(kr_name_clean.split()) - {"lego", "the", "and", "with", "in", "of", "for"}
-                            kr_words = {w for w in kr_words if len(w) > 2}
-                            # Check: significant words from klockoradar name should be in product name
-                            # If klockoradar has extra distinguishing words (like "pink") not in our name → wrong set
-                            if kr_words:
-                                extra_words = kr_words - p_name_words
-                                # Allow 1 extra word (e.g. "exotic" not in limango name is OK)
-                                # But 2+ extra distinguishing words = likely wrong match
-                                distinguishing = {w for w in extra_words if len(w) > 3 and w not in {"exotic", "super", "mega", "ultra", "classic", "city", "friends"}}
-                                if len(distinguishing) >= 2:
-                                    continue  # Too many unmatched words — wrong set
-
-                        lowest = kr_data["lowest_price"]
-                        diff = price_val - lowest
-                        pct = (diff / lowest) * 100 if lowest > 0 else 0
-                        comp = {
-                            "set_number": set_num,
-                            "lowest_price": lowest,
-                            "shop": kr_data.get("shop", ""),
-                            "difference": round(diff, 2),
-                            "percentage": round(pct, 1),
-                            "is_cheaper": diff < 0,
-                        }
-                        p['price_compare'] = _fmt(comp)
-                        p['set_number'] = set_num
-                        p['promoklocki_url'] = f"{PROMOKLOCKI_BASE}/{set_num}"
-                        p['klockoradar_url'] = kr_data.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}")
-                        matched_count += 1
+                        # Multi match (ambiguous) — show all candidates
+                        elif isinstance(set_num, list):
+                            lines = []
+                            first_set = None
+                            for sn in set_num:
+                                kr_data = price_map.get(sn)
+                                if not kr_data:
+                                    continue
+                                if not first_set:
+                                    first_set = sn
+                                lowest = kr_data["lowest_price"]
+                                diff = price_val - lowest
+                                kr_name = kr_data.get("kr_name", f"Set #{sn}")
+                                shop = kr_data.get("shop", "")
+                                if diff > 0:
+                                    lines.append(f"**#{sn}** {kr_name}: {lowest:.2f} zł ({shop}) — drożej o {diff:.2f} zł")
+                                elif diff < 0:
+                                    lines.append(f"**#{sn}** {kr_name}: {lowest:.2f} zł ({shop}) — TANIEJ o {abs(diff):.2f} zł")
+                                else:
+                                    lines.append(f"**#{sn}** {kr_name}: {lowest:.2f} zł ({shop}) — taka sama")
+                            if lines:
+                                p['price_compare'] = "⚠️ Kilka pasujących setów:\n" + "\n".join(lines)
+                                p['set_number'] = first_set
+                                p['promoklocki_url'] = f"{PROMOKLOCKI_BASE}/{first_set}"
+                                p['klockoradar_url'] = f"https://klockoradar.pl/sets/{first_set}"
+                                matched_count += 1
 
                     if matched_count:
                         print(f"[LIMANGO] Price matched: {matched_count}/{len(available_products)} available products")
