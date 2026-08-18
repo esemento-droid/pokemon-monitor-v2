@@ -215,19 +215,23 @@ async def get_products():
     if products:
         try:
             from price_cache import get_cached_price
-            from price_compare import _load_sitemap, match_set_number, format_price_comparison as _fmt, PROMOKLOCKI_BASE, HEADERS as PC_HEADERS
+            from price_compare import match_set_number, format_price_comparison as _fmt, PROMOKLOCKI_BASE
 
-            # Load klockoradar sitemap for name→number matching
-            sitemap = None
+            # Load sitemap from DISK CACHE (built by price_cache.py every 4h)
+            # Falls back to empty dict if file not found (no network fetch during scan!)
+            sitemap = {}
+            sitemap_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "sitemap_cache.json")
             try:
-                async with aiohttp.ClientSession(headers=PC_HEADERS) as pc_session:
-                    sitemap = await _load_sitemap(pc_session)
-                if sitemap:
-                    print(f"[LIMANGO] Sitemap loaded: {len(sitemap)} sets")
+                import os as _os
+                if _os.path.exists(sitemap_cache_file):
+                    with open(sitemap_cache_file, "r") as f:
+                        sitemap = json.load(f)
+                    if sitemap:
+                        print(f"[LIMANGO] Sitemap from cache: {len(sitemap)} sets")
                 else:
-                    print("[LIMANGO] WARNING: Sitemap empty!")
+                    print("[LIMANGO] WARNING: No sitemap_cache.json — run price_cache.py first")
             except Exception as e:
-                print(f"[LIMANGO] Sitemap load failed: {e}")
+                print(f"[LIMANGO] Sitemap cache read error: {e}")
 
             matched_count = 0
             for p in products:

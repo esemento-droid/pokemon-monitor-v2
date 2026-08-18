@@ -111,7 +111,12 @@ def load_shops():
 
 async def shop_worker(name, module, logger, process_type):
     """Independent async worker for one shop."""
-    await asyncio.sleep(random.uniform(0, 30))
+    # Staggered startup: SLOW shops spread over 120s (prevents FS thundering herd)
+    # FAST shops spread over 30s (lightweight HTTP, no issue)
+    if name in SLOW_SHOPS or name in VERY_SLOW_SHOPS:
+        await asyncio.sleep(random.uniform(5, 120))
+    else:
+        await asyncio.sleep(random.uniform(0, 30))
 
     stats = {"ok": 0, "err": 0, "consecutive_err": 0, "turbo": False, "cooldown_until": 0}
     _shutdown = False

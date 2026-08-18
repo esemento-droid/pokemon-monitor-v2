@@ -175,6 +175,15 @@ async def refresh_cache():
         log.warning("No set numbers to refresh!")
         return
 
+    # Save sitemap cache to disk (limango reads from file, not network)
+    if sitemap:
+        sitemap_cache_file = Path("/opt/pokemon-monitor-v2/data/sitemap_cache.json")
+        try:
+            sitemap_cache_file.write_text(json.dumps(sitemap, ensure_ascii=False))
+            log.info(f"Sitemap cache saved: {len(sitemap)} sets -> {sitemap_cache_file}")
+        except Exception as e:
+            log.warning(f"Sitemap cache save failed: {e}")
+
     log.info(f"Refreshing prices for {len(set_numbers)} sets")
 
     # Create FlareSolverr session (reuse = faster)
