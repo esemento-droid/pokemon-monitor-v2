@@ -142,6 +142,12 @@ else
         name = ""
         for (i = 1; i <= n; i++) {
             sub(/\].*/, "", parts[i])
+            # Handle ENGINE:shopname format
+            if (parts[i] ~ /^ENGINE:/) {
+                sub(/^ENGINE:/, "", parts[i])
+                name = parts[i]
+                break
+            }
             if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG|BROWSER_MGR|CF_SOLVER|MAIN)$/ && parts[i] ~ /^[a-zA-Z]/ && parts[i] ~ /[a-z]/) {
                 name = parts[i]
             }
@@ -153,6 +159,7 @@ else
         n = split(line, parts, "[")
         for (i = 1; i <= n; i++) {
             sub(/\].*/, "", parts[i])
+            if (parts[i] ~ /^ENGINE:/) return "ENGINE"
             if (parts[i] == "FAST" || parts[i] == "SLOW" || parts[i] == "NODRIVER" || parts[i] == "ENGINE") {
                 return parts[i]
             }

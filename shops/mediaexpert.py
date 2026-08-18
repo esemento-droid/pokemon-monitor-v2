@@ -20,6 +20,7 @@ if not os.environ.get("DISPLAY"):
 log = logging.getLogger("monitor")
 
 BROWSER_TYPE = "stealth"
+SCAN_TIMEOUT = 180  # mediaexpert needs CF wait + 2 search URLs + scrolls = easily 130-150s
 
 SEARCH_URLS = [
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+tcg",

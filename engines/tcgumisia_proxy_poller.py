@@ -30,7 +30,7 @@ PREORDER_URL = f"{BASE_URL}/pre-order"
 PROXY = "http://127.0.0.1:8888"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-POLL_INTERVAL = 10  # seconds
+POLL_INTERVAL = 20  # seconds (was 10 — tcgumisia rate limits mobile IP)
 POW_REFRESH = 1800  # re-solve PoW every 30 min
 ERROR_BACKOFF = 30  # seconds on error
 
@@ -177,20 +177,33 @@ async def get_products():
         if not ok:
             return []
 
-        # Fetch pre-order page
-        try:
-            async with session.get(
-                PREORDER_URL, proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=15)
-            ) as resp:
-                if resp.status == 429:
-                    logger.warning("[tcgumisia-proxy] 429 on pre-order (proxy)")
-                    return []
-                if resp.status != 200:
-                    return []
-                html = await resp.text()
-        except Exception as e:
-            logger.error(f"[tcgumisia-proxy] Fetch error: {e}")
+        # Fetch pre-order page (with retry on connection reset)
+        html = None
+        for attempt in range(3):
+            try:
+                async with session.get(
+                    PREORDER_URL, proxy=PROXY,
+                    timeout=aiohttp.ClientTimeout(total=20)
+                ) as resp:
+                    if resp.status == 429:
+                        logger.warning("[tcgumisia-proxy] 429 on pre-order (proxy)")
+                        return []
+                    if resp.status != 200:
+                        return []
+                    html = await resp.text()
+                break  # Success
+            except (aiohttp.ServerDisconnectedError, aiohttp.ClientOSError, ConnectionResetError) as e:
+                if attempt < 2:
+                    logger.warning(f"[tcgumisia-proxy] Connection error (attempt {attempt+1}/3): {e}")
+                    await asyncio.sleep(3 * (attempt + 1))
+                    continue
+                logger.error(f"[tcgumisia-proxy] Connection failed after 3 attempts: {e}")
+                return []
+            except Exception as e:
+                logger.error(f"[tcgumisia-proxy] Fetch error: {e}")
+                return []
+
+        if not html:
             return []
 
     products = parse_products(html)

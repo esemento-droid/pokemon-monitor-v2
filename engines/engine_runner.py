@@ -45,7 +45,7 @@ logger = logging.getLogger("monitor")
 # Each entry: (module_path, shop_name, poll_interval_seconds)
 ENGINES = [
     # ("engines.tcgumisia_api", "tcgumisia", 3),  # DISABLED — causes 429 spam (same IP as scraper)
-    ("engines.tcgumisia_proxy_poller", "tcgumisia", 10),  # Pre-order via mobile proxy, 10s interval
+    ("engines.tcgumisia_proxy_poller", "tcgumisia", 20),  # Pre-order via mobile proxy, 20s interval (was 10 — rate limited)
     # ("engines.strefatcg_api", "strefatcg", 3),  # DISABLED — old BS4 scraper only
     # Add more engines here as they're built:
     # ("engines.kartexpol_api", "kartexpol", 5),
@@ -127,18 +127,17 @@ async def engine_worker(module_name: str, shop_name: str, poll_interval: int):
 
             if stats["ok"] % 20 == 0:  # Log every 20th successful poll
                 logger.info(
-                    f"[ENGINE:{shop_name}] {len(products)} products in {scan_time:.1f}s "
-                    f"(cycle #{stats['ok']})"
+                    f"[{shop_name}] {len(products)} produktow w {scan_time:.1f}s"
                 )
 
         except asyncio.TimeoutError:
-            logger.warning(f"[ENGINE:{shop_name}] Timeout")
+            logger.warning(f"[{shop_name}] Timeout")
             stats["consecutive_err"] += 1
         except asyncio.CancelledError:
             logger.info(f"[ENGINE:{shop_name}] Cancelled, shutting down")
             return
         except Exception as e:
-            logger.error(f"[ENGINE:{shop_name}] ERROR: {e}")
+            logger.error(f"[{shop_name}] ERROR: {e}")
             stats["consecutive_err"] += 1
 
         # Wait before next poll
