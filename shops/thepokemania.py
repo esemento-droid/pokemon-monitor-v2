@@ -33,6 +33,12 @@ EXCLUDE = [
     "flesh & blood", "dragon shield", "weiss schwarz",
 ]
 
+# Only exclude Romanian names — URL /lingua-englisch already filters English cards
+# German names are OK (same English product, just described in German on DE site)
+EXCLUDE_NON_EN = [
+    "cutie ", "colecție", "colectie", "sigilat",
+]
+
 
 async def _fetch_page(session, url):
     """Fetch single page with retry."""
@@ -144,8 +150,12 @@ async def get_products():
             name = item["name"]
             name_lower = name.lower()
 
-            # Exclude accessories
+            # Exclude accessories & other games
             if any(ex in name_lower for ex in EXCLUDE):
+                continue
+
+            # Exclude Romanian-named products
+            if any(kw in name_lower for kw in EXCLUDE_NON_EN):
                 continue
 
             price_eur = item["price_eur"]
