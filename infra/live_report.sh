@@ -81,14 +81,56 @@ echo "Chrome/Chromium processes: $CHROME_COUNT"
 echo "Total Chrome RAM: ${CHROME_RAM} MB"
 echo ""
 
+# Grab logs once (used by sections 4a, 4b, 5, 7, 8)
+LOGS=$(journalctl -u pokemon-monitor-v2 --since "60 min ago" --no-pager -o cat 2>/dev/null)
+
+# ============================================================
+# === 4a. CHROME TREND ===
+# ============================================================
+echo "=== 4a. CHROME TREND ==="
+echo ""
+PREV_COUNT=$(cat /tmp/_chrome_prev_count 2>/dev/null || echo "?")
+echo "$CHROME_COUNT" > /tmp/_chrome_prev_count
+echo "  Current: $CHROME_COUNT processes"
+echo "  Previous report: $PREV_COUNT processes"
+if [ "$PREV_COUNT" != "?" ] && [ "$CHROME_COUNT" -gt "$PREV_COUNT" ] 2>/dev/null; then
+    DIFF=$((CHROME_COUNT - PREV_COUNT))
+    echo "  Trend: +$DIFF (GROWING)"
+elif [ "$PREV_COUNT" != "?" ] && [ "$CHROME_COUNT" -lt "$PREV_COUNT" ] 2>/dev/null; then
+    DIFF=$((PREV_COUNT - CHROME_COUNT))
+    echo "  Trend: -$DIFF (shrinking)"
+else
+    echo "  Trend: stable (or first run)"
+fi
+echo ""
+
+# ============================================================
+# === 4b. NODRIVER HEALS (from logs) ===
+# ============================================================
+echo "=== 4b. NODRIVER HEALS (from logs) ==="
+echo ""
+if [ -n "$LOGS" ]; then
+    echo "$LOGS" | grep -i "heal #\|heal limit\|cooldown 30min\|Healing page" | \
+        grep -oP '\[\K[a-zA-Z][\w-]*(?=\])' | \
+        grep -vE '^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG|BROWSER_MGR)$' | \
+        sort | uniq -c | sort -rn | head -10 | \
+        awk '{printf "  %3d x %s\n", $1, $2}'
+    TOTAL_HEALS=$(echo "$LOGS" | grep -ci "heal #\|Healing page")
+    echo ""
+    echo "  Total heals last hour: $TOTAL_HEALS"
+    # Show cooldowns
+    COOLDOWNS=$(echo "$LOGS" | grep -c "cooldown 30min\|heal limit")
+    echo "  Shops in cooldown: $COOLDOWNS"
+else
+    echo "  (no logs)"
+fi
+echo ""
+
 # ============================================================
 # === 5. LOGI OSTATNIA GODZINA - PER SCRAPER ===
 # ============================================================
 echo "=== 5. LOGI OSTATNIA GODZINA (per scraper) ==="
 echo ""
-
-# Grab logs once
-LOGS=$(journalctl -u pokemon-monitor-v2 --since "60 min ago" --no-pager -o cat 2>/dev/null)
 
 if [ -z "$LOGS" ]; then
     echo "  (no logs from last hour)"
@@ -254,7 +296,7 @@ printf "  %-25s %-8s %s\n" "PATH" "STATUS" "TIME"
 printf "  %-25s %-8s %s\n" "----" "------" "----"
 
 # HTTP Tunnel
-RES=$(timeout 10 curl -x http://127.0.0.1:8888 -s -o /dev/null -w "%{http_code} %{time_total}" --connect-timeout 8 --max-time 10 https://httpbin.org/ip 2>/dev/null)
+RES=$(timeout 10 curl -x http://127.0.0.1:8888 -s -o /dev/null -w "%{http_code} %{time_total}" --connect-timeout 8 --max-time 10 https://api.ipify.org 2>/dev/null)
 CODE=$(echo "$RES" | awk '{print $1}')
 TIME=$(echo "$RES" | awk '{print $2}')
 [ -z "$CODE" ] && CODE="FAIL" && TIME="-"
@@ -262,7 +304,7 @@ TIME=$(echo "$RES" | awk '{print $2}')
 printf "  %-25s %-8s %ss\n" "HTTP Tunnel (8888)" "$CODE" "$TIME"
 
 # Tailscale
-RES=$(timeout 10 curl -x http://100.127.72.24:8888 -s -o /dev/null -w "%{http_code} %{time_total}" --connect-timeout 8 --max-time 10 https://httpbin.org/ip 2>/dev/null)
+RES=$(timeout 10 curl -x http://100.127.72.24:8888 -s -o /dev/null -w "%{http_code} %{time_total}" --connect-timeout 8 --max-time 10 https://api.ipify.org 2>/dev/null)
 CODE=$(echo "$RES" | awk '{print $1}')
 TIME=$(echo "$RES" | awk '{print $2}')
 [ -z "$CODE" ] && CODE="FAIL" && TIME="-"
@@ -270,7 +312,7 @@ TIME=$(echo "$RES" | awk '{print $2}')
 printf "  %-25s %-8s %ss\n" "Tailscale (100.x:8888)" "$CODE" "$TIME"
 
 # SOCKS5
-RES=$(timeout 10 curl --socks5-hostname 127.0.0.1:1080 -s -o /dev/null -w "%{http_code} %{time_total}" --connect-timeout 8 --max-time 10 https://httpbin.org/ip 2>/dev/null)
+RES=$(timeout 10 curl --socks5-hostname 127.0.0.1:1080 -s -o /dev/null -w "%{http_code} %{time_total}" --connect-timeout 8 --max-time 10 https://api.ipify.org 2>/dev/null)
 CODE=$(echo "$RES" | awk '{print $1}')
 TIME=$(echo "$RES" | awk '{print $2}')
 [ -z "$CODE" ] && CODE="FAIL" && TIME="-"

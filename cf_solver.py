@@ -6,9 +6,18 @@ Cloudflare challenges and return page HTML.
 
 WHY (vs FlareSolverr):
 - FS spawns unlimited Chrome internally, never cleans up → 440 PIDs, 189% CPU
-- This: 1 persistent browser, fresh tab per request, tab closed after → 0 accumulation
+- This: 1 persistent browser, POOL of contexts, fresh page per request
+- Context pool = no renderer churn (new_context/close per request spawned processes)
 - Same API interface as FS: POST with url → get HTML back
 - Runs in-process (no Docker, no separate service)
+
+ARCHITECTURE:
+- 1 browser process (shared)
+- Pool of MAX_CONCURRENT persistent contexts (created at startup)
+- solve() picks context from pool (round-robin), opens page, navigates, closes page
+- Context lives forever (same renderer process reused)
+- If context crashes → only that one is recreated
+- Page is lightweight (no new renderer process)
 
 USAGE (from shop scrapers — drop-in replacement):
     # Old (FlareSolverr):
@@ -20,16 +29,16 @@ USAGE (from shop scrapers — drop-in replacement):
     html = await solve(url, timeout=30)
 
 RESOURCE USAGE:
-- 1 browser (shared with browser_manager stealth browser if available)
-- 1 tab at a time per request (max 2 concurrent via semaphore)
-- Tab created → navigate → wait for CF → get HTML → tab closed
+- 1 browser + 2 persistent contexts (no churn)
+- 1 page at a time per context (max 2 concurrent via semaphore)
+- Page created → navigate → wait for CF → get HTML → page closed
 - CPU: ~5% per active solve (vs FS 189% with accumulated garbage)
-- RAM: ~50MB per active tab (freed after solve)
+- RAM: ~50MB per active page (freed after solve)
 
 SCALING:
 - 10 shops × 2 min interval = 5 requests/min → semaphore(2) handles easily
-- 50 shops × 2 min = 25 req/min → increase semaphore to 4, add 1 more browser
-- No accumulation regardless of scale
+- 50 shops × 2 min = 25 req/min → increase MAX_CONCURRENT to 4
+- No accumulation regardless of scale (no context create/destroy per request)
 """
 import asyncio
 import logging
@@ -48,11 +57,16 @@ _pw = None
 _semaphore = None
 _lock = asyncio.Lock()
 _started = False
+_contexts = []
+_context_idx = 0
+
+
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 
 async def _ensure_browser():
-    """Start patchright browser if not running."""
-    global _browser, _pw, _semaphore, _started
+    """Start patchright browser if not running, create context pool."""
+    global _browser, _pw, _semaphore, _started, _contexts
 
     if _started and _browser and _browser.is_connected():
         return
@@ -77,8 +91,16 @@ async def _ensure_browser():
             ]
         )
         _semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+
+        # Create persistent context pool (no per-request context churn)
+        _contexts = []
+        for i in range(MAX_CONCURRENT):
+            ctx = await _browser.new_context(user_agent=UA)
+            _contexts.append(ctx)
+            logger.info(f"[CF_SOLVER] Context pool[{i}] created")
+
         _started = True
-        logger.info("[CF_SOLVER] Browser ready (patchright headless + proxy)")
+        logger.info("[CF_SOLVER] Browser ready (patchright headless + proxy, pool=%d)", MAX_CONCURRENT)
 
 
 async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
@@ -95,24 +117,27 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
     
     Behavior:
         1. Acquire semaphore (max 2 concurrent)
-        2. Create fresh tab (context + page)
-        3. Navigate to URL
-        4. Wait for CF challenge to resolve (max 20s)
-        5. Get page HTML
-        6. Close tab (context)
-        7. Release semaphore
+        2. Pick context from pool (round-robin)
+        3. Create fresh page in that context
+        4. Navigate to URL
+        5. Wait for CF challenge to resolve (max 20s)
+        6. Get page HTML
+        7. Close page (context stays alive!)
+        8. Release semaphore
         
-    Tab is ALWAYS closed, even on error. Zero accumulation.
+    Context lives forever (no renderer churn). Page is lightweight.
     """
     await _ensure_browser()
 
+    global _context_idx, _contexts
+
     async with _semaphore:
-        context = None
+        page = None
+        idx = _context_idx
+        _context_idx = (_context_idx + 1) % len(_contexts)
+        context = _contexts[idx]
+
         try:
-            # Fresh context per request (isolated cookies)
-            context = await _browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-            )
             page = await context.new_page()
 
             # Navigate
@@ -151,16 +176,22 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             return None
         except Exception as e:
             logger.error(f"[CF_SOLVER] Error for {url[:60]}: {str(e)[:80]}")
-            # If browser crashed, mark for restart
+            # If context crashed, recreate just this one
             if "closed" in str(e).lower() or "crash" in str(e).lower():
-                global _started
-                _started = False
+                logger.warning(f"[CF_SOLVER] Context[{idx}] crashed, recreating...")
+                try:
+                    _contexts[idx] = await _browser.new_context(user_agent=UA)
+                    logger.info(f"[CF_SOLVER] Context[{idx}] recreated OK")
+                except Exception:
+                    # Browser itself is dead, mark for full restart
+                    global _started
+                    _started = False
             return None
         finally:
-            # ALWAYS close context — zero accumulation guaranteed
-            if context:
+            # Close PAGE only — context stays alive (no renderer churn)
+            if page:
                 try:
-                    await context.close()
+                    await page.close()
                 except Exception:
                     pass
 
@@ -194,8 +225,15 @@ async def solve_fs_compat(url, max_timeout=30000, session=None):
 
 
 async def close():
-    """Shutdown browser."""
-    global _browser, _pw, _started
+    """Shutdown browser and context pool."""
+    global _browser, _pw, _started, _contexts
+    # Close all pooled contexts
+    for ctx in _contexts:
+        try:
+            await ctx.close()
+        except Exception:
+            pass
+    _contexts = []
     if _browser:
         try:
             await _browser.close()
