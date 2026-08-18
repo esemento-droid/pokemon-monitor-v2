@@ -12,7 +12,6 @@ import json
 import aiohttp
 
 SHOP = "thepokemania"
-SHOP_DISABLED = True  # TEMPORARY: disable until first snapshot settles (remove after 1 clean restart)
 BASE = "https://thepokemania.de"
 CATEGORY_URL = "/pokemon-tcg-sets/lingua-englisch"
 MAX_PAGES = 6
@@ -41,15 +40,18 @@ EXCLUDE_NON_EN = [
 
 
 async def _fetch_page(session, url):
-    """Fetch single page with retry."""
-    for attempt in range(2):
+    """Fetch single page with retry (handles 429 rate limit)."""
+    for attempt in range(3):
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                if resp.status == 429:
+                    await asyncio.sleep(5)
+                    continue
                 if resp.status == 200:
                     return await resp.text()
         except Exception:
-            if attempt == 0:
-                await asyncio.sleep(2)
+            if attempt < 2:
+                await asyncio.sleep(3)
     return ""
 
 
@@ -137,13 +139,13 @@ async def get_products():
         urls.append(f"{BASE}{CATEGORY_URL}/p{p}")
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # Sequential fetch with delay (site returns 429 on parallel)
+        # Sequential fetch with delay (site returns 429 on fast requests)
         pages_html = []
         for url in urls:
             html = await _fetch_page(session, url)
             pages_html.append(html)
             if html:
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(3)
 
     for html in pages_html:
         if not html:
