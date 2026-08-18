@@ -154,25 +154,24 @@ class DiscordSender:
                 {"name": "\U0001f4e6 Stan", "value": stock_text, "inline": True},
             ]
         }
-        # Price comparison field (LEGO — limango vs promoklocki)
+        # Price comparison field (LEGO — limango vs klockoradar/promoklocki)
         price_compare = product.get("price_compare")
         if price_compare:
-            # Rich format: limango price + promoklocki lowest + difference
             set_num = product.get("set_number", "")
             promoklocki_url = product.get("promoklocki_url", f"https://promoklocki.pl/{set_num}" if set_num else "")
+            kr_url = product.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}" if set_num else "")
 
             embed["fields"].append({
-                "name": "\U0001f4ca Porównanie cen (promoklocki.pl)",
+                "name": "\U0001f4ca Porównanie cen",
                 "value": price_compare,
                 "inline": False,
             })
             if promoklocki_url:
                 embed["fields"].append({
                     "name": "\U0001f6d2 Promoklocki",
-                    "value": f"[Zobacz najniższe ceny]({promoklocki_url})",
+                    "value": f"[Zobacz ceny]({promoklocki_url})",
                     "inline": True,
                 })
-            kr_url = product.get("klockoradar_url", "")
             if kr_url:
                 embed["fields"].append({
                     "name": "\U0001f50d KlockoRadar",

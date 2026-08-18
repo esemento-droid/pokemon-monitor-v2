@@ -264,11 +264,12 @@ async def get_products():
                 comp = {
                     "set_number": set_num,
                     "lowest_price": lowest,
-                    "shop": "promoklocki.pl",
-                    "shop_url": cached.get("promoklocki_url", f"{PROMOKLOCKI_BASE}/{set_num}"),
+                    "shop": cached.get("shop", "klockoradar.pl"),
+                    "shop_url": cached.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}"),
                     "offer_count": 0,
                     "promoklocki_url": f"{PROMOKLOCKI_BASE}/{set_num}",
-                    "source": "promoklocki.pl",
+                    "klockoradar_url": cached.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}"),
+                    "source": "klockoradar.pl",
                     "difference": round(diff, 2),
                     "percentage": round(pct, 1),
                     "is_cheaper": diff < 0,
@@ -276,6 +277,7 @@ async def get_products():
                 p['price_compare'] = _fmt(comp)
                 p['set_number'] = set_num
                 p['promoklocki_url'] = f"{PROMOKLOCKI_BASE}/{set_num}"
+                p['klockoradar_url'] = cached.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}")
                 matched_count += 1
 
             if matched_count:
