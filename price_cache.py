@@ -30,9 +30,9 @@ FLARESOLVERR_URL = "http://localhost:8191/v1"
 PROMOKLOCKI_BASE = "https://promoklocki.pl"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 
-# Price extraction regex
-PRICE_RE = re.compile(r'Aktualnie\s+najni[żz]sza\s+cena\s*([\d\s,.]+)\s*z[łl]', re.IGNORECASE)
-PRICE_FALLBACK_RE = re.compile(r'"lowPrice"\s*:\s*"?([\d.,]+)"?', re.IGNORECASE)
+# Price extraction regex — matches "Aktualnie najniższa cena ... XX,XX zł" (with HTML tags between)
+PRICE_RE = re.compile(r'najni.sza\s+cena.{0,100}?([\d]+[.,][\d]+)\s*z', re.IGNORECASE)
+PRICE_FALLBACK_RE = re.compile(r'class="bprice">([\d]+[.,][\d]+)\s*z', re.IGNORECASE)
 # Shop name extraction
 SHOP_RE = re.compile(r'<a[^>]*class="[^"]*lowest[^"]*"[^>]*>(.*?)</a>', re.DOTALL)
 

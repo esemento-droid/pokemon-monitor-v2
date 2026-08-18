@@ -24,7 +24,7 @@ LIMANGO_BASE = "https://www.limango.pl"
 LIMANGO_URL = f"{LIMANGO_BASE}/shop/lego"
 NEXT_DATA_RE = re.compile(r'<script\s+id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.DOTALL)
 
-PRICE_RE = re.compile(r'"lowPrice"\s*:\s*"?([\d.,]+)"?', re.IGNORECASE)
+PRICE_RE = re.compile(r'najni.sza.{0,80}?([\d]+[.,][\d]+)\s*z', re.IGNORECASE)
 
 
 def normalize(name):

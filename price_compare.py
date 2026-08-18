@@ -47,11 +47,11 @@ SET_NUMBER_RE = re.compile(r'\b(\d{4,6})\b')
 
 # Promoklocki price extraction
 PROMOKLOCKI_PRICE_RE = re.compile(
-    r'Aktualnie\s+najni[żz]sza\s+cena\s*([\d\s,.]+)\s*z[łl]',
+    r'najni.sza\s+cena.{0,100}?([\d]+[.,][\d]+)\s*z',
     re.IGNORECASE
 )
 PROMOKLOCKI_PRICE_FALLBACK_RE = re.compile(
-    r'"lowPrice"\s*:\s*"?([\d.,]+)"?',
+    r'class="bprice">([\d]+[.,][\d]+)\s*z',
     re.IGNORECASE
 )
 
