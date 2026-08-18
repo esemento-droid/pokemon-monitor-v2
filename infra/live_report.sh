@@ -93,70 +93,67 @@ LOGS=$(journalctl -u pokemon-monitor-v2 --since "60 min ago" --no-pager -o cat 2
 if [ -z "$LOGS" ]; then
     echo "  (no logs from last hour)"
 else
-    # Parse per-shop stats using awk
+    # Parse per-shop stats using awk (mawk-compatible, no 3-arg match)
     echo "$LOGS" | awk '
-    BEGIN {
-        # Field widths for table
-    }
-    # Match successful scans: [FAST] [INFO] [shopname] N produktow w Xs
-    /produkt.*w [0-9.]+s/ {
-        # Extract shop name from [brackets]
-        n = split($0, parts, /\[/)
-        shop = ""
-        for (i=1; i<=n; i++) {
+    # Helper: extract shop name from line with [brackets]
+    function get_shop(line,    n, parts, i, name) {
+        n = split(line, parts, "[")
+        name = ""
+        for (i = 1; i <= n; i++) {
             sub(/\].*/, "", parts[i])
-            # Shop name is typically 3rd or 4th bracket, not FAST/SLOW/INFO/WARNING
             if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG)$/ && parts[i] ~ /^[a-zA-Z]/) {
-                shop = parts[i]
+                name = parts[i]
             }
         }
+        return name
+    }
+
+    # Match successful scans: [FAST] [INFO] [shopname] N produktow w Xs
+    /produkt.*w [0-9.]+s/ {
+        shop = get_shop($0)
         if (shop == "") next
 
-        # Extract product count
-        match($0, /([0-9]+) produkt/, arr)
-        if (RSTART > 0) {
-            products = substr($0, RSTART, RLENGTH)
-            gsub(/ produkt/, "", products)
-            last_products[shop] = products + 0
+        # Extract product count: find "NNN produkt" using split on spaces
+        nw = split($0, words, " ")
+        for (wi = 1; wi <= nw; wi++) {
+            if (words[wi] ~ /^produkt/) {
+                products = words[wi-1] + 0
+                last_products[shop] = products
+                break
+            }
         }
 
-        # Extract time
-        match($0, /w ([0-9.]+)s/, arr)
-        if (RSTART > 0) {
-            tstr = substr($0, RSTART+2, RLENGTH-3)
-            t = tstr + 0.0
-            scan_count[shop]++
+        # Extract time: find "w X.Xs" pattern - the word after "w" ending in "s"
+        t = -1
+        for (wi = 1; wi <= nw; wi++) {
+            if (words[wi] == "w" && wi < nw) {
+                tstr = words[wi+1]
+                # Remove trailing "s"
+                gsub(/s$/, "", tstr)
+                if (tstr ~ /^[0-9.]+$/) {
+                    t = tstr + 0.0
+                }
+                break
+            }
+        }
+
+        scan_count[shop]++
+        if (t >= 0) {
             scan_time_sum[shop] += t
             if (!(shop in scan_time_min) || t < scan_time_min[shop]) scan_time_min[shop] = t
             if (!(shop in scan_time_max) || t > scan_time_max[shop]) scan_time_max[shop] = t
-        } else {
-            scan_count[shop]++
         }
     }
 
     # Match timeouts
     /[Tt]imeout/ {
-        n = split($0, parts, /\[/)
-        shop = ""
-        for (i=1; i<=n; i++) {
-            sub(/\].*/, "", parts[i])
-            if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG)$/ && parts[i] ~ /^[a-zA-Z]/) {
-                shop = parts[i]
-            }
-        }
+        shop = get_shop($0)
         if (shop != "") timeout_count[shop]++
     }
 
     # Match errors
     /\[ERROR\]/ {
-        n = split($0, parts, /\[/)
-        shop = ""
-        for (i=1; i<=n; i++) {
-            sub(/\].*/, "", parts[i])
-            if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG)$/ && parts[i] ~ /^[a-zA-Z]/) {
-                shop = parts[i]
-            }
-        }
+        shop = get_shop($0)
         if (shop != "") error_count[shop]++
     }
 
@@ -178,8 +175,8 @@ else
             counts[n] = scan_count[s] + 0
         }
         # Bubble sort by counts desc
-        for (i=1; i<=n; i++) {
-            for (j=i+1; j<=n; j++) {
+        for (i = 1; i <= n; i++) {
+            for (j = i + 1; j <= n; j++) {
                 if (counts[j] > counts[i]) {
                     tmp = counts[i]; counts[i] = counts[j]; counts[j] = tmp
                     tmp = names[i]; names[i] = names[j]; names[j] = tmp
@@ -193,7 +190,7 @@ else
         shops_ok = 0
         shops_broken = 0
 
-        for (i=1; i<=n; i++) {
+        for (i = 1; i <= n; i++) {
             s = names[i]
             sc = scan_count[s] + 0
             total_scans += sc
