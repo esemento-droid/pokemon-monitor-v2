@@ -559,19 +559,18 @@ def main():
     logger.info(f"SLOW: {len(slow_shops)} shops (in-process async)")
     logger.info(f"NODRIVER: {len(nodriver_names)} shops (persistent browsers)")
     logger.info(f"ENGINES: Hydra v3 rapid pollers (separate process)")
-    logger.info(f"Total: {len(all_shops)} shops in 6 independent processes")
+    logger.info(f"Total: {len(all_shops)} shops in 5 independent processes")
     logger.info("Architecture: each process has OWN event loop, ZERO interference")
 
-    # Split FAST into 3 independent processes (load balancing across CPU cores)
-    # Each FAST process = own fork, own PID, own event loop. ZERO waiting between them.
-    fast_chunk_size = len(fast_shops) // 3
+    # Split FAST into 2 independent processes (was 3, but 4 cores can't handle 6 processes)
+    # 2 FAST + SLOW + NODRIVER + ENGINE = 5 processes on 4 cores = sustainable
+    fast_chunk_size = len(fast_shops) // 2
     fast_1 = fast_shops[:fast_chunk_size]
-    fast_2 = fast_shops[fast_chunk_size:fast_chunk_size * 2]
-    fast_3 = fast_shops[fast_chunk_size * 2:]
+    fast_2 = fast_shops[fast_chunk_size:]
 
-    logger.info(f"FAST split: #{1}={len(fast_1)} | #{2}={len(fast_2)} | #{3}={len(fast_3)} shops")
+    logger.info(f"FAST split: #{1}={len(fast_1)} | #{2}={len(fast_2)} shops")
 
-    # Fork 6 processes (3 FAST + SLOW + NODRIVER + ENGINES)
+    # Fork 5 processes (2 FAST + SLOW + NODRIVER + ENGINES)
     processes = []
 
     p_fast1 = multiprocessing.Process(target=run_fast_process, args=(fast_1,), name="monitor-fast-1")
@@ -583,11 +582,6 @@ def main():
     p_fast2.start()
     processes.append(p_fast2)
     logger.info(f"Started FAST-2 process (PID {p_fast2.pid}, {len(fast_2)} shops)")
-
-    p_fast3 = multiprocessing.Process(target=run_fast_process, args=(fast_3,), name="monitor-fast-3")
-    p_fast3.start()
-    processes.append(p_fast3)
-    logger.info(f"Started FAST-3 process (PID {p_fast3.pid}, {len(fast_3)} shops)")
 
     p_slow = multiprocessing.Process(target=run_slow_process, args=(slow_shops,), name="monitor-slow")
     p_slow.start()
@@ -624,8 +618,6 @@ def main():
                     p_new = multiprocessing.Process(target=run_fast_process, args=(fast_1,), name="monitor-fast-1")
                 elif "fast-2" in p.name:
                     p_new = multiprocessing.Process(target=run_fast_process, args=(fast_2,), name="monitor-fast-2")
-                elif "fast-3" in p.name:
-                    p_new = multiprocessing.Process(target=run_fast_process, args=(fast_3,), name="monitor-fast-3")
                 elif p.name == "monitor-slow":
                     p_new = multiprocessing.Process(target=run_slow_process, args=(slow_shops,), name="monitor-slow")
                 elif p.name == "monitor-engines":
