@@ -127,58 +127,61 @@ fi
 echo ""
 
 # ============================================================
-# === 5. LOGI OSTATNIA GODZINA - PER SCRAPER ===
+# === 5. LOGI OSTATNIA GODZINA - PER SCRAPER (grouped) ===
 # ============================================================
-echo "=== 5. LOGI OSTATNIA GODZINA (per scraper) ==="
+echo "=== 5. SHOPY — SKANY/H (grupowane FAST / SLOW / NODRIVER) ==="
 echo ""
 
 if [ -z "$LOGS" ]; then
     echo "  (no logs from last hour)"
 else
-    # Parse per-shop stats using awk (mawk-compatible, no 3-arg match)
+    # Parse per-shop stats, detect process group from log prefix, output grouped
     echo "$LOGS" | awk '
-    # Helper: extract shop name from line with [brackets]
     function get_shop(line,    n, parts, i, name) {
         n = split(line, parts, "[")
         name = ""
         for (i = 1; i <= n; i++) {
             sub(/\].*/, "", parts[i])
-            if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG)$/ && parts[i] ~ /^[a-zA-Z]/) {
+            if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG|BROWSER_MGR|CF_SOLVER|MAIN)$/ && parts[i] ~ /^[a-zA-Z]/) {
                 name = parts[i]
             }
         }
         return name
     }
 
-    # Match successful scans: [FAST] [INFO] [shopname] N produktow w Xs
+    function get_group(line,    n, parts, i) {
+        n = split(line, parts, "[")
+        for (i = 1; i <= n; i++) {
+            sub(/\].*/, "", parts[i])
+            if (parts[i] == "FAST" || parts[i] == "SLOW" || parts[i] == "NODRIVER" || parts[i] == "ENGINE") {
+                return parts[i]
+            }
+        }
+        return "?"
+    }
+
     /produkt.*w [0-9.]+s/ {
         shop = get_shop($0)
         if (shop == "") next
+        grp = get_group($0)
+        shop_group[shop] = grp
 
-        # Extract product count: find "NNN produkt" using split on spaces
         nw = split($0, words, " ")
         for (wi = 1; wi <= nw; wi++) {
             if (words[wi] ~ /^produkt/) {
-                products = words[wi-1] + 0
-                last_products[shop] = products
+                last_products[shop] = words[wi-1] + 0
                 break
             }
         }
-
-        # Extract time: find "w X.Xs" pattern - the word after "w" ending in "s"
         t = -1
         for (wi = 1; wi <= nw; wi++) {
             if (words[wi] == "w" && wi < nw) {
                 tstr = words[wi+1]
-                # Remove trailing "s"
                 gsub(/s$/, "", tstr)
-                if (tstr ~ /^[0-9.]+$/) {
-                    t = tstr + 0.0
-                }
+                if (tstr ~ /^[0-9.]+$/) t = tstr + 0.0
                 break
             }
         }
-
         scan_count[shop]++
         if (t >= 0) {
             scan_time_sum[shop] += t
@@ -187,36 +190,37 @@ else
         }
     }
 
-    # Match timeouts
     /[Tt]imeout/ {
         shop = get_shop($0)
         if (shop != "") timeout_count[shop]++
+        grp = get_group($0)
+        if (shop != "" && grp != "?") shop_group[shop] = grp
     }
 
-    # Match errors
     /\[ERROR\]/ {
         shop = get_shop($0)
         if (shop != "") error_count[shop]++
+        grp = get_group($0)
+        if (shop != "" && grp != "?") shop_group[shop] = grp
     }
 
     END {
-        # Collect all shops
         for (s in scan_count) all_shops[s] = 1
         for (s in timeout_count) all_shops[s] = 1
         for (s in error_count) all_shops[s] = 1
 
-        # Print header
-        printf "  %-20s %5s %7s %7s %7s %5s %5s %5s  %s\n", "SHOP", "SCANS", "AVG(s)", "MIN(s)", "MAX(s)", "PRODS", "TOUT", "ERR", "STATUS"
-        printf "  %-20s %5s %7s %7s %7s %5s %5s %5s  %s\n", "----", "-----", "------", "------", "------", "-----", "----", "---", "------"
+        # Classify shops: DEAD (0 scans), SICK (>30% timeout), OK
+        total_scans = 0; total_timeouts = 0; total_errors = 0
+        shops_scanning = 0; shops_dead = 0; shops_sick = 0
 
-        # Sort by scan count (collect into arrays for sorting)
+        # Collect into arrays per group
         n = 0
         for (s in all_shops) {
             n++
             names[n] = s
             counts[n] = scan_count[s] + 0
         }
-        # Bubble sort by counts desc
+        # Sort by scan count desc
         for (i = 1; i <= n; i++) {
             for (j = i + 1; j <= n; j++) {
                 if (counts[j] > counts[i]) {
@@ -226,62 +230,88 @@ else
             }
         }
 
-        total_scans = 0
-        total_timeouts = 0
-        total_errors = 0
-        shops_ok = 0
-        shops_broken = 0
-
+        # Print grouped by process
+        # Pass 1: collect groups
         for (i = 1; i <= n; i++) {
             s = names[i]
-            sc = scan_count[s] + 0
-            total_scans += sc
-            tc = timeout_count[s] + 0
-            total_timeouts += tc
-            ec = error_count[s] + 0
-            total_errors += ec
-            prods = last_products[s] + 0
-
-            if (sc > 0) {
-                avg = scan_time_sum[s] / sc
-                mn = scan_time_min[s]
-                mx = scan_time_max[s]
-                avg_str = sprintf("%.1f", avg)
-                min_str = sprintf("%.1f", mn)
-                max_str = sprintf("%.1f", mx)
-            } else {
-                avg_str = "-"
-                min_str = "-"
-                max_str = "-"
-            }
-
-            # Status
-            if (ec > 0) {
-                status = "\\342\\235\\214 error"
-                shops_broken++
-            } else if (tc > 0) {
-                status = "\\342\\232\\240\\357\\270\\217 timeout"
-                shops_broken++
-            } else if (sc > 0) {
-                status = "\\342\\234\\205 OK"
-                shops_ok++
-            } else {
-                status = "? unknown"
-                shops_broken++
-            }
-
-            printf "  %-20s %5d %7s %7s %7s %5d %5d %5d  %s\n", s, sc, avg_str, min_str, max_str, prods, tc, ec, status
+            g = shop_group[s]
+            if (g == "") g = "?"
+            group_shops[g] = group_shops[g] " " i
         }
 
-        # Store totals for summary
-        printf "\n  TOTALS: %d scans | %d timeouts | %d errors | %d shops OK | %d shops broken\n", total_scans, total_timeouts, total_errors, shops_ok, shops_broken
+        # Print order: FAST, SLOW, NODRIVER, ENGINE, ?
+        split("FAST SLOW NODRIVER ENGINE ?", grp_order, " ")
 
-        # Write summary values to temp file for later use
+        for (gi = 1; gi <= 5; gi++) {
+            g = grp_order[gi]
+            if (!(g in group_shops)) continue
+
+            # Count shops in group
+            split(group_shops[g], idxs, " ")
+            grp_count = 0
+            grp_scans = 0
+            for (k in idxs) {
+                if (idxs[k] == "") continue
+                grp_count++
+                grp_scans += scan_count[names[idxs[k]+0]] + 0
+            }
+
+            printf "\n  ━━━ %s (%d shops, %d scans/h) ━━━\n", g, grp_count, grp_scans
+            printf "  %-22s %5s %6s %5s %4s %4s  %s\n", "SHOP", "SCANS", "AVG", "PRODS", "TOUT", "ERR", "STATUS"
+
+            split(group_shops[g], idxs, " ")
+            for (k = 1; k <= length(idxs); k++) {
+                if (idxs[k] == "") continue
+                idx = idxs[k] + 0
+                s = names[idx]
+                sc = scan_count[s] + 0
+                tc = timeout_count[s] + 0
+                ec = error_count[s] + 0
+                prods = last_products[s] + 0
+                total_scans += sc
+                total_timeouts += tc
+                total_errors += ec
+
+                if (sc > 0) {
+                    avg_str = sprintf("%.0fs", scan_time_sum[s] / sc)
+                } else {
+                    avg_str = "-"
+                }
+
+                # Status classification:
+                # DEAD = 0 scans
+                # SICK = >30% timeouts or >20% errors
+                # OK = scanning fine
+                if (sc == 0) {
+                    if (ec > 0) status = "DEAD"
+                    else if (tc > 0) status = "DEAD"
+                    else status = "DEAD"
+                    shops_dead++
+                } else if (tc > 0 && (tc * 100 / (sc + tc)) > 30) {
+                    status = "SICK"
+                    shops_sick++
+                } else if (ec > 0 && (ec * 100 / sc) > 20) {
+                    status = "SICK"
+                    shops_sick++
+                } else {
+                    status = "OK"
+                    shops_scanning++
+                }
+
+                printf "  %-22s %5d %6s %5d %4d %4d  %s\n", s, sc, avg_str, prods, tc, ec, status
+            }
+        }
+
+        printf "\n  ════════════════════════════════════════════════════\n"
+        printf "  SCANNING: %d | SICK (>30%% tout): %d | DEAD (0 scans): %d\n", shops_scanning, shops_sick, shops_dead
+        printf "  Total: %d scans/h | %d timeouts | %d errors\n", total_scans, total_timeouts, total_errors
+
+        # Write summary values to temp file
         print total_scans > "/tmp/_lr_total_scans"
         print total_errors > "/tmp/_lr_total_errors"
         print total_timeouts > "/tmp/_lr_total_timeouts"
-        print shops_ok > "/tmp/_lr_shops_ok"
-        print shops_broken > "/tmp/_lr_shops_broken"
+        print shops_scanning > "/tmp/_lr_shops_ok"
+        print shops_dead + shops_sick > "/tmp/_lr_shops_broken"
     }
     '
 fi
@@ -462,7 +492,8 @@ else
     TOTAL_SCANS=0
 fi
 
-echo "  $TOTAL_SCANS scans/h | ${ERROR_RATE}% errors | ${TIMEOUT_RATE}% timeouts | $SHOPS_OK shops OK | $SHOPS_BROKEN shops broken"
+echo "  $TOTAL_SCANS scans/h | ${ERROR_RATE}% errors | ${TIMEOUT_RATE}% timeouts"
+echo "  SCANNING: $SHOPS_OK | SICK+DEAD: $SHOPS_BROKEN"
 echo ""
 
 # Cleanup temp files
