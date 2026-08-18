@@ -91,8 +91,8 @@ def _get_qty_for_product(name, price_str):
             else:
                 return 0  # Too expensive, skip
 
-    # Catch-all: any other 30th product (new/unknown) — buy 1 if price < 500
-    if price < 500:
+    # Catch-all: any other 30th product (new/unknown) — buy 1 if price < 410
+    if price < 410:
         return 1
     return 0
 

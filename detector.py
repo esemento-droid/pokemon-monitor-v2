@@ -60,7 +60,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                         # check_strefatcg_trigger("NEW_PRODUCT", product)  # DISABLED — bought at 1750 when max 1510
                         check_japancollectibles_trigger("NEW_PRODUCT", product)
                         check_jc_30th_trigger("NEW_PRODUCT", product)
-                        # check_tcgumisia_trigger("NEW_PRODUCT", product)  # PAUSED since 2026-08-13
+                        check_tcgumisia_trigger("NEW_PRODUCT", product)
                         check_mediaexpert_trigger("NEW_PRODUCT", product)
                         restock_detected = True
                     else:
@@ -107,7 +107,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                     # check_strefatcg_trigger("PRICE_CHANGE", product)  # DISABLED
                     check_japancollectibles_trigger("PRICE_CHANGE", product)
                     check_jc_30th_trigger("PRICE_CHANGE", product)
-                    # check_tcgumisia_trigger("PRICE_CHANGE", product)  # PAUSED
+                    check_tcgumisia_trigger("PRICE_CHANGE", product)
                     check_mediaexpert_trigger("PRICE_CHANGE", product)
 
             # Zmiana dostepnosci
@@ -137,7 +137,7 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
                 # check_strefatcg_trigger("RESTOCK", product)  # DISABLED
                 check_japancollectibles_trigger("RESTOCK", product)
                 check_jc_30th_trigger("RESTOCK", product)
-                # check_tcgumisia_trigger("RESTOCK", product)  # PAUSED
+                check_tcgumisia_trigger("RESTOCK", product)
                 check_mediaexpert_trigger("RESTOCK", product)
             elif sold_out:
                 new_p = str(product.get("price", "")).strip().lower()
@@ -164,6 +164,6 @@ async def detect_and_send(shop_name, old_products, new_products, snapshot_done):
     flush_kartexpol_batch()
     flush_tantis_batch()
     flush_jc_30th_batch()
-    # flush_tcgumisia_batch()  # PAUSED
+    flush_tcgumisia_batch()
     # flush_strefatcg_batch()  # DISABLED
     return is_first
