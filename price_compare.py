@@ -237,9 +237,10 @@ def match_set_number(product_name, sitemap):
             continue
         common = name_words & slug_words
         score = len(common)
-        # Coverage: how much of our product name is matched
         coverage = score / len(name_words) if name_words else 0
-        if score > best_score or (score == best_score and coverage > best_coverage):
+        # Better score wins. Tiebreaker: higher coverage, then lower set number (older = more likely on outlet)
+        if score > best_score or (score == best_score and coverage > best_coverage) or \
+           (score == best_score and coverage == best_coverage and best_num and num < best_num):
             best_score = score
             best_num = num
             best_coverage = coverage

@@ -321,14 +321,25 @@ async def get_products():
                             continue
 
                         # Verify: check that klockoradar product name matches our product
+                        # Key: if klockoradar name has words NOT in our product → likely wrong match
                         kr_name = kr_data.get("kr_name", "").lower()
-                        p_name_words = set(re.sub(r'[^a-z0-9\s]', ' ', p['name'].lower()).split()) - {"lego", "the", "and", "with", "in", "of", "for", "r"}
+                        p_name_lower = re.sub(r'[^a-z0-9\s]', ' ', p['name'].lower())
+                        p_name_words = set(p_name_lower.split()) - {"lego", "the", "and", "with", "in", "of", "for", "r", "od", "lat"}
                         p_name_words = {w for w in p_name_words if len(w) > 2}
+
                         if kr_name and p_name_words:
-                            kr_words = set(kr_name.split()) - {"lego", "the", "and", "with", "in", "of", "for"}
-                            overlap = len(p_name_words & kr_words)
-                            if overlap < 1:
-                                continue  # No overlap at all — wrong match
+                            kr_name_clean = re.sub(r'[^a-z0-9\s]', ' ', kr_name)
+                            kr_words = set(kr_name_clean.split()) - {"lego", "the", "and", "with", "in", "of", "for"}
+                            kr_words = {w for w in kr_words if len(w) > 2}
+                            # Check: significant words from klockoradar name should be in product name
+                            # If klockoradar has extra distinguishing words (like "pink") not in our name → wrong set
+                            if kr_words:
+                                extra_words = kr_words - p_name_words
+                                # Allow 1 extra word (e.g. "exotic" not in limango name is OK)
+                                # But 2+ extra distinguishing words = likely wrong match
+                                distinguishing = {w for w in extra_words if len(w) > 3 and w not in {"exotic", "super", "mega", "ultra", "classic", "city", "friends"}}
+                                if len(distinguishing) >= 2:
+                                    continue  # Too many unmatched words — wrong set
 
                         lowest = kr_data["lowest_price"]
                         diff = price_val - lowest
