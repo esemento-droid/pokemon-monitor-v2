@@ -68,9 +68,17 @@ def _parse_page(html):
     # GA4 items (id, name, price in RON)
     ga4_items = []
     for m in GA4_RE.finditer(html):
+        # Decode unicode escapes and remove surrogates (invalid UTF-8)
+        raw_name = m.group(2)
+        try:
+            name = raw_name.encode().decode('unicode_escape')
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            name = raw_name
+        # Remove surrogate characters (cause DB errors)
+        name = name.encode('utf-8', errors='replace').decode('utf-8')
         ga4_items.append({
             "id": m.group(1),
-            "name": m.group(2).encode().decode('unicode_escape'),
+            "name": name,
             "price_ron": float(m.group(6)),
         })
 
