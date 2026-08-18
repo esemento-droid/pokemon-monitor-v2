@@ -60,18 +60,39 @@ def _extract_name_from_image_url(img_url):
 
 
 def _is_lego_set(product):
+    """Filter for actual LEGO construction sets (not clothing/accessories)."""
+    # Method 1: subCategoryName (most reliable)
     cat = (product.get("subCategoryName") or "").lower().strip()
     if cat and any(lc in cat for lc in LEGO_SET_CATEGORIES):
         return True
-    for path in product.get("treePaths", []):
-        if any(kw in path.lower() for kw in TOY_PATH_KEYWORDS):
-            return True
+    # Method 2: isOneSizeProduct = True (klocki mają "onesize", ubrania mają rozmiary)
+    if product.get("isOneSizeProduct"):
+        # Double check: treePath must have toy/klocki keywords
+        for path in product.get("treePaths", []):
+            if any(kw in path.lower() for kw in TOY_PATH_KEYWORDS):
+                return True
+    # Method 3: name contains set number pattern (5 digits)
+    name = product.get("name", "")
+    if re.search(r'\b\d{5}\b', name):
+        # Has 5-digit number AND treePath is toy-related
+        for path in product.get("treePaths", []):
+            if any(kw in path.lower() for kw in TOY_PATH_KEYWORDS):
+                return True
+    # Reject: clothing with LEGO branding (bokserki, kurtki, piżamy etc.)
+    clothing_keywords = ["bokser", "kurtk", "spodni", "bluza", "piżam", "skarpet",
+                         "czapk", "szalik", "t-shirt", "koszulk", "dress"]
+    name_lower = name.lower()
+    if any(kw in name_lower for kw in clothing_keywords):
+        return False
     return False
 
 
-def _build_product_url(product_id):
+def _build_product_url(product_id, golden_product_id=None):
+    """Build limango product URL. Uses goldenProductId for new URL format."""
+    if golden_product_id:
+        return f"{BASE}/p/{golden_product_id}"
     numeric_id = product_id.split("_")[-1] if "_" in product_id else product_id
-    return f"{BASE}/p/{numeric_id}"
+    return f"{BASE}/shop/lego?productId={numeric_id}"
 
 
 def _build_image_url(images):
@@ -145,12 +166,27 @@ async def get_products():
                 images = item.get("images", {})
                 image_url = _build_image_url(images)
 
-                raw_img_url = images.get("default", {}).get("url", "")
-                name = _extract_name_from_image_url(raw_img_url)
+                # Use the actual product name from API (has full LEGO set name!)
+                name = item.get("name", "")
+                if not name:
+                    # Fallback to image URL extraction (legacy)
+                    raw_img_url = images.get("default", {}).get("url", "")
+                    name = _extract_name_from_image_url(raw_img_url)
                 if not name:
                     name = item.get("subCategoryName") or f"LEGO Set {pid}"
+                
+                # Clean up name for display
+                name = name.strip()
+                if not name.upper().startswith("LEGO"):
+                    name = f"LEGO {name}"
 
-                url_prod = _build_product_url(pid)
+                url_prod = _build_product_url(pid, item.get("goldenProductId"))
+
+                # Extract LEGO set number from name (for price comparison)
+                set_number = None
+                set_match = re.search(r'\b(\d{5})\b', name)
+                if set_match:
+                    set_number = set_match.group(1)
 
                 # Available if has variant with price, "zarezerwowany" = not available
                 available = bool(variant and price_amount and price_amount > 0)
@@ -162,8 +198,9 @@ async def get_products():
                     "shop": SHOP,
                     "url": url_prod,
                     "image": image_url,
-                    "stock": "",
+                    "stock": item.get("totalStockAvailable", ""),
                     "available": available,
+                    "set_number": set_number,
                 })
 
             # Stop if page had fewer products (last page)
@@ -179,10 +216,9 @@ async def get_products():
                 format_price_comparison as _fmt, HEADERS as PC_HEADERS, PROMOKLOCKI_BASE
             )
             async with aiohttp.ClientSession(headers=PC_HEADERS) as pc_session:
-                # Pre-load klockoradar sitemap for fuzzy matching set numbers
+                # Pre-load klockoradar sitemap for fuzzy matching
                 sitemap = await _load_sitemap(pc_session)
                 if sitemap:
-                    # Create FlareSolverr session (reuse browser = fast)
                     await _create_flaresolverr_session(pc_session)
                     try:
                         for p in products:
@@ -196,7 +232,8 @@ async def get_products():
                                     continue
                             if price_val <= 0:
                                 continue
-                            set_num = match_set_number(p['name'], sitemap)
+                            # Use pre-extracted set_number or fall back to fuzzy match
+                            set_num = p.get('set_number') or match_set_number(p['name'], sitemap)
                             if not set_num:
                                 continue
                             price_data = await _fetch_promoklocki_price(pc_session, set_num)
@@ -223,8 +260,6 @@ async def get_products():
                             p['klockoradar_url'] = f"https://klockoradar.pl/sets/{set_num}"
                     finally:
                         await _destroy_flaresolverr_session(pc_session)
-        except Exception as e:
-            print(f"[LIMANGO] Price compare error: {e}")
         except Exception as e:
             print(f"[LIMANGO] Price compare error: {e}")
 
