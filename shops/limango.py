@@ -13,12 +13,12 @@ import os
 
 import aiohttp
 
-# Price comparison — from cache (promoklocki.pl, refreshed every 4h by price_cache.py)
+# Price comparison — live from klockoradar (no cache needed)
 try:
-    from price_cache import get_cached_price
-    HAS_PRICE_CACHE = True
+    from price_compare import match_set_number, format_price_comparison as _fmt, PROMOKLOCKI_BASE
+    HAS_PRICE_COMPARE = True
 except ImportError:
-    HAS_PRICE_CACHE = False
+    HAS_PRICE_COMPARE = False
 
 SHOP = "limango"
 BASE = "https://www.limango.pl"
@@ -210,111 +210,133 @@ async def get_products():
             if len(page_products) < 50:
                 break
 
-    # Price comparison — uses pre-cached promoklocki.pl prices (refreshed every 4h by price_cache.py)
-    # No FlareSolverr at scan time! Instant comparison from JSON cache.
-    # Matching: klockoradar sitemap (name → set number), Price: promoklocki (from cache)
-    if products:
+    # Price comparison — live fetch from klockoradar.pl (no CF, no cache, no cron)
+    # Flow: fuzzy match name → set_number → 1 HTTP req to klockoradar → lowest price → embed
+    if products and HAS_PRICE_COMPARE:
         try:
-            from price_cache import get_cached_price
-            from price_compare import match_set_number, format_price_comparison as _fmt, PROMOKLOCKI_BASE
-
-            # Load sitemap from DISK CACHE (built by price_cache.py every 4h)
-            # Falls back to empty dict if file not found (no network fetch during scan!)
+            # Load sitemap for fuzzy matching (name → set_number)
+            # Try disk cache first, fallback to live fetch
             sitemap = {}
             sitemap_cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sitemap_cache.json")
             try:
                 if os.path.exists(sitemap_cache_file):
                     with open(sitemap_cache_file, "r") as f:
                         sitemap = json.load(f)
-                    if sitemap:
-                        print(f"[LIMANGO] Sitemap from cache: {len(sitemap)} sets")
-                else:
-                    print("[LIMANGO] WARNING: No sitemap_cache.json — run price_cache.py first")
-            except Exception as e:
-                print(f"[LIMANGO] Sitemap cache read error: {e}")
+            except Exception:
+                pass
 
-            matched_count = 0
-            for p in products:
-                if not p.get('available'):
-                    continue
-                price_val = 0
-                if p['price']:
+            if not sitemap:
+                # Live fetch sitemap (first run only, ~5s)
+                from price_compare import _load_sitemap, HEADERS as PC_HEADERS
+                async with aiohttp.ClientSession(headers=PC_HEADERS) as _s:
+                    sitemap = await _load_sitemap(_s)
+                # Save for next time
+                if sitemap:
                     try:
-                        price_val = float(p['price'].replace(' zl', '').replace(',', '.'))
-                    except:
-                        continue
-                if price_val <= 0:
-                    continue
-
-                # Match: exact 5-digit number from name OR fuzzy match via klockoradar sitemap
-                set_num = p.get('set_number')
-                if not set_num and sitemap:
-                    set_num = match_set_number(p['name'], sitemap)
-                if not set_num:
-                    continue
-
-                # Read from cache (instant!)
-                cached = get_cached_price(set_num)
-
-                # Fallback: live fetch from klockoradar (no CF, ~0.5s)
-                if not cached:
-                    try:
-                        kr_url = f"https://klockoradar.pl/sets/{set_num}"
-                        async with aiohttp.ClientSession() as _s:
-                            async with _s.get(kr_url, timeout=aiohttp.ClientTimeout(total=10)) as _r:
-                                if _r.status == 200:
-                                    _html = await _r.text()
-                                    import re as _re
-                                    for _ld in _re.findall(r'<script type="application/ld\+json">(.*?)</script>', _html, _re.DOTALL):
-                                        try:
-                                            _d = json.loads(_ld)
-                                        except Exception:
-                                            continue
-                                        if _d.get("@type") != "Product":
-                                            continue
-                                        _offers = _d.get("offers", {})
-                                        if _offers.get("@type") == "AggregateOffer" and _offers.get("lowPrice"):
-                                            _low = float(_offers["lowPrice"])
-                                            _shop = ""
-                                            _ind = _offers.get("offers", [])
-                                            if _ind:
-                                                try:
-                                                    _ch = min(_ind, key=lambda o: float(o.get("price", 99999)))
-                                                    _shop = _ch.get("seller", {}).get("name", "")
-                                                except Exception:
-                                                    pass
-                                            cached = {"lowest_price": _low, "shop": _shop, "klockoradar_url": kr_url}
-                                            break
+                        with open(sitemap_cache_file, "w") as f:
+                            json.dump(sitemap, f, ensure_ascii=False)
                     except Exception:
                         pass
 
-                if not cached:
-                    continue
+            if not sitemap:
+                print("[LIMANGO] WARNING: No sitemap for price compare")
+            else:
+                matched_count = 0
+                available_products = [p for p in products if p.get('available')]
 
-                lowest = cached["lowest_price"]
-                diff = price_val - lowest
-                pct = (diff / lowest) * 100 if lowest > 0 else 0
-                comp = {
-                    "set_number": set_num,
-                    "lowest_price": lowest,
-                    "shop": cached.get("shop", "klockoradar.pl"),
-                    "shop_url": cached.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}"),
-                    "offer_count": 0,
-                    "promoklocki_url": f"{PROMOKLOCKI_BASE}/{set_num}",
-                    "klockoradar_url": cached.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}"),
-                    "source": "klockoradar.pl",
-                    "difference": round(diff, 2),
-                    "percentage": round(pct, 1),
-                    "is_cheaper": diff < 0,
-                }
-                p['price_compare'] = _fmt(comp)
-                p['set_number'] = set_num
-                p['promoklocki_url'] = f"{PROMOKLOCKI_BASE}/{set_num}"
-                p['klockoradar_url'] = cached.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}")
-                matched_count += 1
+                # Fetch klockoradar prices in parallel (all available products at once)
+                async def _fetch_kr_price(session, set_num):
+                    """Fetch lowest price from klockoradar for one set."""
+                    url = f"https://klockoradar.pl/sets/{set_num}"
+                    try:
+                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                            if resp.status != 200:
+                                return None
+                            html = await resp.text()
+                        for ld_raw in re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL):
+                            try:
+                                data = json.loads(ld_raw)
+                            except Exception:
+                                continue
+                            if data.get("@type") != "Product":
+                                continue
+                            offers = data.get("offers", {})
+                            if offers.get("@type") == "AggregateOffer" and offers.get("lowPrice"):
+                                low = float(offers["lowPrice"])
+                                shop_name = ""
+                                ind = offers.get("offers", [])
+                                if ind:
+                                    try:
+                                        cheapest = min(ind, key=lambda o: float(o.get("price", 99999)))
+                                        shop_name = cheapest.get("seller", {}).get("name", "")
+                                    except Exception:
+                                        pass
+                                return {"lowest_price": low, "shop": shop_name, "klockoradar_url": url}
+                    except Exception:
+                        pass
+                    return None
 
-            if matched_count:
-                print(f"[LIMANGO] Price matched: {matched_count}/{len([p for p in products if p.get('available')])} available products")
+                # Match set numbers first
+                product_sets = []  # [(product, set_num, price_val)]
+                for p in available_products:
+                    price_val = 0
+                    if p['price']:
+                        try:
+                            price_val = float(p['price'].replace(' zl', '').replace(',', '.'))
+                        except Exception:
+                            continue
+                    if price_val <= 0:
+                        continue
+                    set_num = p.get('set_number')
+                    if not set_num:
+                        set_num = match_set_number(p['name'], sitemap)
+                    if set_num:
+                        product_sets.append((p, set_num, price_val))
+
+                # Parallel fetch (max 5 concurrent, polite)
+                if product_sets:
+                    sem = asyncio.Semaphore(5)
+                    async def _bounded_fetch(session, set_num):
+                        async with sem:
+                            result = await _fetch_kr_price(session, set_num)
+                            await asyncio.sleep(0.2)
+                            return result
+
+                    unique_sets = list(set(sn for _, sn, _ in product_sets))
+                    async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+                        tasks = [_bounded_fetch(session, sn) for sn in unique_sets]
+                        results = await asyncio.gather(*tasks)
+
+                    # Map results
+                    price_map = {}
+                    for sn, result in zip(unique_sets, results):
+                        if result:
+                            price_map[sn] = result
+
+                    # Apply to products
+                    for p, set_num, price_val in product_sets:
+                        kr_data = price_map.get(set_num)
+                        if not kr_data:
+                            continue
+                        lowest = kr_data["lowest_price"]
+                        diff = price_val - lowest
+                        pct = (diff / lowest) * 100 if lowest > 0 else 0
+                        comp = {
+                            "set_number": set_num,
+                            "lowest_price": lowest,
+                            "shop": kr_data.get("shop", ""),
+                            "difference": round(diff, 2),
+                            "percentage": round(pct, 1),
+                            "is_cheaper": diff < 0,
+                        }
+                        p['price_compare'] = _fmt(comp)
+                        p['set_number'] = set_num
+                        p['promoklocki_url'] = f"{PROMOKLOCKI_BASE}/{set_num}"
+                        p['klockoradar_url'] = kr_data.get("klockoradar_url", f"https://klockoradar.pl/sets/{set_num}")
+                        matched_count += 1
+
+                    if matched_count:
+                        print(f"[LIMANGO] Price matched: {matched_count}/{len(available_products)} available products")
         except Exception as e:
             print(f"[LIMANGO] Price compare error: {e}")
 
