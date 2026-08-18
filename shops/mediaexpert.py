@@ -1,26 +1,25 @@
 """
 Scraper: mediaexpert.pl
-Silnik: nodriver (Cloudflare bypass required)
-Metoda: headless Chrome + mobile proxy
-Szukaj: "pokemon tcg" + "pokemon booster" - sealed products only
-Filtr: TYLKO sealed English Pokemon TCG (no decks, singles, Japanese, accessories)
-URL: /search?query[menu_item]=&query[querystring]=QUERY
-Selektory: .offer-box, aria-label=nazwa, class offer-PID, cena w groszach
+Silnik: NODRIVER (stealth patchright, headless=False + mobile proxy)
+Reason: CF requires headless=False fingerprint + mobile proxy IP.
+         cf_bridge (headless=True) gets blocked. VPS IP banned.
+Method: scan_with_page (persistent browser) + JS extraction.
+Searches: "pokemon tcg" + "pokemon booster"
+Target scan time: 30-50s (down from 95s — optimized sleeps)
 """
 import asyncio
-import os
 import json
 import logging
+import os
 import re
 
-# Ensure DISPLAY is set for headless Chrome (Xvfb)
 if not os.environ.get("DISPLAY"):
     os.environ["DISPLAY"] = ":99"
 
 log = logging.getLogger("monitor")
 
 BROWSER_TYPE = "stealth"
-SCAN_TIMEOUT = 120  # Optimized: CF wait 4+6s + 2 URLs + fast scroll = ~40-50s typical
+SCAN_TIMEOUT = 90  # Tight but realistic: 2 URLs × ~20s each + overhead
 
 SEARCH_URLS = [
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+tcg",
@@ -48,8 +47,6 @@ INCLUDE_KW = [
     "tcg", "poke ball", "pokeball",
 ]
 
-PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
-
 # Extract all products from .offer-box elements
 EXTRACT_JS = """
 JSON.stringify(Array.from(document.querySelectorAll('.offer-box')).map(box => {
@@ -71,40 +68,35 @@ JSON.stringify(Array.from(document.querySelectorAll('.offer-box')).map(box => {
 
 
 async def scan_with_page(page):
-    """Persistent browser interface - page already exists, just navigate."""
+    """Persistent browser interface - page already exists, just navigate.
+    
+    Optimized for speed:
+    - CF resolves in ~3-5s on subsequent visits (session cookies persist)
+    - First visit may take 5-10s for challenge
+    - Total target: 30-50s for both URLs
+    """
     products = []
     seen_ids = set()
 
-    # First URL - navigate + wait for CF to resolve
-    await page.goto(SEARCH_URLS[0], wait_until="domcontentloaded", timeout=30000)
-    await asyncio.sleep(4)
+    for i, search_url in enumerate(SEARCH_URLS):
+        try:
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+        except Exception as e:
+            log.warning(f"[mediaexpert] goto failed for URL {i+1}: {e}")
+            continue
 
-    # Check CF resolution
-    title = await page.title()
-    if not title or "moment" in title.lower() or "checking" in title.lower():
-        log.warning("[mediaexpert] CF not resolved, waiting...")
-        await asyncio.sleep(6)
+        # Quick CF check — on persistent browser, cookies usually pass CF instantly
+        await asyncio.sleep(3)
         title = await page.title()
-        if not title or "moment" in title.lower():
-            log.error("[mediaexpert] CF block - cannot access")
-            return []
-
-    for search_url in SEARCH_URLS:
-        if search_url != SEARCH_URLS[0]:
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(4)
-
-            # Check CF
+        if not title or "moment" in title.lower() or "checking" in title.lower():
+            # CF challenge — wait but not forever
+            await asyncio.sleep(5)
             title = await page.title()
-            if not title or "moment" in title.lower() or "checking" in title.lower():
-                log.warning("[mediaexpert] CF challenge on %s, waiting...", search_url)
-                await asyncio.sleep(6)
-                title = await page.title()
-                if not title or "moment" in title.lower():
-                    log.error("[mediaexpert] CF block on %s", search_url)
-                    continue
+            if not title or "moment" in title.lower():
+                log.warning(f"[mediaexpert] CF block on URL {i+1}, skipping")
+                continue
 
-        # Dismiss cookies
+        # Dismiss cookies (first time only, fast no-op afterwards)
         await page.evaluate("""
             (() => {
                 const bb = document.querySelectorAll('button');
@@ -117,17 +109,15 @@ async def scan_with_page(page):
                 }
             })()
         """)
-        await asyncio.sleep(1)
 
-        # Scroll down to load lazy products
-        for _ in range(4):
-            await page.evaluate("window.scrollBy(0, 1000)")
-            await asyncio.sleep(0.8)
+        # Quick scroll to trigger lazy loading
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(1.5)
 
         # Extract products
         raw = await page.evaluate(EXTRACT_JS)
         if not raw:
-            log.warning("[mediaexpert] No data from %s", search_url)
+            log.warning(f"[mediaexpert] No data from URL {i+1}")
             continue
 
         try:
@@ -144,7 +134,6 @@ async def scan_with_page(page):
             if pid in seen_ids:
                 continue
 
-            # Apply filters
             name_lower = name.lower()
             if any(kw in name_lower for kw in EXCLUDE_KW):
                 continue
@@ -153,11 +142,7 @@ async def scan_with_page(page):
 
             seen_ids.add(pid)
 
-            # Parse price (in grosze -> PLN)
-            price_raw = item.get("price", "")
-            price_str = _format_price(price_raw)
-
-            # URL
+            price_str = _format_price(item.get("price", ""))
             item_url = item.get("url", "")
             if item_url and not item_url.startswith("http"):
                 item_url = "https://www.mediaexpert.pl" + item_url
@@ -173,122 +158,8 @@ async def scan_with_page(page):
                 "available": not item.get("unavail", False),
             })
 
-    log.info(f"[MEDIAEXPERT] {len(products)} produktow")
-    return products
-
-
-async def get_products():
-    import nodriver as uc
-
-    products = []
-    seen_ids = set()
-
-    browser_args = [
-        "--no-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-setuid-sandbox",
-    ]
-    if PROXY_ADDR and PROXY_ADDR != "none":
-        browser_args.append(f"--proxy-server=http://{PROXY_ADDR}")
-
-    try:
-        browser = await uc.start(headless=False, sandbox=False, browser_args=browser_args)
-    except Exception as e:
-        log.error(f"[mediaexpert] Failed to start browser: {e}")
-        return []
-
-    try:
-        for search_url in SEARCH_URLS:
-            page = await browser.get(search_url)
-            await asyncio.sleep(12)
-
-            # Check CF
-            title = await page.evaluate("document.title")
-            if not title or "moment" in title.lower() or "checking" in title.lower():
-                log.warning("[mediaexpert] CF challenge, waiting...")
-                await asyncio.sleep(15)
-                title = await page.evaluate("document.title")
-                if not title or "moment" in title.lower():
-                    log.error("[mediaexpert] CF block on %s", search_url)
-                    continue
-
-            # Dismiss cookies
-            await page.evaluate("""
-                (() => {
-                    const bb = document.querySelectorAll('button');
-                    for (const b of bb) {
-                        const t = (b.textContent || '').toLowerCase();
-                        if ((t.includes('akceptuj') || t.includes('zgadzam') || t.includes('rozumiem'))
-                            && b.offsetParent !== null) {
-                            b.click(); return;
-                        }
-                    }
-                })()
-            """)
-            await asyncio.sleep(2)
-
-            # Scroll down to load lazy products
-            for _ in range(5):
-                await page.evaluate("window.scrollBy(0, 800)")
-                await asyncio.sleep(1.5)
-
-            # Extract products
-            raw = await page.evaluate(EXTRACT_JS)
-            if not raw:
-                log.warning("[mediaexpert] No data from %s", search_url)
-                continue
-
-            try:
-                items = json.loads(raw)
-            except (json.JSONDecodeError, TypeError):
-                log.error("[mediaexpert] JSON parse error")
-                continue
-
-            for item in items:
-                pid = item.get("pid", "")
-                name = item.get("name", "")
-                if not name or not pid:
-                    continue
-                if pid in seen_ids:
-                    continue
-
-                # Apply filters
-                name_lower = name.lower()
-                if any(kw in name_lower for kw in EXCLUDE_KW):
-                    continue
-                if not any(kw in name_lower for kw in INCLUDE_KW):
-                    continue
-
-                seen_ids.add(pid)
-
-                # Parse price (in grosze -> PLN)
-                price_raw = item.get("price", "")
-                price_str = _format_price(price_raw)
-
-                # URL
-                item_url = item.get("url", "")
-                if item_url and not item_url.startswith("http"):
-                    item_url = "https://www.mediaexpert.pl" + item_url
-
-                products.append({
-                    "id": f"mediaexpert_{pid}",
-                    "name": name,
-                    "price": price_str,
-                    "shop": "mediaexpert",
-                    "url": item_url,
-                    "image": item.get("img", ""),
-                    "stock": 0 if item.get("unavail") else 1,
-                    "available": not item.get("unavail", False),
-                })
-
-    except Exception as e:
-        log.error(f"[mediaexpert] Error: {e}")
-    finally:
-        try:
-            browser.stop()
-        except:
-            pass
+    # Sort: OOS first, available last (Discord scroll fix)
+    products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
 
     log.info(f"[MEDIAEXPERT] {len(products)} produktow")
     return products
@@ -304,3 +175,21 @@ def _format_price(price_raw):
         return f"{pln:.2f} zl"
     except (ValueError, TypeError):
         return str(price_raw).strip()
+
+
+async def get_products():
+    """Legacy interface — for standalone testing only."""
+    from patchright.async_api import async_playwright
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(
+            headless=False,
+            args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                  "--disable-blink-features=AutomationControlled",
+                  "--proxy-server=http://127.0.0.1:8888"]
+        )
+        try:
+            ctx = await browser.new_context()
+            page = await ctx.new_page()
+            return await scan_with_page(page)
+        finally:
+            await browser.close()

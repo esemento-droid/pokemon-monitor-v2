@@ -11,8 +11,8 @@ import os
 log = logging.getLogger("monitor")
 
 SHOP = "proshop"
-BROWSER_TYPE = "stealth"
-SCAN_TIMEOUT = 120  # CF either passes in ~15s or blocks completely — no point waiting longer
+BROWSER_TYPE = "standard"  # Try VPS IP directly — mobile proxy gets ERR_TIMED_OUT
+SCAN_TIMEOUT = 90  # CF either passes quickly or blocks — no point waiting long
 URL = "https://www.proshop.pl/Pokemon/Pokemon?f~pokmon_tcg=bokse~booster-tin-og-tema~tin~tilbehor"
 
 EXCLUDE = [
