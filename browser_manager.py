@@ -41,20 +41,31 @@ MAX_TABS_PER_BROWSER = 30
 
 
 class BrowserManager:
-    """Manages persistent browsers and dedicated pages for each shop."""
+    """Manages persistent browsers and dedicated pages for each shop.
+    
+    KEY FIX: ONE shared context per browser (not per shop!).
+    Each shop gets a PAGE (tab) in the shared context.
+    new_context() = new Chrome renderer process = memory/CPU leak.
+    new_page() in existing context = lightweight tab, no new process.
+    """
 
     def __init__(self):
         self._stealth_browser = None   # patchright (CF bypass)
         self._standard_browser = None  # playwright (simple headless)
+        self._stealth_context = None   # ONE shared context for all stealth shops
+        self._standard_context = None  # ONE shared context for all standard shops
         self._pw_stealth = None        # patchright playwright instance
         self._pw_standard = None       # playwright instance
         self._pages = {}               # shop_name → page
+        self._browser_types = {}       # shop_name → "stealth" or "standard"
         self._started = False
 
     async def start(self):
-        """Launch persistent browsers."""
+        """Launch persistent browsers + ONE context each."""
         if self._started:
             return
+
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
         # Stealth browser (patchright) — for CF/anti-bot shops
         try:
@@ -72,7 +83,9 @@ class BrowserManager:
                     f"--proxy-server=http://{PROXY_ADDR}",
                 ]
             )
-            logger.info("[BROWSER_MGR] Stealth browser (patchright) launched with proxy")
+            # ONE context for ALL stealth shops (no per-shop renderer churn)
+            self._stealth_context = await self._stealth_browser.new_context(user_agent=ua)
+            logger.info("[BROWSER_MGR] Stealth browser (patchright) launched + 1 shared context")
         except Exception as e:
             logger.error(f"[BROWSER_MGR] Stealth browser launch FAILED: {e}")
             self._stealth_browser = None
@@ -91,7 +104,9 @@ class BrowserManager:
                     "--disable-background-timer-throttling",
                 ]
             )
-            logger.info("[BROWSER_MGR] Standard browser (playwright headless) launched")
+            # ONE context for ALL standard shops
+            self._standard_context = await self._standard_browser.new_context(user_agent=ua)
+            logger.info("[BROWSER_MGR] Standard browser (playwright headless) launched + 1 shared context")
         except Exception as e:
             logger.error(f"[BROWSER_MGR] Standard browser launch FAILED: {e}")
             self._standard_browser = None
@@ -101,33 +116,28 @@ class BrowserManager:
 
     async def create_page(self, shop_name, browser_type="standard", user_agent=None):
         """
-        Create a dedicated page (tab) for a shop.
-        browser_type: "stealth" (patchright+proxy) or "standard" (playwright headless)
-        Returns page object. Page lives until explicitly destroyed.
+        Create a dedicated page (tab) for a shop in the SHARED context.
+        No new context = no new renderer process = no Chrome growth.
         """
         if shop_name in self._pages:
-            # Already has a page — return it
             return self._pages[shop_name]
 
-        ua = user_agent or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-
         if browser_type == "stealth":
-            browser = self._stealth_browser
+            context = self._stealth_context
         else:
-            browser = self._standard_browser
+            context = self._standard_context
 
-        if not browser or not browser.is_connected():
-            logger.error(f"[BROWSER_MGR] Browser '{browser_type}' not available for [{shop_name}]")
-            # Try to respawn
+        if not context:
+            logger.error(f"[BROWSER_MGR] Context '{browser_type}' not available for [{shop_name}]")
             await self._respawn_browser(browser_type)
-            browser = self._stealth_browser if browser_type == "stealth" else self._standard_browser
-            if not browser:
+            context = self._stealth_context if browser_type == "stealth" else self._standard_context
+            if not context:
                 return None
 
         try:
-            context = await browser.new_context(user_agent=ua)
             page = await context.new_page()
             self._pages[shop_name] = page
+            self._browser_types[shop_name] = browser_type
             logger.info(f"[BROWSER_MGR] Page created for [{shop_name}] ({browser_type})")
             return page
         except Exception as e:
@@ -141,23 +151,23 @@ class BrowserManager:
 
     async def heal_page(self, shop_name, browser_type="standard", user_agent=None):
         """
-        Recreate a crashed/broken page. Browser survives.
-        Properly closes old context before creating new one.
+        Recreate a crashed page. NO new context — just close old page, open new one.
+        Browser and context survive. Zero new renderer processes.
         """
         old_page = self._pages.pop(shop_name, None)
         if old_page:
             try:
-                ctx = old_page.context
-                await asyncio.wait_for(ctx.close(), timeout=10)
+                await asyncio.wait_for(old_page.close(), timeout=10)
             except Exception:
                 pass
 
-        logger.warning(f"[BROWSER_MGR] Healing page for [{shop_name}]")
+        logger.warning(f"[BROWSER_MGR] Healing page for [{shop_name}] (page close + new page, same context)")
         return await self.create_page(shop_name, browser_type, user_agent)
 
     async def _respawn_browser(self, browser_type):
-        """Respawn a crashed browser."""
+        """Respawn a crashed browser + recreate shared context."""
         logger.warning(f"[BROWSER_MGR] Respawning {browser_type} browser...")
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
         if browser_type == "stealth":
             old = self._stealth_browser
@@ -177,10 +187,12 @@ class BrowserManager:
                         f"--proxy-server=http://{PROXY_ADDR}",
                     ]
                 )
-                logger.info("[BROWSER_MGR] Stealth browser respawned")
+                self._stealth_context = await self._stealth_browser.new_context(user_agent=ua)
+                logger.info("[BROWSER_MGR] Stealth browser + context respawned")
             except Exception as e:
                 logger.error(f"[BROWSER_MGR] Stealth respawn FAILED: {e}")
                 self._stealth_browser = None
+                self._stealth_context = None
         else:
             old = self._standard_browser
             if old:
@@ -193,25 +205,35 @@ class BrowserManager:
                     headless=True,
                     args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
                 )
-                logger.info("[BROWSER_MGR] Standard browser respawned")
+                self._standard_context = await self._standard_browser.new_context(user_agent=ua)
+                logger.info("[BROWSER_MGR] Standard browser + context respawned")
             except Exception as e:
                 logger.error(f"[BROWSER_MGR] Standard respawn FAILED: {e}")
                 self._standard_browser = None
+                self._standard_context = None
 
-        # Recreate all pages for affected shops
-        affected = [name for name, page in self._pages.items()]
-        # We can't easily know which pages belong to which browser here,
-        # so we'll let the shop workers call heal_page() when they detect failure.
+        # Clear pages for affected browser type — workers will call heal_page()
+        affected = [name for name, btype in self._browser_types.items() if btype == browser_type]
+        for name in affected:
+            self._pages.pop(name, None)
+        if affected:
+            logger.info(f"[BROWSER_MGR] Cleared {len(affected)} pages after respawn: {affected}")
 
     async def close(self):
         """Shutdown everything."""
         for name, page in self._pages.items():
             try:
-                ctx = page.context
-                await ctx.close()
+                await page.close()
             except Exception:
                 pass
         self._pages.clear()
+
+        for ctx in [self._stealth_context, self._standard_context]:
+            if ctx:
+                try:
+                    await ctx.close()
+                except Exception:
+                    pass
 
         if self._stealth_browser:
             try:
@@ -243,6 +265,8 @@ class BrowserManager:
         return {
             "stealth_alive": self._stealth_browser is not None and self._stealth_browser.is_connected() if self._stealth_browser else False,
             "standard_alive": self._standard_browser is not None and self._standard_browser.is_connected() if self._standard_browser else False,
+            "stealth_context": self._stealth_context is not None,
+            "standard_context": self._standard_context is not None,
             "pages": len(self._pages),
             "page_names": list(self._pages.keys()),
         }
