@@ -229,21 +229,28 @@ def match_set_number(product_name, sitemap):
         return None
     best_num = None
     best_score = 0
+    best_coverage = 0.0
     for num, slug in sitemap.items():
         slug_words = set(slug.split('-')) - STOP_WORDS
         slug_words = {w for w in slug_words if len(w) > 1}
-        score = len(name_words & slug_words)
-        if score > best_score:
+        if not slug_words:
+            continue
+        common = name_words & slug_words
+        score = len(common)
+        # Coverage: how much of our product name is matched
+        coverage = score / len(name_words) if name_words else 0
+        if score > best_score or (score == best_score and coverage > best_coverage):
             best_score = score
             best_num = num
-    # Require 2+ matching words, OR 1 word if it's long/unique (8+ chars)
-    if best_score >= 2:
+            best_coverage = coverage
+    # Require: 2+ matching words AND at least 40% of product name words matched
+    if best_score >= 2 and best_coverage >= 0.4:
         return best_num
-    if best_score == 1:
-        # Check if the matching word is unique enough (8+ chars, not generic)
+    # Single long unique word (8+ chars) — still OK (e.g. "koenigsegg", "chrysanthemum")
+    if best_score == 1 and best_coverage >= 0.3:
         matching_words = name_words & set(sitemap.get(best_num, '').split('-'))
         for w in matching_words:
-            if len(w) >= 8:  # "chrysanthemum", "koenigsegg" etc. are unique enough
+            if len(w) >= 8:
                 return best_num
     return None
 

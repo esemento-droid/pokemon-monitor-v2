@@ -271,7 +271,8 @@ async def get_products():
                                         shop_name = cheapest.get("seller", {}).get("name", "")
                                     except Exception:
                                         pass
-                                return {"lowest_price": low, "shop": shop_name, "klockoradar_url": url}
+                                kr_name = data.get("name", "")
+                                return {"lowest_price": low, "shop": shop_name, "klockoradar_url": url, "kr_name": kr_name}
                     except Exception:
                         pass
                     return None
@@ -313,11 +314,22 @@ async def get_products():
                         if result:
                             price_map[sn] = result
 
-                    # Apply to products
+                    # Apply to products (with name verification)
                     for p, set_num, price_val in product_sets:
                         kr_data = price_map.get(set_num)
                         if not kr_data:
                             continue
+
+                        # Verify: check that klockoradar product name matches our product
+                        kr_name = kr_data.get("kr_name", "").lower()
+                        p_name_words = set(re.sub(r'[^a-z0-9\s]', ' ', p['name'].lower()).split()) - {"lego", "the", "and", "with", "in", "of", "for", "r"}
+                        p_name_words = {w for w in p_name_words if len(w) > 2}
+                        if kr_name and p_name_words:
+                            kr_words = set(kr_name.split()) - {"lego", "the", "and", "with", "in", "of", "for"}
+                            overlap = len(p_name_words & kr_words)
+                            if overlap < 1:
+                                continue  # No overlap at all — wrong match
+
                         lowest = kr_data["lowest_price"]
                         diff = price_val - lowest
                         pct = (diff / lowest) * 100 if lowest > 0 else 0
