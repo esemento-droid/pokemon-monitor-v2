@@ -20,7 +20,7 @@ if not os.environ.get("DISPLAY"):
 log = logging.getLogger("monitor")
 
 BROWSER_TYPE = "stealth"
-SCAN_TIMEOUT = 180  # mediaexpert needs CF wait + 2 search URLs + scrolls = easily 130-150s
+SCAN_TIMEOUT = 120  # Optimized: CF wait 4+6s + 2 URLs + fast scroll = ~40-50s typical
 
 SEARCH_URLS = [
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+tcg",
@@ -76,14 +76,14 @@ async def scan_with_page(page):
     seen_ids = set()
 
     # First URL - navigate + wait for CF to resolve
-    await page.goto(SEARCH_URLS[0], wait_until="domcontentloaded", timeout=45000)
-    await asyncio.sleep(8)
+    await page.goto(SEARCH_URLS[0], wait_until="domcontentloaded", timeout=30000)
+    await asyncio.sleep(4)
 
     # Check CF resolution
     title = await page.title()
     if not title or "moment" in title.lower() or "checking" in title.lower():
-        log.warning("[mediaexpert] CF not resolved, waiting longer...")
-        await asyncio.sleep(15)
+        log.warning("[mediaexpert] CF not resolved, waiting...")
+        await asyncio.sleep(6)
         title = await page.title()
         if not title or "moment" in title.lower():
             log.error("[mediaexpert] CF block - cannot access")
@@ -92,13 +92,13 @@ async def scan_with_page(page):
     for search_url in SEARCH_URLS:
         if search_url != SEARCH_URLS[0]:
             await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(8)
+            await asyncio.sleep(4)
 
             # Check CF
             title = await page.title()
             if not title or "moment" in title.lower() or "checking" in title.lower():
                 log.warning("[mediaexpert] CF challenge on %s, waiting...", search_url)
-                await asyncio.sleep(15)
+                await asyncio.sleep(6)
                 title = await page.title()
                 if not title or "moment" in title.lower():
                     log.error("[mediaexpert] CF block on %s", search_url)
@@ -117,12 +117,12 @@ async def scan_with_page(page):
                 }
             })()
         """)
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
         # Scroll down to load lazy products
-        for _ in range(5):
-            await page.evaluate("window.scrollBy(0, 800)")
-            await asyncio.sleep(1)
+        for _ in range(4):
+            await page.evaluate("window.scrollBy(0, 1000)")
+            await asyncio.sleep(0.8)
 
         # Extract products
         raw = await page.evaluate(EXTRACT_JS)

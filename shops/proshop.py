@@ -12,7 +12,7 @@ log = logging.getLogger("monitor")
 
 SHOP = "proshop"
 BROWSER_TYPE = "stealth"
-SCAN_TIMEOUT = 180  # Proshop has aggressive CF, needs more time than default 120s
+SCAN_TIMEOUT = 120  # CF either passes in ~15s or blocks completely — no point waiting longer
 URL = "https://www.proshop.pl/Pokemon/Pokemon?f~pokmon_tcg=bokse~booster-tin-og-tema~tin~tilbehor"
 
 EXCLUDE = [
@@ -69,26 +69,26 @@ async def scan_with_page(page):
     """Persistent browser interface — page already exists, just navigate."""
     products = []
 
-    await page.goto(URL, wait_until="domcontentloaded", timeout=90000)
-    await asyncio.sleep(25)
+    await page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+    await asyncio.sleep(8)
 
-    # Check CF — give it more time (proshop has aggressive CF)
+    # Check CF — quick check, if not resolved wait once more
     title = await page.title()
     if not title or "moment" in title.lower() or "attention" in title.lower() or "cloudflare" in title.lower():
-        log.warning("[proshop] CF not resolved, waiting longer (attempt 1)...")
-        await asyncio.sleep(25)
+        log.warning("[proshop] CF not resolved, waiting...")
+        await asyncio.sleep(10)
         title = await page.title()
         if not title or "attention" in title.lower() or "moment" in title.lower():
-            # Second attempt: reload page and wait again
-            log.warning("[proshop] CF still blocking, reload + wait (attempt 2)...")
+            # Retry: reload and wait
+            log.warning("[proshop] CF still blocking, reload...")
             try:
-                await page.reload(wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(25)
+                await page.reload(wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(10)
                 title = await page.title()
             except Exception:
                 pass
             if not title or "attention" in title.lower() or "moment" in title.lower():
-                log.error("[proshop] CF block - cannot access after 2 attempts")
+                log.error("[proshop] CF block - cannot access")
                 return []
 
     raw = await page.evaluate(EXTRACT_JS)
