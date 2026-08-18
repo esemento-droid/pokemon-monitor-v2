@@ -68,7 +68,9 @@ def _is_lego_set(product):
                          "plecak", "tornister", "torba", "worek", "piórnik",
                          "płytka", "płytk", "baseplate",
                          "pojemnik", "lunch", "bidon", "butelk", "śniadani",
-                         "zestaw na", "częściowy zestaw", "lampk", "latark"]
+                         "zestaw na", "częściowy zestaw", "lampk", "latark",
+                         "kubek", "kubk", "haczyk", "wieszak", "półka",
+                         "organizer", "ramka", "zegar"]
     if any(kw in name for kw in clothing_keywords):
         return False
     

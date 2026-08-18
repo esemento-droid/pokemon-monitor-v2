@@ -1,3 +1,126 @@
+# Session Context — 2026-08-18 (Morning Session: Fixes + Limango Overhaul)
+
+## UWAGA: Ten plik zastępuje SESSION_CONTEXT_2026-08-17_v2.md
+
+---
+
+## Co zrobiono 2026-08-18 rano:
+
+### 1. Strefatcg trigger — WYŁĄCZONY (URGENT!)
+- **Problem**: Bot zamówił zestaw za 1750 PLN gdy max powinno być 1510
+- **Root cause**: `except (ValueError, TypeError): pass` — gdy cena nie parsowała → skipował sprawdzenie → kupował za dowolną cenę!
+- **Fix**: `pass` → `return` (bezpieczeństwo: nie kupuj jeśli nie możesz zweryfikować ceny)
+- **Max price**: 1580 → **1510 PLN**
+- **Status**: WYŁĄCZONY w detector.py (wszystkie 3 wywołania + flush zakomentowane)
+- **Włączenie**: TYLKO na wyraźną prośbę usera
+
+### 2. FlareSolverr — bumped do 768MB
+- 512MB powodowało "tab crashed" na gralnia/dystryktzero
+- Teraz 768MB + 1GB swap
+- BROWSER_TIMEOUT=60000 (zamyka idle sesje)
+
+### 3. Broken scrapers — diagnostyka
+- **xjoy**: DZIAŁA (był w cooldown po wczorajszym RAM crash) ✅
+- **mediaexpert**: DZIAŁA (był w cooldown) ✅
+- **rgfk**: Anubis challenge timeout — zmniejszono timeout 90→30s, graceful failure
+- **am76**: Rate-limited na VPS IP — dodano mobile proxy + delay 3s
+- **gralnia/dystryktzero**: FS tab crash — naprawione bumpem FS do 768MB
+- **eduksiazka/mepel**: Parser empty — do dalszego debugowania
+
+### 4. Limango LEGO — PEŁNA PRZEBUDOWA
+- **Nazwy**: było z URL obrazka (bzdury), teraz z API `item["name"]` (pełne prawidłowe nazwy)
+- **URL**: `/p/{goldenProductId}` dawało 404 → teraz `/shop/product/{id}` (działa, redirectuje do SEO URL)
+- **Dostępność**: było `price > 0` (zawsze true) → teraz `totalStockAvailable > 0`
+- **Filtr**: odrzuca ubrania (bokserki, kurtki, piżamy), akcesoria (plecaki, tornistra, pojemniki, bidony, lunch boxy, lampki), płytki baseplate
+- **Matching zestawów**: klockoradar sitemap (fuzzy match nazwy → numer 5-cyfrowy)
+- **Ceny promoklocki**: cache w `data/price_cache.json` (54 zestawy), odświeżany co 4h
+- **Price regex**: naprawiony — promoklocki nie ma `lowPrice` w JSON-LD, format to `najniższa cena...XX,XX zł` w HTML
+- **Wynik**: 77 zestawów, 50 z porównaniem cen, embedy na DC z linkami + ceną + różnicą %
+
+### 5. Price Cache system (NOWY)
+- `price_cache.py` — cron co 4h, odpytuje promoklocki via FlareSolverr
+- `infra/build_price_cache_v2.sh` — bash script, restartuje FS co 5 requestów (obejście OOM)
+- `data/price_cache.json` — 54 zestawów z cenami
+- Limango czyta z cache INSTANT (zero FS przy skanie)
+- Flow: klockoradar sitemap (nazwa→numer) → promoklocki cache (numer→cena) → embed
+
+### 6. Stabilność po nocy — POTWIERDZONA
+- Monitor: 7h+ uptime bez restartów ✅
+- RAM: 4.4-4.8 GB available (stabilne) ✅
+- Audit: 152 healthy / 0 struggling / 2 dead (vs wczoraj 40/66/18) ✅
+- Scany: 7736/h (vs wczoraj 841/h) — 9x więcej! ✅
+- memory_guard: łapie zombies co 5 min ✅
+- Night IP: Orange PL UNCHANGED (potrzeba Play SIM)
+
+---
+
+## Pliki zmienione 2026-08-18:
+- `detector.py` — strefatcg trigger DISABLED
+- `strefatcg_trigger.py` — max_price 1510, safety return on parse error
+- `shops/limango.py` — pełna przebudowa (nazwy, URL, dostępność, filtr, price compare)
+- `shops/rgfk.py` — graceful Anubis timeout (30s)
+- `shops/am76.py` — mobile proxy + delay
+- `price_cache.py` — promoklocki price regex fix
+- `price_compare.py` — promoklocki price regex fix + single-word match (8+ chars)
+- `discord_sender.py` — usunięte live FS calls (was causing 305 errors/h)
+- `infra/build_price_cache_v2.sh` — bash price fetcher z FS restart co 5 req
+- `infra/fix_flaresolverr.sh` — FS bump do 768MB
+- `infra/fix_scrapers.py` — broken scraper diagnostic
+- `infra/test_limango_live.py` — limango live test
+- `infra/test_limango_names.py` — limango name analysis
+- `infra/debug_match.py` — fuzzy match debugger
+- `infra/morning_check.sh` — morning health check
+- `infra/full_report.sh` — full system report
+
+---
+
+## Stan systemu (2026-08-18 10:00):
+
+### Monitor: ✅ active
+### RAM: 4.8 GB available
+### Chrome: ~40 procesów
+### FlareSolverr: 234MB / 768MB
+### Proxy: tunnel OK (0.44s), SOCKS5 OK (0.40s)
+### Scrapery: 165 OK, 152 healthy (≥70%)
+### Limango: 77 zestawów, 50 z price compare
+### Price cache: 54 zestawów z promoklocki
+### Strefatcg trigger: WYŁĄCZONY
+
+---
+
+## Crontab (debian):
+```
+*/5 * * * * sudo docker start flaresolverr >/dev/null 2>&1
+* * * * * /opt/pokemon-monitor-v2/proxy_watchdog.sh >/dev/null 2>&1
+*/5 * * * * /opt/pokemon-monitor-v2/start_socks5.sh >/dev/null 2>&1
+*/3 * * * * cd /opt/pokemon-monitor-v2 && ./venv/bin/python3 health_alert.py >/dev/null 2>&1
+0 * * * * cd /opt/pokemon-monitor-v2 && timeout 300 DISPLAY=:99 ./venv/bin/python3 session_warmer.py >> data/warmer.log 2>&1
+0 22 * * * cd /opt/pokemon-monitor-v2 && venv/bin/python daily_stats.py >> /opt/pokemon-monitor-v2/data/daily_stats.log 2>&1
+*/5 * * * * /opt/pokemon-monitor-v2/infra/memory_guard.sh
+0 */4 * * * cd /opt/pokemon-monitor-v2 && ./venv/bin/python3 price_cache.py >> data/price_cache.log 2>&1
+```
+
+---
+
+## Następne kroki:
+1. **Limango webhook** — `discord_webhook_limango.txt` ma PLACEHOLDER. Embedy lecą na główny webhook → router rozdziela. Jeśli OK — zostawić. Jeśli chcesz dedykowany kanał — wstawić URL.
+2. **DB constraint** — `event_log_type_check` nie ma `NEW_LISTING` — trzeba dodać ALTER TABLE
+3. **Dead scrapers** — eduksiazka, mepel (parser empty), rgfk (Anubis)
+4. **Play SIM** — Orange PL nie rotuje IP. Potrzeba dynamiczna SIM.
+5. **Rozwój** — patrz ANALYSIS_AND_PLAN.md (SLOW→FAST migracja, API engines)
+
+---
+
+## Ważne adresy:
+- VPS: 146.59.45.228 (OVH, Debian)
+- Phone Tailscale: 100.127.72.24
+- Phone SSH: port 8022, pass: 123
+- Mobile IP: 37.47.130.139 (Orange PL, static)
+- DB: postgresql://pokemonitor:mon2026pg@localhost/pokemonitor
+- Repo: github.com/mr68pknctx/pokemon-monitor-v2
+
+---
+
 # Session Context — 2026-08-17 v2 (RAM Fix + Stability + Speed Optimization)
 
 ## Co zrobiono w tej sesji:
