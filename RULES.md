@@ -90,12 +90,36 @@ curl -sL paste.rs/XXXXX | bash 2>&1 | curl -s --data-binary @- https://paste.rs/
 1. Łapać WSZYSTKIE angielskie sealed Pokemon TCG (booster boxes, ETBs, tins, collections, blisters, bundles, mini tins, UPCs)
 2. Prawidłowo wykrywać DOSTĘPNOŚĆ — testuj na live site (koszyk/dodaj = available, brak/niedost = unavailable)
 3. **Przy pierwszym zaczytaniu (snapshot) MUSI ładować TEŻ niedostępne produkty** — to kluczowe dla wykrywania RESTOCKÓW (przejście OOS→available). Jeśli scraper nie załaduje OOS na start, nie będzie miał baseline do porównania i nie wyśle alertu restock.
-3. Wykrywać RESTOCKI (przejście unavailable→available) i ZMIANY CEN
-4. Mieć OBRAZKI które wyświetlają się na Discord (testuj HTTP HEAD, weserv.nl proxy jeśli 403)
-5. Być SZYBKI i STABILNY — API-first, max 6-10 req/min, proxy jeśli rate limit
-6. EXCLUDE kompletny od startu (decks, JP/KR/CHI, accessories, other games, junk)
-7. Filtr cenowy: <10 PLN = single → wycinaj
-8. Testuj na VPS (nie sandbox) — inny IP, proxy, CF zachowują się inaczej
+4. **Kolejność pierwszego snapshot: OOS NAJPIERW, dostępne NA KOŃCU** — Discord wyświetla chronologicznie (najnowsze na dole). Dostępne muszą być OSTATNIE żeby user nie scrollował przez 100+ OOS embedów. Implementacja: `products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))` przed return.
+5. Wykrywać RESTOCKI (przejście unavailable→available) i ZMIANY CEN
+6. Mieć OBRAZKI które wyświetlają się na Discord (testuj HTTP HEAD, weserv.nl proxy jeśli 403)
+7. Być SZYBKI i STABILNY — API-first, max 6-10 req/min, proxy jeśli rate limit
+8. EXCLUDE kompletny od startu (decks, JP/KR/CHI, accessories, other games, junk)
+9. Filtr cenowy: <10 PLN = single → wycinaj
+10. Testuj na VPS (nie sandbox) — inny IP, proxy, CF zachowują się inaczej
+
+### 🌍 ZAGRANICZNE SKLEPY (FOREIGN_SHOPS):
+- Sklepy zagraniczne (DE, UK, EU) idą do kanału **🌍 Zagraniczne** na Discord
+- Dodaj do `FOREIGN_SHOPS` w `discord_router/config.py`
+- Ceny w oryginalnej walucie (EUR, GBP) — NIE przeliczaj na PLN
+- Nazwy produktów mogą być w lokalnym języku (DE, FR) ale KARTY muszą być English
+- Jeśli site ma filtr językowy (np. `/lingua-englisch`) — użyj go zamiast filtrowania po nazwie
+- Produkty z DE/FR/innym kodem języka w nazwie (np. " DE Factory Sealed") = inna edycja = WYCINAJ
+
+### 🔧 BUDOWA SCRAPER — ARCHITEKTURA:
+- **1 scraper = 1 plik** w `shops/` — MUSI mieć `async def get_products() -> list[dict]`
+- **NODRIVER shopy** muszą mieć `async def scan_with_page(page)` + `BROWSER_TYPE = "stealth"|"standard"`
+- **Module-level SCAN_TIMEOUT** — jeśli shop potrzebuje > 120s (stealth) lub > 90s (standard), dodaj `SCAN_TIMEOUT = X` w module. Worker to respektuje.
+- **Nie mix proxy per shop** — stealth browser = mobile proxy (wszystkie), standard = VPS IP (wszystkie). Jeśli shop banuje mobile IP → przenieś na standard.
+- **Rate limit**: jeśli site daje 429 → sequential fetch z delay (NIE parallel). Dodaj do SLOW_SHOPS w main.py.
+
+### 🖼️ OBRAZKI — MATCHOWANIE:
+- Preferuj matchowanie po slug/ID (nie po pozycji!)
+- Jeśli po pozycji — WERYFIKUJ: ratio 1:1 (imgs count == products count)
+- Jeśli 2:1 (main+hover) → `imgs[i*2]`
+- Jeśli 1:1 → `imgs[i]`
+- **TESTUJ** na minimum 5 produktach: slug obrazka == slug URL produktu
+- data-src > src (lazy loading = data-src ma pełny URL)
 
 ### EXCLUDE POLICY (per-shop, NIE centralna!):
 User odrzucił centralną listę — każdy shop ma INDYWIDUALNY exclude (różny inventory/naming).
