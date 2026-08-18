@@ -9,6 +9,7 @@ import asyncio
 import re
 import json
 import ssl
+import os
 
 import aiohttp
 
@@ -222,8 +223,7 @@ async def get_products():
             sitemap = {}
             sitemap_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "sitemap_cache.json")
             try:
-                import os as _os
-                if _os.path.exists(sitemap_cache_file):
+                if os.path.exists(sitemap_cache_file):
                     with open(sitemap_cache_file, "r") as f:
                         sitemap = json.load(f)
                     if sitemap:
