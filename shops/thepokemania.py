@@ -55,8 +55,11 @@ async def _fetch_page(session, url):
 def _parse_page(html):
     """
     Extract products from page HTML.
-    Sources: GA4 dataLayer (id, name, price_ron), LD+JSON (URLs), data-src (images)
+    Sources: GA4 dataLayer (id, name, price_ron), LD+JSON (URLs), data-src (images),
+    HTML grid-image classes (availability: out-of-stock class)
     """
+    from bs4 import BeautifulSoup
+
     # Exchange rate RON -> EUR
     rate_match = re.search(r'"exchange_rate":([\d.]+)', html)
     rate = float(rate_match.group(1)) if rate_match else 5.0916
@@ -83,26 +86,25 @@ def _parse_page(html):
         except (json.JSONDecodeError, TypeError):
             pass
 
-    # Product images (data-src, 2 per product: main + hover)
+    # Product images (data-src, 1 per product in order)
     imgs = re.findall(r'data-src="(https://c\.cdnmp\.net/[^"]+)"', html)
 
-    # Availability: "Add to cart" or "Vorbestellung" = available, else unavailable
-    avail_matches = re.findall(r'(Add to cart|Vorbestellung|Ausverkauft|Nicht verfügbar)', html)
+    # Availability from HTML: grid-image--out-of-stock class
+    soup = BeautifulSoup(html, "lxml")
+    grid_items = soup.select('.grid-image')
+    avail_list = []
+    for gi in grid_items:
+        classes = ' '.join(gi.get('class', []))
+        is_oos = 'out-of-stock' in classes
+        avail_list.append(not is_oos)
 
     # Merge by position
     products = []
     for i, ga in enumerate(ga4_items):
         url = urls[i] if i < len(urls) else ""
-        # 1 image per product (matched by position, verified slug match)
         img = imgs[i] if i < len(imgs) else ""
-
-        # Convert RON to EUR
         price_eur = ga["price_ron"] / rate
-
-        # Availability from page order
-        available = True
-        if i < len(avail_matches):
-            available = avail_matches[i] in ("Add to cart", "Vorbestellung")
+        available = avail_list[i] if i < len(avail_list) else True
 
         products.append({
             "id": ga["id"],
