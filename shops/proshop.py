@@ -12,6 +12,7 @@ log = logging.getLogger("monitor")
 
 SHOP = "proshop"
 BROWSER_TYPE = "stealth"
+SCAN_TIMEOUT = 180  # Proshop has aggressive CF, needs more time than default 120s
 URL = "https://www.proshop.pl/Pokemon/Pokemon?f~pokmon_tcg=bokse~booster-tin-og-tema~tin~tilbehor"
 
 EXCLUDE = [

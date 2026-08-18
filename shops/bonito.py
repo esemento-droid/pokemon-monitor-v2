@@ -1,8 +1,9 @@
 """
 Scraper: bonito.pl — bot protection JS verification
-Method: patchright (persistent stealth browser) + JS/BS4 extraction
-NOTE: IP 37.47.130.139 is BANNED by bonito. Uses WARP proxy (different IP).
-BROWSER_TYPE = "stealth"
+Method: playwright standard browser (headless, VPS IP - no proxy)
+NOTE: Orange IP 37.47.130.139 is BANNED. VPS IP (146.59.45.228) works with JS challenge.
+BROWSER_TYPE = "standard" — uses VPS IP directly (not mobile proxy)
+SCAN_TIMEOUT = 150 — needs time for JS challenge
 """
 import asyncio
 import json
@@ -12,7 +13,8 @@ import re
 log = logging.getLogger("monitor")
 
 SHOP = "bonito"
-BROWSER_TYPE = "stealth"
+BROWSER_TYPE = "standard"  # VPS IP (not mobile proxy which is banned)
+SCAN_TIMEOUT = 150  # JS challenge needs patience
 SEARCH_URL = "https://bonito.pl/szukaj?fraza=pokemon+tcg"
 
 EXCLUDE = [
