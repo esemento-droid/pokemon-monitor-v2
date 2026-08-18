@@ -142,13 +142,13 @@ class BrowserManager:
     async def heal_page(self, shop_name, browser_type="standard", user_agent=None):
         """
         Recreate a crashed/broken page. Browser survives.
-        Call this when page.goto() throws or page is unresponsive.
+        Properly closes old context before creating new one.
         """
         old_page = self._pages.pop(shop_name, None)
         if old_page:
             try:
                 ctx = old_page.context
-                await ctx.close()
+                await asyncio.wait_for(ctx.close(), timeout=10)
             except Exception:
                 pass
 

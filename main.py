@@ -439,7 +439,7 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
     """
     await asyncio.sleep(random.uniform(2, 20))  # Stagger first scan
 
-    stats = {"ok": 0, "err": 0, "consecutive_err": 0}
+    stats = {"ok": 0, "err": 0, "consecutive_err": 0, "heal_count": 0}
     scan_fn = module.scan_with_page
     SCAN_TIMEOUT = 90  # Max seconds per scan — prevents hung pages
 
@@ -463,6 +463,7 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                 stats["ok"] += 1
                 stats["err"] = 0
                 stats["consecutive_err"] = 0
+                stats["heal_count"] = 0  # Reset on success
                 scan_time = (datetime.now() - start).total_seconds()
                 logger.info(f"[{name}] {len(products)} produktow w {scan_time:.1f}s")
             else:
@@ -470,18 +471,32 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                 stats["consecutive_err"] += 1
 
         except asyncio.TimeoutError:
-            logger.warning(f"[{name}] TIMEOUT {SCAN_TIMEOUT}s — healing page")
             stats["err"] += 1
             stats["consecutive_err"] += 1
-            # Heal: close broken page, get fresh one (browser lives!)
-            page = await mgr.heal_page(name, browser_type=browser_type)
-            if not page:
-                logger.error(f"[{name}] Page heal FAILED — waiting 5min")
-                await asyncio.sleep(300)
-                page = await mgr.heal_page(name, browser_type=browser_type)
-                if not page:
-                    logger.error(f"[{name}] Page heal FAILED AGAIN — giving up")
-                    return
+            stats["heal_count"] = stats.get("heal_count", 0)
+
+            # First try: reload (cheap, no new renderer)
+            try:
+                await asyncio.wait_for(page.reload(timeout=30000), timeout=35)
+                logger.warning(f"[{name}] TIMEOUT {SCAN_TIMEOUT}s — reloaded page")
+            except Exception:
+                # Reload failed — heal only if under limit
+                if stats["heal_count"] < 3:
+                    stats["heal_count"] += 1
+                    logger.warning(f"[{name}] TIMEOUT — heal #{stats['heal_count']}/3")
+                    new_page = await mgr.heal_page(name, browser_type=browser_type)
+                    if new_page:
+                        page = new_page
+                    else:
+                        logger.error(f"[{name}] Heal failed — cooldown 30min")
+                        await asyncio.sleep(1800)
+                        stats["heal_count"] = 0
+                        continue
+                else:
+                    logger.warning(f"[{name}] TIMEOUT — heal limit reached, cooldown 30min")
+                    await asyncio.sleep(1800)
+                    stats["heal_count"] = 0
+                    continue
 
         except Exception as e:
             err_str = str(e)[:100]
@@ -489,15 +504,24 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
             stats["err"] += 1
             stats["consecutive_err"] += 1
 
-            # If it's a browser/page crash, heal
-            if "closed" in err_str.lower() or "crash" in err_str.lower() or "target" in err_str.lower():
-                logger.warning(f"[{name}] Page crashed — healing")
-                page = await mgr.heal_page(name, browser_type=browser_type)
-                if not page:
-                    await asyncio.sleep(60)
-                    page = await mgr.heal_page(name, browser_type=browser_type)
-                    if not page:
-                        return
+            # Only heal on browser/page crash, with limit
+            if any(x in err_str.lower() for x in ["closed", "crash", "target"]):
+                stats["heal_count"] = stats.get("heal_count", 0)
+                if stats["heal_count"] < 3:
+                    stats["heal_count"] += 1
+                    logger.warning(f"[{name}] Page crashed — heal #{stats['heal_count']}/3")
+                    new_page = await mgr.heal_page(name, browser_type=browser_type)
+                    if new_page:
+                        page = new_page
+                    else:
+                        await asyncio.sleep(1800)
+                        stats["heal_count"] = 0
+                        continue
+                else:
+                    logger.warning(f"[{name}] Crash — heal limit, cooldown 30min")
+                    await asyncio.sleep(1800)
+                    stats["heal_count"] = 0
+                    continue
 
         # Delay between scans (independent per shop — no blocking others)
         consec = stats["consecutive_err"]
