@@ -12,14 +12,12 @@ import ssl
 
 import aiohttp
 
-# Price comparison
-import sys
-sys.path.insert(0, '/opt/pokemon-monitor-v2')
+# Price comparison — from cache (promoklocki.pl, refreshed every 4h by price_cache.py)
 try:
-    from price_compare import get_price_comparison, format_price_comparison
-    HAS_PRICE_COMPARE = True
+    from price_cache import get_cached_price
+    HAS_PRICE_CACHE = True
 except ImportError:
-    HAS_PRICE_COMPARE = False
+    HAS_PRICE_CACHE = False
 
 SHOP = "limango"
 BASE = "https://www.limango.pl"
@@ -209,18 +207,11 @@ async def get_products():
 
     # Price comparison — uses pre-cached promoklocki.pl prices (refreshed every 4h by price_cache.py)
     # No FlareSolverr at scan time! Instant comparison from JSON cache.
+    # ONLY matches by exact set number (5-digit) — NO fuzzy matching (too risky, could compare wrong sets)
     if products:
         try:
             from price_cache import get_cached_price
-            from price_compare import _load_sitemap, match_set_number, format_price_comparison as _fmt, PROMOKLOCKI_BASE, HEADERS as PC_HEADERS
-
-            # Load sitemap for fuzzy matching (products without set number in name)
-            sitemap = None
-            try:
-                async with aiohttp.ClientSession(headers=PC_HEADERS) as pc_session:
-                    sitemap = await _load_sitemap(pc_session)
-            except Exception:
-                pass
+            from price_compare import format_price_comparison as _fmt, PROMOKLOCKI_BASE
 
             matched_count = 0
             for p in products:
@@ -235,10 +226,9 @@ async def get_products():
                 if price_val <= 0:
                     continue
 
-                # Get set number: from name or fuzzy match
+                # ONLY use exact set number from product name (5 digits)
+                # NO fuzzy matching — must be certain it's the same set
                 set_num = p.get('set_number')
-                if not set_num and sitemap:
-                    set_num = match_set_number(p['name'], sitemap)
                 if not set_num:
                     continue
 
@@ -256,7 +246,6 @@ async def get_products():
                     "shop": "promoklocki.pl",
                     "shop_url": cached.get("promoklocki_url", f"{PROMOKLOCKI_BASE}/{set_num}"),
                     "offer_count": 0,
-                    "klockoradar_url": f"https://klockoradar.pl/sets/{set_num}",
                     "promoklocki_url": f"{PROMOKLOCKI_BASE}/{set_num}",
                     "source": "promoklocki.pl",
                     "difference": round(diff, 2),
@@ -265,7 +254,7 @@ async def get_products():
                 }
                 p['price_compare'] = _fmt(comp)
                 p['set_number'] = set_num
-                p['klockoradar_url'] = f"https://klockoradar.pl/sets/{set_num}"
+                p['promoklocki_url'] = f"{PROMOKLOCKI_BASE}/{set_num}"
                 matched_count += 1
 
             if matched_count:

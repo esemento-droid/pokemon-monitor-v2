@@ -37,17 +37,9 @@ class DiscordSender:
             try:
                 event_type, product = await self._queue.get()
 
-                # Auto price comparison for LEGO shops
-                shop = product.get("shop", "")
-                if HAS_PRICE_COMPARE and shop in LEGO_SHOPS and not product.get("price_compare"):
-                    try:
-                        comparison = await get_price_comparison(
-                            product.get("name", ""), str(product.get("price", ""))
-                        )
-                        if comparison:
-                            product["price_compare"] = format_price_comparison(comparison)
-                    except Exception:
-                        pass
+                # LEGO price comparison — already injected by limango.py from price_cache
+                # No live FlareSolverr calls here! (was causing 500 errors)
+                # If product has price_compare field → it was set by the scraper from cache
 
                 embed = self._build_embed(event_type, product)
                 await self._rate_limit()
@@ -162,20 +154,30 @@ class DiscordSender:
                 {"name": "\U0001f4e6 Stan", "value": stock_text, "inline": True},
             ]
         }
-        # Price comparison field (LEGO)
+        # Price comparison field (LEGO — limango vs promoklocki)
         price_compare = product.get("price_compare")
         if price_compare:
+            # Rich format: limango price + promoklocki lowest + difference
+            set_num = product.get("set_number", "")
+            promoklocki_url = product.get("promoklocki_url", f"https://promoklocki.pl/{set_num}" if set_num else "")
+
             embed["fields"].append({
-                "name": "\U0001f4ca Porownanie cen",
+                "name": "\U0001f4ca Porównanie cen (promoklocki.pl)",
                 "value": price_compare,
                 "inline": False,
             })
+            if promoklocki_url:
+                embed["fields"].append({
+                    "name": "\U0001f6d2 Promoklocki",
+                    "value": f"[Zobacz najniższe ceny]({promoklocki_url})",
+                    "inline": True,
+                })
             kr_url = product.get("klockoradar_url", "")
             if kr_url:
                 embed["fields"].append({
                     "name": "\U0001f50d KlockoRadar",
-                    "value": kr_url,
-                    "inline": False,
+                    "value": f"[Historia cen]({kr_url})",
+                    "inline": True,
                 })
 
         if image and image.startswith("http"):

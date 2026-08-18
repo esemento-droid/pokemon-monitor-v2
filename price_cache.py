@@ -145,33 +145,18 @@ async def refresh_cache():
         if re.match(r'^\d{4,6}$', key):
             set_numbers.add(key)
 
-    # Source 2: klockoradar sitemap (get ALL known LEGO sets)
+    # Source 2: limango products from DB — extract set numbers from names
     try:
-        from price_compare import _load_sitemap
-        async with aiohttp.ClientSession(headers=HEADERS) as s:
-            sitemap = await _load_sitemap(s)
-            if sitemap:
-                # Only cache sets that limango might have (from recent scans)
-                # Read limango products from last scan
-                try:
-                    from database import get_shop_products
-                    from database import init_db
-                    await init_db()
-                    limango_products = await get_shop_products("limango")
-                    for pid, prod in limango_products.items():
-                        name = prod.get("name", "")
-                        m = re.search(r'\b(\d{5})\b', name)
-                        if m:
-                            set_numbers.add(m.group(1))
-                        # Also try fuzzy match
-                        from price_compare import match_set_number
-                        matched = match_set_number(name, sitemap)
-                        if matched:
-                            set_numbers.add(matched)
-                except Exception as e:
-                    log.warning(f"DB read failed: {e}")
+        from database import get_shop_products, init_db
+        await init_db()
+        limango_products = await get_shop_products("limango")
+        for pid, prod in limango_products.items():
+            name = prod.get("name", "")
+            m = re.search(r'\b(\d{5})\b', name)
+            if m:
+                set_numbers.add(m.group(1))
     except Exception as e:
-        log.warning(f"Sitemap load failed: {e}")
+        log.warning(f"DB read failed: {e}")
 
     if not set_numbers:
         log.warning("No set numbers to refresh!")
