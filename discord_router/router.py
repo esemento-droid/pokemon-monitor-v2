@@ -125,7 +125,7 @@ def get_system_type(message):
     if "alarm" in text or "🚨" in text:
         return ERROR_CHANNEL_NAME
 
-    if "heartbeat" in text or "monitor działa" in text:
+    if "heartbeat" in text or "monitor działa" in text or "shops active" in text:
         return HEARTBEAT_CHANNEL_NAME
 
     if "uruchomiony" in text or "router online" in text:
