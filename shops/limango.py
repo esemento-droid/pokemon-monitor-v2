@@ -207,59 +207,55 @@ async def get_products():
             if len(page_products) < 50:
                 break
 
-    # Price comparison — promoklocki.pl via FlareSolverr (session reuse, ~2s per product)
+    # Price comparison — klockoradar.pl (direct HTTP, no FlareSolverr needed!)
+    # Promoklocki.pl is behind Cloudflare and FlareSolverr can't handle 60 requests
     if HAS_PRICE_COMPARE and products:
         try:
             from price_compare import (
-                _load_sitemap, match_set_number, _fetch_promoklocki_price,
-                _create_flaresolverr_session, _destroy_flaresolverr_session,
+                _load_sitemap, match_set_number, _fetch_klockoradar_price,
                 format_price_comparison as _fmt, HEADERS as PC_HEADERS, PROMOKLOCKI_BASE
             )
             async with aiohttp.ClientSession(headers=PC_HEADERS) as pc_session:
-                # Pre-load klockoradar sitemap for fuzzy matching
                 sitemap = await _load_sitemap(pc_session)
                 if sitemap:
-                    await _create_flaresolverr_session(pc_session)
-                    try:
-                        for p in products:
-                            if not p.get('available'):
+                    for p in products:
+                        if not p.get('available'):
+                            continue
+                        price_val = 0
+                        if p['price']:
+                            try:
+                                price_val = float(p['price'].replace(' zl', '').replace(',', '.'))
+                            except:
                                 continue
-                            price_val = 0
-                            if p['price']:
-                                try:
-                                    price_val = float(p['price'].replace(' zl', '').replace(',', '.'))
-                                except:
-                                    continue
-                            if price_val <= 0:
-                                continue
-                            # Use pre-extracted set_number or fall back to fuzzy match
-                            set_num = p.get('set_number') or match_set_number(p['name'], sitemap)
-                            if not set_num:
-                                continue
-                            price_data = await _fetch_promoklocki_price(pc_session, set_num)
-                            if not price_data:
-                                continue
-                            lowest = price_data["lowest_price"]
-                            diff = price_val - lowest
-                            pct = (diff / lowest) * 100 if lowest > 0 else 0
-                            comp = {
-                                "set_number": set_num,
-                                "lowest_price": lowest,
-                                "shop": "promoklocki.pl",
-                                "shop_url": price_data.get("shop_url", ""),
-                                "offer_count": 0,
-                                "klockoradar_url": f"https://klockoradar.pl/sets/{set_num}",
-                                "promoklocki_url": f"{PROMOKLOCKI_BASE}/{set_num}",
-                                "source": "promoklocki.pl",
-                                "difference": round(diff, 2),
-                                "percentage": round(pct, 1),
-                                "is_cheaper": diff < 0,
-                            }
-                            p['price_compare'] = _fmt(comp)
-                            p['set_number'] = set_num
-                            p['klockoradar_url'] = f"https://klockoradar.pl/sets/{set_num}"
-                    finally:
-                        await _destroy_flaresolverr_session(pc_session)
+                        if price_val <= 0:
+                            continue
+                        # Use pre-extracted set_number or fuzzy match from sitemap
+                        set_num = p.get('set_number') or match_set_number(p['name'], sitemap)
+                        if not set_num:
+                            continue
+                        # Klockoradar — plain HTTP, no FlareSolverr!
+                        price_data = await _fetch_klockoradar_price(pc_session, set_num)
+                        if not price_data:
+                            continue
+                        lowest = price_data["lowest_price"]
+                        diff = price_val - lowest
+                        pct = (diff / lowest) * 100 if lowest > 0 else 0
+                        comp = {
+                            "set_number": set_num,
+                            "lowest_price": lowest,
+                            "shop": price_data.get("shop", "klockoradar.pl"),
+                            "shop_url": price_data.get("shop_url", ""),
+                            "offer_count": price_data.get("offer_count", 0),
+                            "klockoradar_url": f"https://klockoradar.pl/sets/{set_num}",
+                            "promoklocki_url": f"{PROMOKLOCKI_BASE}/{set_num}",
+                            "source": "klockoradar.pl",
+                            "difference": round(diff, 2),
+                            "percentage": round(pct, 1),
+                            "is_cheaper": diff < 0,
+                        }
+                        p['price_compare'] = _fmt(comp)
+                        p['set_number'] = set_num
+                        p['klockoradar_url'] = f"https://klockoradar.pl/sets/{set_num}"
         except Exception as e:
             print(f"[LIMANGO] Price compare error: {e}")
 
