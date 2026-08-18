@@ -115,61 +115,56 @@ async def main():
         print(f"   Matched {len(set_numbers)} products to set numbers")
         print()
 
-        # Step 3: Fetch promoklocki prices via FlareSolverr
+        # Step 3: Fetch promoklocki prices
+        # Strategy: try direct HTTP first (JSON-LD lowPrice in raw HTML), FS only as fallback
         print("3. Fetching promoklocki prices...")
-        # Create FS session
-        try:
-            await session.post(FLARESOLVERR_URL, json={"cmd": "sessions.create", "session": "price_build"}, timeout=aiohttp.ClientTimeout(total=10))
-        except:
-            pass
 
         cache = {}
         for i, (num, name) in enumerate(sorted(set_numbers.items())):
             url = f"{PROMOKLOCKI_BASE}/{num}"
-            try:
-                payload = {"cmd": "request.get", "url": url, "session": "price_build", "maxTimeout": 30000}
-                async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=35)) as resp:
-                    if resp.status != 200:
-                        print(f"   [{i+1}/{len(set_numbers)}] {num} — FS HTTP {resp.status}")
-                        continue
-                    data = await resp.json()
-                    if data.get("status") != "ok":
-                        print(f"   [{i+1}/{len(set_numbers)}] {num} — FS status {data.get('status')}")
-                        continue
-                    html = data.get("solution", {}).get("response", "")
-                    if not html:
-                        continue
-            except Exception as e:
-                print(f"   [{i+1}/{len(set_numbers)}] {num} — error: {e}")
-                continue
+            price = None
 
-            # Extract price
-            match = PRICE_RE.search(html)
-            if match:
-                price_str = match.group(1).replace(",", ".").replace(" ", "")
+            # Try 1: Direct HTTP (no FS — works if promoklocki serves lowPrice in HTML without JS)
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15), ssl=ssl_ctx, allow_redirects=True) as resp:
+                    if resp.status == 200:
+                        html = await resp.text()
+                        m = PRICE_RE.search(html)
+                        if m:
+                            price = float(m.group(1).replace(",", ".").replace(" ", ""))
+            except:
+                pass
+
+            # Try 2: FlareSolverr (if direct failed — CF blocked)
+            if not price:
                 try:
-                    price = float(price_str)
-                    cache[num] = {
-                        "set_number": num,
-                        "lowest_price": price,
-                        "promoklocki_url": url,
-                        "product_name": name[:80],
-                        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                        "updated_at_ts": time.time(),
-                    }
-                    print(f"   [{i+1}/{len(set_numbers)}] #{num}: {price:.2f} zl — {name[:50]}")
+                    payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
+                    async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=40)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get("status") == "ok":
+                                fs_html = data.get("solution", {}).get("response", "")
+                                if fs_html:
+                                    m = PRICE_RE.search(fs_html)
+                                    if m:
+                                        price = float(m.group(1).replace(",", ".").replace(" ", ""))
                 except:
                     pass
+
+            if price and price > 0:
+                cache[num] = {
+                    "set_number": num,
+                    "lowest_price": price,
+                    "promoklocki_url": url,
+                    "product_name": name[:80],
+                    "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "updated_at_ts": time.time(),
+                }
+                print(f"   [{i+1}/{len(set_numbers)}] #{num}: {price:.2f} zl — {name[:50]}")
             else:
-                print(f"   [{i+1}/{len(set_numbers)}] #{num}: NO PRICE FOUND")
+                print(f"   [{i+1}/{len(set_numbers)}] #{num}: NO PRICE")
 
-            await asyncio.sleep(5)
-
-        # Destroy FS session
-        try:
-            await session.post(FLARESOLVERR_URL, json={"cmd": "sessions.destroy", "session": "price_build"}, timeout=aiohttp.ClientTimeout(total=5))
-        except:
-            pass
+            await asyncio.sleep(3)
 
     # Save cache
     with open(CACHE_FILE, "w") as f:
