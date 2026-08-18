@@ -40,7 +40,7 @@ from engines.engine_runner import run_engines_process
 NODRIVER_SHOPS = {
     "empik", "proshop", "boosterpoint",
     "dragonus", "piwniczaki", "rgfk", "strefamarzen", "wilczek", "tantis",
-    "battlestash", "bonito", "libristo",
+    "bonito", "libristo",
 }
 
 SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
@@ -289,94 +289,120 @@ async def _send_alarm(name, error, logger):
 VENV_PYTHON = os.path.join(DIR, "venv", "bin", "python3")
 RUNNER = os.path.join(DIR, "runner.py")
 
-# Semaphore: max 3 Chrome browsers running simultaneously (12 shops × 3 procs = 36 Chrome = load 18!)
-# With limit 3: max 3 × 3 = 9 Chrome procs = load ~4-6 (healthy for 4-core VPS)
-_chrome_semaphore = None
+# Shops that use playwright (headless=True, poolable)
+PLAYWRIGHT_SHOPS = {"wilczek", "dragonus", "piwniczaki", "rgfk", "strefamarzen"}
+# Shops that use patchright (headless=False, proxy, own browser)
+PATCHRIGHT_SHOPS = {"boosterpoint", "tantis", "bonito"}
+# Shops that use nodriver (own browser, CF bypass)
+NODRIVER_ONLY_SHOPS = {"empik", "libristo", "proshop"}
 
 
-async def nodriver_worker(name, logger, start_delay=10, semaphore=None):
-    """Subprocess worker for Chrome shops. Kills ENTIRE process tree on timeout."""
-    # Staggered start: each Chrome shop starts 30s after previous (prevents CPU overload)
-    await asyncio.sleep(start_delay + random.uniform(0, 5))
+async def pool_shop_worker(name, module, pool, logger):
+    """Worker for playwright shops — uses Chrome Pool (no browser startup per scan)."""
+    await asyncio.sleep(random.uniform(2, 15))  # Small stagger
+
+    stats = {"ok": 0, "err": 0, "consecutive_err": 0}
+
+    # Check if shop has pool-compatible scan function
+    has_pool_scan = hasattr(module, 'scan_with_page')
+
+    while True:
+        try:
+            if has_pool_scan:
+                # New interface: shop gets page from pool
+                products = await pool.run_shop(name, module.scan_with_page)
+            else:
+                # Legacy: shop launches its own browser, pool just limits concurrency
+                products = await pool.run_shop(name, module.get_products)
+
+            if products:
+                products = sanitize_batch(products)
+            if products:
+                shop_field = products[0].get("shop", name)
+                old = await get_shop_products(shop_field)
+                snapshot = await is_snapshot_done(name)
+                was_first = await detect_and_send(name, old, products, snapshot)
+                if was_first or not snapshot:
+                    await mark_snapshot_done(name)
+                await save_products_batch(products)
+                stats["ok"] += 1
+                stats["err"] = 0
+                stats["consecutive_err"] = 0
+                logger.info(f"[{name}] {len(products)} produktow (pool)")
+            else:
+                stats["err"] += 1
+                stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
+
+        except Exception as e:
+            logger.error(f"[{name}] ERROR: {e}")
+            stats["err"] += 1
+            stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
+
+        # Delay between scans
+        consec = stats.get("consecutive_err", 0)
+        if consec >= 10:
+            await asyncio.sleep(1800)  # 30 min cooldown
+        elif consec >= 5:
+            await asyncio.sleep(600)   # 10 min cooldown
+        elif stats["err"] > 0:
+            await asyncio.sleep(random.randint(60, 120))
+        else:
+            await asyncio.sleep(random.randint(30, 60))
+
+
+async def subprocess_shop_worker(name, subprocess_pool, logger):
+    """Worker for nodriver/patchright shops — subprocess but with concurrency limit."""
+    await asyncio.sleep(random.uniform(5, 30))
+
     stats = {"ok": 0, "err": 0, "consecutive_err": 0}
 
     while True:
-        # Acquire semaphore — wait for free Chrome slot before starting scan
-        async with semaphore:
-            start = datetime.now()
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    VENV_PYTHON, "-u", RUNNER, name,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=DIR,
-                    start_new_session=True,
-                )
-                try:
-                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT_NODRIVER)
-                except asyncio.TimeoutError:
-                    logger.warning(f"[{name}] TIMEOUT {TIMEOUT_NODRIVER}s (subprocess)")
-                    # Kill ENTIRE process group (catches Chrome children)
-                    try:
-                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                    except (ProcessLookupError, OSError):
-                        pass
-                    await asyncio.sleep(2)
-                    try:
-                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                    except (ProcessLookupError, OSError):
-                        pass
-                    try:
-                        proc.kill()
-                    except ProcessLookupError:
-                        pass
-                    await proc.wait()
-                    stats["err"] += 1
-                    stats["consecutive_err"] += 1
+        async def _run_subprocess():
+            proc = await asyncio.create_subprocess_exec(
+                VENV_PYTHON, "-u", RUNNER, name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=DIR,
+                start_new_session=True,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                raise RuntimeError(stderr.decode().strip()[-200:] if stderr else "unknown")
+            output = stdout.decode().strip()
+            if output:
+                for line in output.split("\n"):
+                    if line.strip():
+                        logger.info(line.strip())
+            return True  # Success marker
 
-                    # Progressive cooldown for dead shops
-                    consec = stats["consecutive_err"]
-                    if consec >= 10:
-                        logger.warning(f"[{name}] 10+ timeouts — cooldown 30min")
-                        await asyncio.sleep(1800)
-                    elif consec >= 5:
-                        logger.warning(f"[{name}] 5+ timeouts — cooldown 10min")
-                        await asyncio.sleep(600)
-                    else:
-                        await asyncio.sleep(random.randint(30, 60))
-                    continue
+        result = await subprocess_pool.run_shop(name, _run_subprocess, timeout=TIMEOUT_NODRIVER)
 
-                output = stdout.decode().strip()
-                if output:
-                    for line in output.split("\n"):
-                        if line.strip():
-                            logger.info(line.strip())
-
-                if proc.returncode != 0:
-                    err_msg = stderr.decode().strip()[-200:] if stderr else "unknown"
-                    logger.error(f"[{name}] EXIT {proc.returncode}: {err_msg}")
-                    stats["err"] += 1
-                    stats["consecutive_err"] += 1
-                else:
-                    stats["ok"] += 1
-                    stats["err"] = 0
-                    stats["consecutive_err"] = 0
-
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logger.error(f"[{name}] SUBPROCESS ERROR: {e}")
-                stats["err"] += 1
-                stats["consecutive_err"] += 1
-
-        # Fast cycle for healthy shops, slower for erroring ones
-        if stats["consecutive_err"] == 0:
-            delay = random.randint(30, 60)  # Healthy: 30-60s between scans
-        elif stats["consecutive_err"] < 5:
-            delay = random.randint(60, 120)  # Some errors: back off
+        if result:
+            stats["ok"] += 1
+            stats["err"] = 0
+            stats["consecutive_err"] = 0
         else:
-            delay = random.randint(300, 600)  # Many errors: heavy backoff
-        await asyncio.sleep(delay)
+            stats["err"] += 1
+            stats["consecutive_err"] += 1
+            # Kill any orphaned Chrome from this shop
+            try:
+                import subprocess as sp
+                sp.run(["pkill", "-f", f"runner.py {name}"], capture_output=True, timeout=5)
+            except Exception:
+                pass
+
+        # Delay
+        consec = stats["consecutive_err"]
+        if consec >= 10:
+            logger.warning(f"[{name}] 10+ errors — cooldown 30min")
+            await asyncio.sleep(1800)
+        elif consec >= 5:
+            logger.warning(f"[{name}] 5+ errors — cooldown 10min")
+            await asyncio.sleep(600)
+        elif stats["err"] > 0:
+            await asyncio.sleep(random.randint(60, 120))
+        else:
+            await asyncio.sleep(random.randint(30, 60))
 
 
 # ============================================================
@@ -440,24 +466,65 @@ async def _async_process(process_name, shop_names_modules):
 
 
 async def _async_nodriver(process_name, shop_names):
-    """Async entry for NODRIVER process (subprocesses)."""
+    """Async entry for NODRIVER process — Chrome Pool + Subprocess pools."""
     logger = setup_logger(process_name)
-    logger.info(f"=== {process_name} process starting ({len(shop_names)} shops via subprocess) ===")
+    logger.info(f"=== {process_name} process starting ({len(shop_names)} shops) ===")
 
-    # Max 3 Chrome browsers at once (12 shops × 3 Chrome procs each = 36 if unlimited = load 18)
-    # With semaphore(3): max 9 Chrome procs = load ~4-5 on 4 cores
-    semaphore = asyncio.Semaphore(3)
+    await init_db()
+    discord.start()
+
+    from chrome_pool import PlaywrightPool, SubprocessPool, _calc_pool_size
+
+    # Split shops by type
+    pw_shops = [n for n in shop_names if n in PLAYWRIGHT_SHOPS]
+    nd_shops = [n for n in shop_names if n in NODRIVER_ONLY_SHOPS]
+    pr_shops = [n for n in shop_names if n in PATCHRIGHT_SHOPS]
+    # Any unknown → subprocess (safe default)
+    other = [n for n in shop_names if n not in PLAYWRIGHT_SHOPS and n not in NODRIVER_ONLY_SHOPS and n not in PATCHRIGHT_SHOPS]
+    nd_shops.extend(other)
+
+    # Playwright Pool — persistent browsers, zero startup per scan
+    pool_size = _calc_pool_size(len(pw_shops)) if pw_shops else 0
+    pool = None
+    if pw_shops:
+        pool = PlaywrightPool(size=min(pool_size, len(pw_shops), 4))
+        await pool.start()
+
+    # Subprocess pools — limit concurrency for heavy browsers
+    nodriver_pool = SubprocessPool(max_concurrent=2, name="NODRIVER")
+    patchright_pool = SubprocessPool(max_concurrent=2, name="PATCHRIGHT")
+
+    logger.info(f"[{process_name}] Playwright pool: {pool.size if pool else 0} browsers for {len(pw_shops)} shops")
+    logger.info(f"[{process_name}] Nodriver: max 2 concurrent for {len(nd_shops)} shops")
+    logger.info(f"[{process_name}] Patchright: max 2 concurrent for {len(pr_shops)} shops")
 
     tasks = []
-    for idx, name in enumerate(shop_names):
-        tasks.append(asyncio.create_task(nodriver_worker(name, logger, start_delay=idx * 10, semaphore=semaphore)))
 
-    logger.info(f"[{process_name}] {len(shop_names)} subprocess workers started (max 3 concurrent Chrome)")
+    # Playwright shops — use pool (fast, no browser startup)
+    for name in pw_shops:
+        module = importlib.import_module(f"shops.{name}")
+        tasks.append(asyncio.create_task(pool_shop_worker(name, module, pool, logger)))
+
+    # Nodriver shops — subprocess with concurrency limit
+    for name in nd_shops:
+        tasks.append(asyncio.create_task(subprocess_shop_worker(name, nodriver_pool, logger)))
+
+    # Patchright shops — subprocess with concurrency limit
+    for name in pr_shops:
+        tasks.append(asyncio.create_task(subprocess_shop_worker(name, patchright_pool, logger)))
+
+    tasks.append(asyncio.create_task(heartbeat_worker(logger, process_name, len(shop_names))))
+
+    logger.info(f"[{process_name}] All {len(shop_names)} workers started")
 
     try:
         await asyncio.gather(*tasks, return_exceptions=True)
     except KeyboardInterrupt:
         pass
+    finally:
+        if pool:
+            await pool.close()
+        await discord.close()
 
 
 # ============================================================
