@@ -59,29 +59,29 @@ def _extract_name_from_image_url(img_url):
 
 def _is_lego_set(product):
     """Filter for actual LEGO construction sets (not clothing/accessories)."""
-    # Method 1: subCategoryName (most reliable)
+    name = product.get("name", "").lower()
+    
+    # Reject clothing/accessories with LEGO branding
+    clothing_keywords = ["bokser", "kurtk", "spodni", "bluza", "piżam", "skarpet",
+                         "czapk", "szalik", "t-shirt", "koszulk", "dress", "leggin",
+                         "bluzi", "polar", "buty", "sandał", "kapel", "rękawic"]
+    if any(kw in name for kw in clothing_keywords):
+        return False
+    
+    # Accept: subCategoryName indicates construction toy
     cat = (product.get("subCategoryName") or "").lower().strip()
     if cat and any(lc in cat for lc in LEGO_SET_CATEGORIES):
         return True
-    # Method 2: isOneSizeProduct = True (klocki mają "onesize", ubrania mają rozmiary)
+    
+    # Accept: isOneSizeProduct + toy treePath (klocki have "onesize")
     if product.get("isOneSizeProduct"):
-        # Double check: treePath must have toy/klocki keywords
-        for path in product.get("treePaths", []):
-            if any(kw in path.lower() for kw in TOY_PATH_KEYWORDS):
-                return True
-    # Method 3: name contains set number pattern (5 digits)
-    name = product.get("name", "")
-    if re.search(r'\b\d{5}\b', name):
-        # Has 5-digit number AND treePath is toy-related
-        for path in product.get("treePaths", []):
-            if any(kw in path.lower() for kw in TOY_PATH_KEYWORDS):
-                return True
-    # Reject: clothing with LEGO branding (bokserki, kurtki, piżamy etc.)
-    clothing_keywords = ["bokser", "kurtk", "spodni", "bluza", "piżam", "skarpet",
-                         "czapk", "szalik", "t-shirt", "koszulk", "dress"]
-    name_lower = name.lower()
-    if any(kw in name_lower for kw in clothing_keywords):
-        return False
+        return True
+    
+    # Accept: treePath has toy/klocki keywords
+    for path in product.get("treePaths", []):
+        if any(kw in path.lower() for kw in TOY_PATH_KEYWORDS):
+            return True
+    
     return False
 
 
