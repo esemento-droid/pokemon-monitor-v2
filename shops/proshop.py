@@ -1,15 +1,19 @@
-"""Proshop.pl scraper - nodriver (CF bypass) + mobile proxy"""
+"""
+Scraper: proshop.pl — CF protected
+Method: patchright (persistent stealth browser) + JS extraction
+BROWSER_TYPE = "stealth"
+"""
 import asyncio
-import os
 import json
 import logging
-import re
+import os
 
 log = logging.getLogger("monitor")
 
 SHOP = "proshop"
+BROWSER_TYPE = "stealth"
 URL = "https://www.proshop.pl/Pokemon/Pokemon?f~pokmon_tcg=bokse~booster-tin-og-tema~tin~tilbehor"
-PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
+
 EXCLUDE = [
     "portfolio", "album", "sleeves", "koszulk", "toploader", "pro-binder", "ultra pro", "ultrapro",
     "plush", "figure", "figurk", "playset", "carry case", "clip", "play 'n", "playmat",
@@ -60,79 +64,72 @@ JSON.stringify((function(){
 """
 
 
-async def get_products():
-    import nodriver as uc
-
+async def scan_with_page(page):
+    """Persistent browser interface — page already exists, just navigate."""
     products = []
 
-    browser_args = [
-        "--no-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-setuid-sandbox",
-    ]
-    if PROXY_ADDR and PROXY_ADDR != "none":
-        browser_args.append(f"--proxy-server=http://{PROXY_ADDR}")
+    await page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+    await asyncio.sleep(15)
 
-    try:
-        browser = await uc.start(headless=False, sandbox=False, browser_args=browser_args)
-    except Exception as e:
-        log.error(f"[proshop] Failed to start browser: {e}")
+    # Check CF
+    title = await page.title()
+    if not title or "moment" in title.lower() or "attention" in title.lower() or "cloudflare" in title.lower():
+        log.warning("[proshop] CF not resolved, waiting longer...")
+        await asyncio.sleep(10)
+        title = await page.title()
+        if not title or "attention" in title.lower() or "moment" in title.lower():
+            log.error("[proshop] CF block - cannot access")
+            return []
+
+    raw = await page.evaluate(EXTRACT_JS)
+    if not raw:
+        log.warning("[proshop] No data from JS extraction")
         return []
 
     try:
-        page = await browser.get(URL)
-        await asyncio.sleep(15)
+        items = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        log.error("[proshop] Failed to parse JS data")
+        return []
 
-        title = await page.evaluate("document.title")
-        if not title or "moment" in title.lower() or "attention" in title.lower() or "cloudflare" in title.lower():
-            log.warning("[proshop] CF not resolved, waiting longer...")
-            await asyncio.sleep(10)
-            title = await page.evaluate("document.title")
-            if not title or "attention" in title.lower() or "moment" in title.lower():
-                log.error("[proshop] CF block - cannot access")
-                return []
-
-        raw = await page.evaluate(EXTRACT_JS)
-        if not raw:
-            log.warning("[proshop] No data from JS extraction")
-            return []
-
-        try:
-            items = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            log.error("[proshop] Failed to parse JS data")
-            return []
-
-        seen = set()
-        for item in items:
-            pid = item.get("pid", "")
-            name = item.get("name", "")
-            if not pid or not name or pid in seen:
-                continue
-            if any(ex in name.lower() for ex in EXCLUDE):
-                continue
-            seen.add(pid)
-            price_val = item.get("price", "")
-            price_str = f"{price_val} zl" if price_val else "brak"
-            products.append({
-                "id": f"proshop_{pid}",
-                "name": name,
-                "price": price_str,
-                "shop": SHOP,
-                "url": item.get("url", ""),
-                "image": item.get("img", ""),
-                "stock": None,
-                "available": item.get("available", False),
-            })
-
-    except Exception as e:
-        log.error(f"[proshop] Error: {e}")
-    finally:
-        try:
-            browser.stop()
-        except:
-            pass
+    seen = set()
+    for item in items:
+        pid = item.get("pid", "")
+        name = item.get("name", "")
+        if not pid or not name or pid in seen:
+            continue
+        if any(ex in name.lower() for ex in EXCLUDE):
+            continue
+        seen.add(pid)
+        price_val = item.get("price", "")
+        price_str = f"{price_val} zl" if price_val else "brak"
+        products.append({
+            "id": f"proshop_{pid}",
+            "name": name,
+            "price": price_str,
+            "shop": SHOP,
+            "url": item.get("url", ""),
+            "image": item.get("img", ""),
+            "stock": None,
+            "available": item.get("available", False),
+        })
 
     print(f"[PROSHOP] {len(products)} produktow")
     return products
+
+
+async def get_products():
+    """Legacy interface — for testing only."""
+    from patchright.async_api import async_playwright
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(
+            headless=False,
+            args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                  "--disable-blink-features=AutomationControlled",
+                  "--proxy-server=http://127.0.0.1:8888"]
+        )
+        try:
+            page = await browser.new_page()
+            return await scan_with_page(page)
+        finally:
+            await browser.close()

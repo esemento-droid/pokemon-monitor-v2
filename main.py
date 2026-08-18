@@ -283,129 +283,13 @@ async def _send_alarm(name, error, logger):
 
 
 # ============================================================
-# NODRIVER SUBPROCESS WORKER
+# PERSISTENT BROWSER SHOP WORKERS (new architecture)
 # ============================================================
-
-VENV_PYTHON = os.path.join(DIR, "venv", "bin", "python3")
-RUNNER = os.path.join(DIR, "runner.py")
-
-# Shops that use playwright (headless=True, poolable)
-PLAYWRIGHT_SHOPS = {"wilczek", "dragonus", "piwniczaki", "rgfk", "strefamarzen"}
-# Shops that use patchright (headless=False, proxy, own browser)
-PATCHRIGHT_SHOPS = {"boosterpoint", "tantis", "bonito"}
-# Shops that use nodriver (own browser, CF bypass)
-NODRIVER_ONLY_SHOPS = {"empik", "libristo", "proshop"}
+# All NODRIVER shops now use persistent browsers via browser_manager.py
+# Old subprocess/pool code removed. See _async_nodriver() and _persistent_shop_worker().
 
 
-async def pool_shop_worker(name, module, pool, logger):
-    """Worker for playwright shops — uses Chrome Pool (no browser startup per scan)."""
-    await asyncio.sleep(random.uniform(2, 15))  # Small stagger
-
-    stats = {"ok": 0, "err": 0, "consecutive_err": 0}
-
-    # Check if shop has pool-compatible scan function
-    has_pool_scan = hasattr(module, 'scan_with_page')
-
-    while True:
-        try:
-            if has_pool_scan:
-                # New interface: shop gets page from pool
-                products = await pool.run_shop(name, module.scan_with_page)
-            else:
-                # Legacy: shop launches its own browser, pool just limits concurrency
-                products = await pool.run_shop(name, module.get_products)
-
-            if products:
-                products = sanitize_batch(products)
-            if products:
-                shop_field = products[0].get("shop", name)
-                old = await get_shop_products(shop_field)
-                snapshot = await is_snapshot_done(name)
-                was_first = await detect_and_send(name, old, products, snapshot)
-                if was_first or not snapshot:
-                    await mark_snapshot_done(name)
-                await save_products_batch(products)
-                stats["ok"] += 1
-                stats["err"] = 0
-                stats["consecutive_err"] = 0
-                logger.info(f"[{name}] {len(products)} produktow (pool)")
-            else:
-                stats["err"] += 1
-                stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
-
-        except Exception as e:
-            logger.error(f"[{name}] ERROR: {e}")
-            stats["err"] += 1
-            stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
-
-        # Delay between scans
-        consec = stats.get("consecutive_err", 0)
-        if consec >= 10:
-            await asyncio.sleep(1800)  # 30 min cooldown
-        elif consec >= 5:
-            await asyncio.sleep(600)   # 10 min cooldown
-        elif stats["err"] > 0:
-            await asyncio.sleep(random.randint(60, 120))
-        else:
-            await asyncio.sleep(random.randint(30, 60))
-
-
-async def subprocess_shop_worker(name, subprocess_pool, logger):
-    """Worker for nodriver/patchright shops — subprocess but with concurrency limit."""
-    await asyncio.sleep(random.uniform(5, 30))
-
-    stats = {"ok": 0, "err": 0, "consecutive_err": 0}
-
-    while True:
-        async def _run_subprocess():
-            proc = await asyncio.create_subprocess_exec(
-                VENV_PYTHON, "-u", RUNNER, name,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=DIR,
-            )
-            try:
-                stdout, stderr = await proc.communicate()
-            except asyncio.CancelledError:
-                proc.kill()
-                await proc.wait()
-                raise
-            except Exception:
-                proc.kill()
-                await proc.wait()
-                raise
-
-            if proc.returncode != 0:
-                raise RuntimeError(stderr.decode().strip()[-200:] if stderr else "unknown")
-            output = stdout.decode().strip()
-            if output:
-                for line in output.split("\n"):
-                    if line.strip():
-                        logger.info(line.strip())
-            return True  # Success marker
-
-        result = await subprocess_pool.run_shop(name, _run_subprocess, timeout=TIMEOUT_NODRIVER)
-
-        if result:
-            stats["ok"] += 1
-            stats["err"] = 0
-            stats["consecutive_err"] = 0
-        else:
-            stats["err"] += 1
-            stats["consecutive_err"] += 1
-
-        # Delay
-        consec = stats["consecutive_err"]
-        if consec >= 10:
-            logger.warning(f"[{name}] 10+ errors — cooldown 30min")
-            await asyncio.sleep(1800)
-        elif consec >= 5:
-            logger.warning(f"[{name}] 5+ errors — cooldown 10min")
-            await asyncio.sleep(600)
-        elif stats["err"] > 0:
-            await asyncio.sleep(random.randint(60, 120))
-        else:
-            await asyncio.sleep(random.randint(30, 60))
+# (Old pool_shop_worker and subprocess_shop_worker removed — replaced by _persistent_shop_worker)
 
 
 # ============================================================
@@ -469,65 +353,151 @@ async def _async_process(process_name, shop_names_modules):
 
 
 async def _async_nodriver(process_name, shop_names):
-    """Async entry for NODRIVER process — Chrome Pool + Subprocess pools."""
+    """
+    Async entry for NODRIVER process — PERSISTENT BROWSER ARCHITECTURE.
+    
+    - 2 browsers (stealth patchright + standard playwright) — NEVER close
+    - Each shop gets its OWN DEDICATED PAGE — lives forever
+    - Scan = page.goto() + parse — zero startup, zero shutdown
+    - Each shop runs independently (own asyncio task, own timer)
+    - NO QUEUE. NO BLOCKING. Every shop scans in parallel.
+    - Self-healing: page crash → recreate page, browser lives
+    """
     logger = setup_logger(process_name)
     logger.info(f"=== {process_name} process starting ({len(shop_names)} shops) ===")
+    logger.info(f"[{process_name}] Architecture: persistent browsers, dedicated pages, zero subprocess")
 
     await init_db()
     discord.start()
 
-    from chrome_pool import PlaywrightPool, SubprocessPool, _calc_pool_size
+    from browser_manager import BrowserManager
 
-    # Split shops by type
-    pw_shops = [n for n in shop_names if n in PLAYWRIGHT_SHOPS]
-    nd_shops = [n for n in shop_names if n in NODRIVER_ONLY_SHOPS]
-    pr_shops = [n for n in shop_names if n in PATCHRIGHT_SHOPS]
-    # Any unknown → subprocess (safe default)
-    other = [n for n in shop_names if n not in PLAYWRIGHT_SHOPS and n not in NODRIVER_ONLY_SHOPS and n not in PATCHRIGHT_SHOPS]
-    nd_shops.extend(other)
+    # Start persistent browsers
+    mgr = BrowserManager()
+    await mgr.start()
 
-    # Playwright Pool — persistent browsers, zero startup per scan
-    pool_size = _calc_pool_size(len(pw_shops)) if pw_shops else 0
-    pool = None
-    if pw_shops:
-        pool = PlaywrightPool(size=min(pool_size, len(pw_shops), 4))
-        await pool.start()
-
-    # Subprocess pools — limit concurrency for heavy browsers
-    nodriver_pool = SubprocessPool(max_concurrent=2, name="NODRIVER")
-    patchright_pool = SubprocessPool(max_concurrent=2, name="PATCHRIGHT")
-
-    logger.info(f"[{process_name}] Playwright pool: {pool.size if pool else 0} browsers for {len(pw_shops)} shops")
-    logger.info(f"[{process_name}] Nodriver: max 2 concurrent for {len(nd_shops)} shops")
-    logger.info(f"[{process_name}] Patchright: max 2 concurrent for {len(pr_shops)} shops")
-
+    # Load shop modules and create dedicated pages
     tasks = []
+    for name in shop_names:
+        try:
+            module = importlib.import_module(f"shops.{name}")
+            if not hasattr(module, 'scan_with_page'):
+                logger.error(f"[{name}] NO scan_with_page() — skipping (needs migration)")
+                continue
 
-    # Playwright shops — use pool (fast, no browser startup)
-    for name in pw_shops:
-        module = importlib.import_module(f"shops.{name}")
-        tasks.append(asyncio.create_task(pool_shop_worker(name, module, pool, logger)))
+            # Determine browser type from module attribute
+            browser_type = getattr(module, 'BROWSER_TYPE', 'standard')
 
-    # Nodriver shops — subprocess with concurrency limit
-    for name in nd_shops:
-        tasks.append(asyncio.create_task(subprocess_shop_worker(name, nodriver_pool, logger)))
+            # Create dedicated page for this shop
+            page = await mgr.create_page(name, browser_type=browser_type)
+            if not page:
+                logger.error(f"[{name}] Failed to create page — skipping")
+                continue
 
-    # Patchright shops — subprocess with concurrency limit
-    for name in pr_shops:
-        tasks.append(asyncio.create_task(subprocess_shop_worker(name, patchright_pool, logger)))
+            # Start independent worker for this shop
+            tasks.append(asyncio.create_task(
+                _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
+            ))
+            logger.info(f"[{name}] Worker started ({browser_type} browser)")
+
+        except Exception as e:
+            logger.error(f"[{name}] Load failed: {e}")
 
     tasks.append(asyncio.create_task(heartbeat_worker(logger, process_name, len(shop_names))))
 
-    logger.info(f"[{process_name}] All {len(shop_names)} workers started")
+    logger.info(f"[{process_name}] {len(tasks)-1} shop workers started | Stats: {mgr.stats}")
 
     try:
         await asyncio.gather(*tasks, return_exceptions=True)
     except KeyboardInterrupt:
         pass
     finally:
-        if pool:
-            await pool.close()
+        await mgr.close()
         await discord.close()
+
+
+async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger):
+    """
+    Independent worker for one shop with persistent page.
+    
+    - page lives forever (dedicated tab in persistent browser)
+    - Each scan: page.goto() + parse → products
+    - Self-healing: if page crashes, get new page from manager
+    - No queue, no blocking, no waiting on other shops
+    """
+    await asyncio.sleep(random.uniform(2, 20))  # Stagger first scan
+
+    stats = {"ok": 0, "err": 0, "consecutive_err": 0}
+    scan_fn = module.scan_with_page
+    SCAN_TIMEOUT = 90  # Max seconds per scan — prevents hung pages
+
+    while True:
+        try:
+            # Run scan with timeout — no shop can hang forever
+            products = await asyncio.wait_for(scan_fn(page), timeout=SCAN_TIMEOUT)
+
+            if products:
+                products = sanitize_batch(products)
+
+            if products:
+                shop_field = products[0].get("shop", name)
+                old = await get_shop_products(shop_field)
+                snapshot = await is_snapshot_done(name)
+                was_first = await detect_and_send(name, old, products, snapshot)
+                if was_first or not snapshot:
+                    await mark_snapshot_done(name)
+                await save_products_batch(products)
+                stats["ok"] += 1
+                stats["err"] = 0
+                stats["consecutive_err"] = 0
+                logger.info(f"[{name}] {len(products)} produktow")
+            else:
+                stats["err"] += 1
+                stats["consecutive_err"] += 1
+
+        except asyncio.TimeoutError:
+            logger.warning(f"[{name}] TIMEOUT {SCAN_TIMEOUT}s — healing page")
+            stats["err"] += 1
+            stats["consecutive_err"] += 1
+            # Heal: close broken page, get fresh one (browser lives!)
+            page = await mgr.heal_page(name, browser_type=browser_type)
+            if not page:
+                logger.error(f"[{name}] Page heal FAILED — waiting 5min")
+                await asyncio.sleep(300)
+                page = await mgr.heal_page(name, browser_type=browser_type)
+                if not page:
+                    logger.error(f"[{name}] Page heal FAILED AGAIN — giving up")
+                    return
+
+        except Exception as e:
+            err_str = str(e)[:100]
+            logger.error(f"[{name}] ERROR: {err_str}")
+            stats["err"] += 1
+            stats["consecutive_err"] += 1
+
+            # If it's a browser/page crash, heal
+            if "closed" in err_str.lower() or "crash" in err_str.lower() or "target" in err_str.lower():
+                logger.warning(f"[{name}] Page crashed — healing")
+                page = await mgr.heal_page(name, browser_type=browser_type)
+                if not page:
+                    await asyncio.sleep(60)
+                    page = await mgr.heal_page(name, browser_type=browser_type)
+                    if not page:
+                        return
+
+        # Delay between scans (independent per shop — no blocking others)
+        consec = stats["consecutive_err"]
+        if consec >= 20:
+            await asyncio.sleep(1800)  # 30 min
+        elif consec >= 10:
+            await asyncio.sleep(600)   # 10 min
+        elif consec >= 5:
+            await asyncio.sleep(300)   # 5 min
+        elif stats["err"] > 0:
+            await asyncio.sleep(random.randint(60, 120))
+        else:
+            # Healthy: scan every 30-60s (same speed as before!)
+            await asyncio.sleep(random.randint(30, 60))
 
 
 # ============================================================
