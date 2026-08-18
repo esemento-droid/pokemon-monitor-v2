@@ -85,7 +85,7 @@ def check_strefatcg_trigger(event_type, product):
         return
     
     # Max price check — STRICT: if can't parse price, DO NOT trigger (safety)
-    MAX_PRICE = 1510  # Updated 2026-08-18 (was 1580, user wants 1510 max)
+    MAX_PRICE = 1501  # Updated 2026-08-18 — user wants below 1501
     try:
         price_str = product.get("price", "0")
         price_val = float(price_str.replace("PLN", "").replace("zł", "").replace("zl", "").replace(",", ".").replace(" ", "").strip())
