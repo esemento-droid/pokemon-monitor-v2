@@ -23,23 +23,14 @@ BOT_PATH = Path("/opt/pokemon-monitor-v2/tcgumisia_autobuy.py")
 COMPLETED_FILE = Path("/opt/pokemon-monitor-v2/tcgumisia_completed.json")
 WEBHOOK_FILE = Path("/opt/pokemon-monitor-v2/discord_webhook_strefatcg.txt")
 
-# Keywords that trigger the bot (any 30th product)
+# Keywords that trigger the bot (ONLY ETB 30th)
 KEYWORDS_30TH = ["30th", "30 celebration", "30-lecie", "30 lecie", "30 rocznica"]
+KEYWORDS_ETB = ["elite trainer box", "etb"]
 
 # Specific products with (qty_min, qty_max, max_price) — random qty per account
 # Key: substring in product name (lowercase)
 PRODUCT_CONFIG = {
-    "elite trainer box": (2, 3, 401),
-    "tin - sylveon": (2, 3, 145),
-    "tin - greninja": (2, 3, 145),
-    "sticker collection - alolan": (2, 6, 120),
-    "sticker collection - lucario": (2, 6, 120),
-    "booster bundle": (1, 4, 249),
-    "ex box - greninja": (1, 4, 162),
-    "ex box - sylveon": (1, 4, 162),
-    "poster collection": (1, 3, 121),
-    "2-pack": (1, 5, 81),
-    "binder collection": (1, 1, 251),
+    "elite trainer box": (2, 3, 410),
 }
 
 # Products to SKIP (not interested)
@@ -91,15 +82,16 @@ def _get_qty_for_product(name, price_str):
             else:
                 return 0  # Too expensive, skip
 
-    # Catch-all: any other 30th product (new/unknown) — buy 1 if price < 410
-    if price < 410:
-        return 1
+    # Catch-all: NOT used — only ETB from PRODUCT_CONFIG triggers
     return 0
 
 
 def _matches_keywords(name):
+    """Must be BOTH 30th AND ETB."""
     name_lower = name.lower()
-    return any(kw in name_lower for kw in KEYWORDS_30TH)
+    is_30th = any(kw in name_lower for kw in KEYWORDS_30TH)
+    is_etb = any(kw in name_lower for kw in KEYWORDS_ETB)
+    return is_30th and is_etb
 
 
 def check_tcgumisia_trigger(event_type, product):
