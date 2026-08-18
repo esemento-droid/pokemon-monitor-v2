@@ -255,6 +255,39 @@ async def get_products():
 
                 # Read from cache (instant!)
                 cached = get_cached_price(set_num)
+
+                # Fallback: live fetch from klockoradar (no CF, ~0.5s)
+                if not cached:
+                    try:
+                        kr_url = f"https://klockoradar.pl/sets/{set_num}"
+                        async with aiohttp.ClientSession() as _s:
+                            async with _s.get(kr_url, timeout=aiohttp.ClientTimeout(total=10)) as _r:
+                                if _r.status == 200:
+                                    _html = await _r.text()
+                                    import re as _re
+                                    for _ld in _re.findall(r'<script type="application/ld\+json">(.*?)</script>', _html, _re.DOTALL):
+                                        try:
+                                            _d = json.loads(_ld)
+                                        except Exception:
+                                            continue
+                                        if _d.get("@type") != "Product":
+                                            continue
+                                        _offers = _d.get("offers", {})
+                                        if _offers.get("@type") == "AggregateOffer" and _offers.get("lowPrice"):
+                                            _low = float(_offers["lowPrice"])
+                                            _shop = ""
+                                            _ind = _offers.get("offers", [])
+                                            if _ind:
+                                                try:
+                                                    _ch = min(_ind, key=lambda o: float(o.get("price", 99999)))
+                                                    _shop = _ch.get("seller", {}).get("name", "")
+                                                except Exception:
+                                                    pass
+                                            cached = {"lowest_price": _low, "shop": _shop, "klockoradar_url": kr_url}
+                                            break
+                    except Exception:
+                        pass
+
                 if not cached:
                     continue
 
