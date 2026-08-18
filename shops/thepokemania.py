@@ -31,7 +31,6 @@ EXCLUDE = [
     "würfel", "dice", "münze", "coin", "damage counter",
     "yu-gi-oh", "one piece", "lorcana", "digimon", "magic the", "naruto",
     "flesh & blood", "dragon shield", "weiss schwarz",
-    # German language products (we want English only - URL filter handles this)
 ]
 
 
@@ -122,8 +121,13 @@ async def get_products():
         urls.append(f"{BASE}{CATEGORY_URL}/p{p}")
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # Parallel fetch all pages
-        pages_html = await asyncio.gather(*[_fetch_page(session, url) for url in urls])
+        # Sequential fetch with delay (site returns 429 on parallel)
+        pages_html = []
+        for url in urls:
+            html = await _fetch_page(session, url)
+            pages_html.append(html)
+            if html:
+                await asyncio.sleep(1.5)
 
     for html in pages_html:
         if not html:
