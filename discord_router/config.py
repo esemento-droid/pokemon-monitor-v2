@@ -10,7 +10,7 @@ HEARTBEAT_CHANNEL_NAME = "💓・heartbeat"
 ERROR_CHANNEL_NAME = "🚨・bledy"
 
 # Foreign shops - route to separate Discord category
-FOREIGN_SHOPS = {"efantasy"}
+FOREIGN_SHOPS = {"efantasy", "thepokemania"}
 FOREIGN_CATEGORY_NAME = "🌍 Zagraniczne"
 
 # LEGO shops - route to LEGO category

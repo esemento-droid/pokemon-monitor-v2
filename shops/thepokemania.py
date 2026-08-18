@@ -33,8 +33,7 @@ EXCLUDE = [
     "flesh & blood", "dragon shield", "weiss schwarz",
 ]
 
-# Only exclude Romanian names — URL /lingua-englisch already filters English cards
-# German names are OK (same English product, just described in German on DE site)
+# Exclude Romanian names + German edition cards (DE in name/URL = German card language)
 EXCLUDE_NON_EN = [
     "cutie ", "colecție", "colectie", "sigilat",
 ]
@@ -94,8 +93,8 @@ def _parse_page(html):
     products = []
     for i, ga in enumerate(ga4_items):
         url = urls[i] if i < len(urls) else ""
-        # 2 images per product (main + hover), take first
-        img = imgs[i * 2] if i * 2 < len(imgs) else ""
+        # 1 image per product (matched by position, verified slug match)
+        img = imgs[i] if i < len(imgs) else ""
 
         # Convert RON to EUR
         price_eur = ga["price_ron"] / rate
@@ -156,6 +155,12 @@ async def get_products():
 
             # Exclude Romanian-named products
             if any(kw in name_lower for kw in EXCLUDE_NON_EN):
+                continue
+
+            # Exclude German edition cards: " DE " in name or URL = Deutsche Edition
+            # e.g. "Paldea Evolved DE Factory Sealed" or URL contains "-de-"
+            item_url = item["url"]
+            if " DE " in name or " de " in item_url.split("/")[-1].replace("-", " "):
                 continue
 
             price_eur = item["price_eur"]
