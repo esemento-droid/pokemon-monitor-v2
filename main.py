@@ -506,10 +506,11 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
         elif consec >= 5:
             await asyncio.sleep(300)   # 5 min
         elif stats["err"] > 0:
-            await asyncio.sleep(random.randint(60, 120))
+            await asyncio.sleep(random.randint(90, 180))
         else:
-            # Healthy: scan every 30-60s (same speed as before!)
-            await asyncio.sleep(random.randint(30, 60))
+            # Healthy: scan every 60-120s (reduced from 30-60s to lower CPU pressure)
+            # Chrome renderers are expensive — give CPU breathing room for FAST shops
+            await asyncio.sleep(random.randint(60, 120))
 
 
 # ============================================================
