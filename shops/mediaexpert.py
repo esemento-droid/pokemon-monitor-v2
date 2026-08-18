@@ -76,7 +76,7 @@ async def scan_with_page(page):
 
     # First URL - navigate + wait for CF to resolve
     await page.goto(SEARCH_URLS[0], wait_until="domcontentloaded", timeout=45000)
-    await asyncio.sleep(12)
+    await asyncio.sleep(8)
 
     # Check CF resolution
     title = await page.title()
@@ -91,7 +91,7 @@ async def scan_with_page(page):
     for search_url in SEARCH_URLS:
         if search_url != SEARCH_URLS[0]:
             await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(12)
+            await asyncio.sleep(8)
 
             # Check CF
             title = await page.title()
@@ -121,7 +121,7 @@ async def scan_with_page(page):
         # Scroll down to load lazy products
         for _ in range(5):
             await page.evaluate("window.scrollBy(0, 800)")
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(1)
 
         # Extract products
         raw = await page.evaluate(EXTRACT_JS)

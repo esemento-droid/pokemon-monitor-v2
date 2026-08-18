@@ -20,7 +20,7 @@ async def get_products():
     products = []
     seen = set()
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        async with session.get(URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+        async with session.get(URL, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             if resp.status != 200:
                 return []
             html = await resp.text()

@@ -48,11 +48,8 @@ async def get_products():
             urls.append(url)
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        pages_html = []
-        for i in range(0, len(urls), 2):
-            batch = await asyncio.gather(*[fetch_page(session, url) for url in urls[i:i+2]])
-            pages_html.extend(batch)
-            await asyncio.sleep(0.5)
+        # Fetch all pages in parallel (no batching — mrpuggy handles it fine)
+        pages_html = await asyncio.gather(*[fetch_page(session, url) for url in urls])
 
     for html in pages_html:
         if not html:
