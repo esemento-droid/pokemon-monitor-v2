@@ -80,7 +80,7 @@ async def scan_with_page(page):
 
     for i, search_url in enumerate(SEARCH_URLS):
         try:
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=40000)
         except Exception as e:
             log.warning(f"[mediaexpert] goto failed for URL {i+1}: {e}")
             continue
