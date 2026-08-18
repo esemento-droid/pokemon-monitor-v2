@@ -18,7 +18,9 @@ EXCLUDE = [
     "weiss schwarz", "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
 ]
 
+
 def parse_page(html):
+    """Parse products from HTML."""
     products = []
     soup = BeautifulSoup(html, "lxml")
     items = soup.select("span.tc-product-tile-data")
@@ -50,6 +52,7 @@ def parse_page(html):
         products.append({"id": f"rgfk_{pid}", "name": name, "price": price, "shop": SHOP, "url": href, "image": image, "stock": stock, "available": available})
     return products
 
+
 async def fetch_with_cookies(session, url):
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
@@ -59,48 +62,39 @@ async def fetch_with_cookies(session, url):
     except Exception:
         return ""
 
-async def get_products():
+
+async def scan_with_page(page):
+    """Chrome Pool interface — pass Anubis challenge, get cookies, fetch pages."""
     products = []
     seen_ids = set()
-    # Step 1: Playwright to pass Anubis and get cookies
-    cookies_dict = {}
-    first_html = ""
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            try:
-                page = await browser.new_page(user_agent=UA)
-                await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
-                # Wait for Anubis challenge to resolve (shorter timeout)
-                try:
-                    await page.wait_for_selector("a.product-thumbnail", timeout=30000)
-                except Exception:
-                    # Anubis may redirect or show challenge — try waiting longer
-                    await asyncio.sleep(5)
-                    # Check if we got products anyway
-                    content = await page.content()
-                    if "tc-product-tile-data" not in content:
-                        print("[RGFK] Anubis challenge not resolved")
-                        return []
-                first_html = await page.content()
-                cookies = await page.context.cookies()
-                for c in cookies:
-                    cookies_dict[c["name"]] = c["value"]
-            finally:
-                await browser.close()
-    except Exception as e:
-        print(f"[RGFK] Browser error: {e}")
-        return []
 
+    # Navigate to pass Anubis challenge
+    await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
+    try:
+        await page.wait_for_selector("a.product-thumbnail", timeout=30000)
+    except Exception:
+        await asyncio.sleep(5)
+        content = await page.content()
+        if "tc-product-tile-data" not in content:
+            print("[RGFK] Anubis challenge not resolved")
+            return []
+
+    first_html = await page.content()
     if not first_html or "tc-product-tile-data" not in first_html:
         print("[RGFK] No product data in page")
         return []
+
+    # Get cookies for aiohttp pages 2+
+    cookies = await page.context.cookies()
+    cookies_dict = {c["name"]: c["value"] for c in cookies}
+
     # Parse page 1
     page_prods = parse_page(first_html)
     for pr in page_prods:
         if pr["id"] not in seen_ids:
             seen_ids.add(pr["id"])
             products.append(pr)
+
     # Detect max page
     soup = BeautifulSoup(first_html, "lxml")
     pages = set()
@@ -113,7 +107,8 @@ async def get_products():
             except ValueError:
                 pass
     max_page = max(pages) if pages else 1
-    # Step 2: aiohttp with cookies for pages 2-max
+
+    # aiohttp with cookies for pages 2-max (fast, no Chrome needed)
     if max_page > 1:
         cookie_str = "; ".join(f"{k}={v}" for k, v in cookies_dict.items())
         headers = {"User-Agent": UA, "Cookie": cookie_str}
@@ -127,5 +122,21 @@ async def get_products():
                         if pr["id"] not in seen_ids:
                             seen_ids.add(pr["id"])
                             products.append(pr)
+
     print(f"[RGFK] {len(products)} produktow")
     return products
+
+
+async def get_products():
+    """Legacy interface — fallback/testing."""
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(user_agent=UA)
+                return await scan_with_page(page)
+            finally:
+                await browser.close()
+    except Exception as e:
+        print(f"[RGFK] Browser error: {e}")
+        return []

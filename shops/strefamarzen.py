@@ -16,20 +16,11 @@ EXCLUDE = [
     "force of will", "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
 ]
 
-async def get_products():
+
+def _parse_html(html):
+    """Parse products from HTML."""
     products = []
     seen = set()
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        try:
-            page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120")
-            await page.goto(SEARCH_URL, wait_until="networkidle", timeout=30000)
-            await page.wait_for_timeout(5000)
-            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            await page.wait_for_timeout(3000)
-            html = await page.content()
-        finally:
-            await browser.close()
     soup = BeautifulSoup(html, "lxml")
     for wrapper in soup.select(".product__content_wrapper"):
         link = wrapper.select_one("a.product__name")
@@ -50,15 +41,14 @@ async def get_products():
         price_el = wrapper.select_one(".price.--main")
         price = "brak"
         if price_el:
-            pt = price_el.get_text(strip=True).replace("\xa0","")
+            pt = price_el.get_text(strip=True).replace("\xa0", "")
             m = re.search(r"(\d+[,.]\d+)", pt)
             if m:
-                price = m.group(1).replace(",",".") + " zl"
+                price = m.group(1).replace(",", ".") + " zl"
         parent = wrapper.parent
         text = parent.get_text(" ", strip=True).lower() if parent else ""
         available = "niedost" not in text
         full_url = href if href.startswith("http") else BASE + href
-        # Image extraction
         image = ""
         img_container = wrapper.parent if wrapper.parent else wrapper
         img_el = img_container.select_one("img[src*='/products/'], img[data-src*='/products/']")
@@ -71,9 +61,30 @@ async def get_products():
                     image = BASE + image
                 else:
                     image = BASE + "/" + image
-            # Skip placeholder/logo images
             if image and ("logo" in image.lower() or "placeholder" in image.lower() or image.startswith("data:")):
                 image = ""
         products.append({"id": f"strefamarzen_{pid}", "name": name, "price": price, "shop": SHOP, "url": full_url, "image": image, "stock": None, "available": available})
+    return products
+
+
+async def scan_with_page(page):
+    """Chrome Pool interface — gets ready page, returns products."""
+    await page.goto(SEARCH_URL, wait_until="networkidle", timeout=30000)
+    await page.wait_for_timeout(5000)
+    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    await page.wait_for_timeout(3000)
+    html = await page.content()
+    products = _parse_html(html)
     print(f"[STREFAMARZEN] {len(products)} produktow")
     return products
+
+
+async def get_products():
+    """Legacy interface — fallback/testing."""
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120")
+            return await scan_with_page(page)
+        finally:
+            await browser.close()

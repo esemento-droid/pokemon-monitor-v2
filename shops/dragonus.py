@@ -18,51 +18,10 @@ EXCLUDE = [
     "zeszyt", "puzzle", "figurk", "figure set"
 ]
 
-async def get_products():
-    for _att in range(2):
-        try:
-            return await _do_scrape()
-        except Exception as e:
-            print("[dragonus] Retry " + str(_att+1) + "/2: " + type(e).__name__)
-            await asyncio.sleep(5)
-    return []
 
-async def _do_scrape():
+def _parse_html(pages_html):
+    """Parse products from list of page HTMLs."""
     products = []
-    pages_html = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-
-        try:
-            async def fetch_page(pg):
-                ctx = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
-                page = await ctx.new_page()
-                url = f"{CAT_URL}/{pg}" if pg > 1 else CAT_URL
-                try:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                    await asyncio.sleep(4)
-                    html = await page.content()
-                    return html
-                finally:
-                    await page.close()
-                    await ctx.close()
-
-            # First page to detect max
-            html1 = await fetch_page(1)
-            max_page = 1
-            for m in re.findall(r'/pl/c/Pokemon/315/(\d+)', html1):
-                pg = int(m)
-                if pg > max_page:
-                    max_page = pg
-
-            pages_html = [html1]
-            # Parallel fetch remaining pages
-            if max_page > 1:
-                results = await asyncio.gather(*[fetch_page(pg) for pg in range(2, max_page + 1)])
-                pages_html += results
-        finally:
-            await browser.close()
-
     for page_html in pages_html:
         soup = BeautifulSoup(page_html, "lxml")
         for r in soup.select("td.even, td.odd"):
@@ -100,6 +59,52 @@ async def _do_scrape():
                 "available": available,
             })
     return products
+
+
+async def scan_with_page(page):
+    """Chrome Pool interface — gets ready page, returns products."""
+    # First page
+    await page.goto(CAT_URL, wait_until="domcontentloaded", timeout=30000)
+    await asyncio.sleep(4)
+    html1 = await page.content()
+
+    # Detect max page
+    max_page = 1
+    for m in re.findall(r'/pl/c/Pokemon/315/(\d+)', html1):
+        pg = int(m)
+        if pg > max_page:
+            max_page = pg
+
+    pages_html = [html1]
+
+    # Fetch remaining pages sequentially (same page object, navigate)
+    for pg in range(2, max_page + 1):
+        url = f"{CAT_URL}/{pg}"
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(4)
+        pages_html.append(await page.content())
+
+    products = _parse_html(pages_html)
+    print(f"[DRAGONUS] {len(products)} produktow")
+    return products
+
+
+async def get_products():
+    """Legacy interface — fallback/testing."""
+    for _att in range(2):
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                try:
+                    page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+                    return await scan_with_page(page)
+                finally:
+                    await browser.close()
+        except Exception as e:
+            print("[dragonus] Retry " + str(_att + 1) + "/2: " + type(e).__name__)
+            await asyncio.sleep(5)
+    return []
+
 
 if __name__ == "__main__":
     async def test():

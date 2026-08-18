@@ -18,17 +18,10 @@ EXCLUDE = [
     "riftbound", "zeszyt", "puzzle", "figurk", "figure set"
 ]
 
-async def get_products():
+
+def _parse_html(html):
+    """Parse products from HTML — shared between pool and legacy mode."""
     products = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        try:
-            page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120")
-            await page.goto(URL, wait_until="networkidle", timeout=60000)
-            await asyncio.sleep(2)
-            html = await page.content()
-        finally:
-            await browser.close()
     soup = BeautifulSoup(html, "lxml")
     for item in soup.select(".product"):
         text = item.get_text(" ", strip=True)
@@ -54,5 +47,25 @@ async def get_products():
             image = img_el.get("src") or img_el.get("data-src") or ""
             if image and not image.startswith("http"): image = BASE + image
         products.append({"id": f"wilczek_{pid}", "name": name, "price": price, "shop": SHOP, "url": href, "image": image, "stock": None, "available": available})
+    return products
+
+
+async def scan_with_page(page):
+    """Chrome Pool interface — gets ready page, returns products."""
+    await page.goto(URL, wait_until="networkidle", timeout=60000)
+    await asyncio.sleep(2)
+    html = await page.content()
+    products = _parse_html(html)
     print(f"[WILCZEK] {len(products)} produktow")
     return products
+
+
+async def get_products():
+    """Legacy interface — launches own browser (fallback/testing)."""
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120")
+            return await scan_with_page(page)
+        finally:
+            await browser.close()
