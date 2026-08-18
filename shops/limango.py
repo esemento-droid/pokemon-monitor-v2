@@ -64,7 +64,9 @@ def _is_lego_set(product):
     # Reject clothing/accessories with LEGO branding
     clothing_keywords = ["bokser", "kurtk", "spodni", "bluza", "piżam", "skarpet",
                          "czapk", "szalik", "t-shirt", "koszulk", "dress", "leggin",
-                         "bluzi", "polar", "buty", "sandał", "kapel", "rękawic"]
+                         "bluzi", "polar", "buty", "sandał", "kapel", "rękawic",
+                         "plecak", "tornister", "torba", "worek", "piórnik",
+                         "płytka", "płytk", "baseplate"]
     if any(kw in name for kw in clothing_keywords):
         return False
     
