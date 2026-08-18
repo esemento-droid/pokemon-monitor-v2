@@ -86,11 +86,8 @@ def _is_lego_set(product):
 
 
 def _build_product_url(product_id, golden_product_id=None):
-    """Build limango product URL. Uses goldenProductId for new URL format."""
-    if golden_product_id:
-        return f"{BASE}/p/{golden_product_id}"
-    numeric_id = product_id.split("_")[-1] if "_" in product_id else product_id
-    return f"{BASE}/shop/lego?productId={numeric_id}"
+    """Build limango product URL. Format: /shop/product/{full_id}"""
+    return f"{BASE}/shop/product/{product_id}"
 
 
 def _build_image_url(images):
@@ -186,8 +183,9 @@ async def get_products():
                 if set_match:
                     set_number = set_match.group(1)
 
-                # Available if has variant with price, "zarezerwowany" = not available
-                available = bool(variant and price_amount and price_amount > 0)
+                # Available = has stock AND has price
+                total_stock = item.get("totalStockAvailable", 0)
+                available = bool(total_stock and total_stock > 0 and price_amount and price_amount > 0)
 
                 products.append({
                     "id": f"{SHOP}_{pid}",
