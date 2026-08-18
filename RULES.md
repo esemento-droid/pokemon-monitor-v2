@@ -89,6 +89,7 @@ curl -sL paste.rs/XXXXX | bash 2>&1 | curl -s --data-binary @- https://paste.rs/
 ### Co scraper MUSI robić:
 1. Łapać WSZYSTKIE angielskie sealed Pokemon TCG (booster boxes, ETBs, tins, collections, blisters, bundles, mini tins, UPCs)
 2. Prawidłowo wykrywać DOSTĘPNOŚĆ — testuj na live site (koszyk/dodaj = available, brak/niedost = unavailable)
+3. **Przy pierwszym zaczytaniu (snapshot) MUSI ładować TEŻ niedostępne produkty** — to kluczowe dla wykrywania RESTOCKÓW (przejście OOS→available). Jeśli scraper nie załaduje OOS na start, nie będzie miał baseline do porównania i nie wyśle alertu restock.
 3. Wykrywać RESTOCKI (przejście unavailable→available) i ZMIANY CEN
 4. Mieć OBRAZKI które wyświetlają się na Discord (testuj HTTP HEAD, weserv.nl proxy jeśli 403)
 5. Być SZYBKI i STABILNY — API-first, max 6-10 req/min, proxy jeśli rate limit
