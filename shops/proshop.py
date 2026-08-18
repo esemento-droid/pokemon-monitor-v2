@@ -68,14 +68,14 @@ async def scan_with_page(page):
     """Persistent browser interface — page already exists, just navigate."""
     products = []
 
-    await page.goto(URL, wait_until="domcontentloaded", timeout=45000)
-    await asyncio.sleep(15)
+    await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+    await asyncio.sleep(20)
 
-    # Check CF
+    # Check CF — give it more time (proshop has aggressive CF)
     title = await page.title()
     if not title or "moment" in title.lower() or "attention" in title.lower() or "cloudflare" in title.lower():
         log.warning("[proshop] CF not resolved, waiting longer...")
-        await asyncio.sleep(10)
+        await asyncio.sleep(20)
         title = await page.title()
         if not title or "attention" in title.lower() or "moment" in title.lower():
             log.error("[proshop] CF block - cannot access")

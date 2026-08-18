@@ -1,8 +1,9 @@
 """
 Scraper: strefamtg.pl
-Platform: PrestaShop (behind Cloudflare)
-Method: FlareSolverr + BeautifulSoup
+Platform: PrestaShop (NO Cloudflare — direct aiohttp works fine)
+Method: aiohttp + BeautifulSoup (parallel pages)
 Category: /2838-talie-i-zestawy-kart-pokemon (3 pages)
+Group: FAST (moved from SLOW — no CF bypass needed)
 """
 import aiohttp
 import asyncio
@@ -16,7 +17,7 @@ CATEGORY_URLS = [
     "/2838-talie-i-zestawy-kart-pokemon?page=2",
     "/2838-talie-i-zestawy-kart-pokemon?page=3",
 ]
-FLARESOLVERR_URL = "http://localhost:8191/v1"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
 
 EXCLUDE = [
     "sleeves", "koszulk", "toploader", "album", "pro-binder", "ultra pro", "ultra-pro",
@@ -33,22 +34,16 @@ EXCLUDE = [
 ]
 
 
-async def fetch_flaresolverr(url):
-    """Fetch URL via FlareSolverr to bypass Cloudflare."""
-    try:
-        async with aiohttp.ClientSession() as session:
-            payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
-            async with session.post(
-                FLARESOLVERR_URL, json=payload,
-                timeout=aiohttp.ClientTimeout(total=45),
-            ) as resp:
-                if resp.status != 200:
-                    return ""
-                data = await resp.json()
-                if data.get("status") == "ok":
-                    return data.get("solution", {}).get("response", "")
-    except Exception as e:
-        print(f"[strefamtg] FlareSolverr error: {e}")
+async def _fetch_page(session, url):
+    """Fetch single page with retry."""
+    for attempt in range(2):
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                if resp.status == 200:
+                    return await resp.text()
+        except Exception:
+            if attempt == 0:
+                await asyncio.sleep(2)
     return ""
 
 
@@ -56,18 +51,17 @@ async def get_products():
     products = []
     seen = set()
 
-    for cat_path in CATEGORY_URLS:
-        url = BASE_URL + cat_path
-        html = await fetch_flaresolverr(url)
+    urls = [BASE_URL + path for path in CATEGORY_URLS]
+
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        # Parallel fetch all pages
+        pages = await asyncio.gather(*[_fetch_page(session, url) for url in urls])
+
+    for html in pages:
         if not html:
             continue
 
         soup = BeautifulSoup(html, "lxml")
-
-        # Check for CF block
-        if "Just a moment" in soup.get_text()[:200]:
-            print("[strefamtg] Cloudflare block via FlareSolverr")
-            continue
 
         for item in soup.select("article.product-miniature, div.product-miniature, [class*=product-miniature]"):
             name_el = item.select_one("h2 a, h3 a, .product-title a, a.product-name, a[class*=title]")
