@@ -207,11 +207,19 @@ async def get_products():
 
     # Price comparison — uses pre-cached promoklocki.pl prices (refreshed every 4h by price_cache.py)
     # No FlareSolverr at scan time! Instant comparison from JSON cache.
-    # ONLY matches by exact set number (5-digit) — NO fuzzy matching (too risky, could compare wrong sets)
+    # Matching: klockoradar sitemap (name → set number), Price: promoklocki (from cache)
     if products:
         try:
             from price_cache import get_cached_price
-            from price_compare import format_price_comparison as _fmt, PROMOKLOCKI_BASE
+            from price_compare import _load_sitemap, match_set_number, format_price_comparison as _fmt, PROMOKLOCKI_BASE, HEADERS as PC_HEADERS
+
+            # Load klockoradar sitemap for name→number matching
+            sitemap = None
+            try:
+                async with aiohttp.ClientSession(headers=PC_HEADERS) as pc_session:
+                    sitemap = await _load_sitemap(pc_session)
+            except Exception:
+                pass
 
             matched_count = 0
             for p in products:
@@ -226,9 +234,10 @@ async def get_products():
                 if price_val <= 0:
                     continue
 
-                # ONLY use exact set number from product name (5 digits)
-                # NO fuzzy matching — must be certain it's the same set
+                # Match: exact 5-digit number from name OR fuzzy match via klockoradar sitemap
                 set_num = p.get('set_number')
+                if not set_num and sitemap:
+                    set_num = match_set_number(p['name'], sitemap)
                 if not set_num:
                     continue
 

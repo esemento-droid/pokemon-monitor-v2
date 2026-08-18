@@ -145,18 +145,31 @@ async def refresh_cache():
         if re.match(r'^\d{4,6}$', key):
             set_numbers.add(key)
 
-    # Source 2: limango products from DB — extract set numbers from names
+    # Source 2: limango products from DB — extract set numbers from names + fuzzy match
     try:
         from database import get_shop_products, init_db
         await init_db()
         limango_products = await get_shop_products("limango")
+
+        # Load klockoradar sitemap for fuzzy name→number matching
+        from price_compare import _load_sitemap, match_set_number, HEADERS as PC_HEADERS
+        sitemap = {}
+        async with aiohttp.ClientSession(headers=PC_HEADERS) as s:
+            sitemap = await _load_sitemap(s)
+
         for pid, prod in limango_products.items():
             name = prod.get("name", "")
+            # Direct: extract 5-digit number from name
             m = re.search(r'\b(\d{5})\b', name)
             if m:
                 set_numbers.add(m.group(1))
+            # Fuzzy: match name to klockoradar sitemap slugs
+            elif sitemap:
+                matched = match_set_number(name, sitemap)
+                if matched:
+                    set_numbers.add(matched)
     except Exception as e:
-        log.warning(f"DB read failed: {e}")
+        log.warning(f"DB/sitemap read failed: {e}")
 
     if not set_numbers:
         log.warning("No set numbers to refresh!")
