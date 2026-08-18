@@ -221,7 +221,7 @@ async def get_products():
             # Load sitemap from DISK CACHE (built by price_cache.py every 4h)
             # Falls back to empty dict if file not found (no network fetch during scan!)
             sitemap = {}
-            sitemap_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "sitemap_cache.json")
+            sitemap_cache_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sitemap_cache.json")
             try:
                 if os.path.exists(sitemap_cache_file):
                     with open(sitemap_cache_file, "r") as f:
