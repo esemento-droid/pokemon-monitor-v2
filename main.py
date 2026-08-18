@@ -98,6 +98,9 @@ def load_shops():
         name = filename[:-3]
         try:
             module = importlib.import_module(f"shops.{name}")
+            if getattr(module, "SHOP_DISABLED", False):
+                logging.getLogger("monitor").info(f"[LOAD] SKIP {name} (SHOP_DISABLED)")
+                continue
             if hasattr(module, "get_products"):
                 shops.append((name, module))
         except Exception as e:

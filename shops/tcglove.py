@@ -1,4 +1,11 @@
 """
+DISABLED 2026-08-18: Domain SSL dead (Cannot connect to host www.tcglove.pl:443 ssl:Fail)
+Re-enable when domain comes back.
+"""
+
+SHOP_DISABLED = True
+
+"""
 Scraper: KupTeraz.com.pl
 Platform: Custom (product-tile web component)
 Method: aiohttp + BeautifulSoup

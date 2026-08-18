@@ -1,7 +1,14 @@
+"""
+DISABLED 2026-08-18: Domain SSL dead (Cannot connect to host mycards.pl:443 ssl:Fail)
+Re-enable when domain comes back.
+"""
 import aiohttp
 import asyncio
 import re
 from bs4 import BeautifulSoup
+
+# Domain is dead — skip to save CPU
+SHOP_DISABLED = True
 
 CATEGORIES = [
     "https://mycards.pl/pl/c/Pokemon-Booster-Pack/5",

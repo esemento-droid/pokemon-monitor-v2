@@ -1,3 +1,11 @@
+"""
+DISABLED 2026-08-18: DUPLICATE of shops/tantis.py (uses same SHOP="tantis" field)
+This old version spawns its own patchright browser = wastes 200+ MB RAM + CPU.
+New tantis.py uses scan_with_page() via browser_manager (persistent, shared).
+"""
+
+SHOP_DISABLED = True
+
 import asyncio
 import json
 import re
