@@ -441,7 +441,7 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
 
     stats = {"ok": 0, "err": 0, "consecutive_err": 0, "heal_count": 0}
     scan_fn = module.scan_with_page
-    SCAN_TIMEOUT = 90  # Max seconds per scan — prevents hung pages
+    SCAN_TIMEOUT = 120 if browser_type == "stealth" else 90  # Stealth needs more time (CF + proxy)
 
     while True:
         start = datetime.now()
