@@ -202,14 +202,20 @@ class SubprocessPool:
         """
         Run shop function with concurrency limit + timeout.
         run_fn: async function that launches its own browser and returns products.
-        Guarantees: slot released even on timeout/crash.
+        Guarantees: slot released even on timeout/crash. Kills orphan Chrome.
         """
         async with self._semaphore:
             try:
                 result = await asyncio.wait_for(run_fn(), timeout=timeout)
                 return result if result else []
             except asyncio.TimeoutError:
-                logger.warning(f"[{self.name}] [{shop_name}] TIMEOUT {timeout}s")
+                logger.warning(f"[{self.name}] [{shop_name}] TIMEOUT {timeout}s — killing orphans")
+                # Kill any runner.py for this shop + its Chrome children
+                import subprocess as sp
+                try:
+                    sp.run(["pkill", "-9", "-f", f"runner.py {shop_name}"], capture_output=True, timeout=5)
+                except Exception:
+                    pass
                 return []
             except Exception as e:
                 logger.error(f"[{self.name}] [{shop_name}] ERROR: {e}")

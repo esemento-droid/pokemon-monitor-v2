@@ -365,7 +365,27 @@ async def subprocess_shop_worker(name, subprocess_pool, logger):
                 cwd=DIR,
                 start_new_session=True,
             )
-            stdout, stderr = await proc.communicate()
+            try:
+                stdout, stderr = await proc.communicate()
+            except Exception:
+                # Kill entire process group on error
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+                raise
+            finally:
+                # ALWAYS kill process group — Chrome children survive parent exit!
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, OSError):
+                    pass
+                await asyncio.sleep(1)
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+
             if proc.returncode != 0:
                 raise RuntimeError(stderr.decode().strip()[-200:] if stderr else "unknown")
             output = stdout.decode().strip()
@@ -384,12 +404,6 @@ async def subprocess_shop_worker(name, subprocess_pool, logger):
         else:
             stats["err"] += 1
             stats["consecutive_err"] += 1
-            # Kill any orphaned Chrome from this shop
-            try:
-                import subprocess as sp
-                sp.run(["pkill", "-f", f"runner.py {name}"], capture_output=True, timeout=5)
-            except Exception:
-                pass
 
         # Delay
         consec = stats["consecutive_err"]
