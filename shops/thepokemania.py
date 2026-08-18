@@ -179,5 +179,10 @@ async def get_products():
                 "available": item["available"],
             })
 
+    # Sort: OOS first (silent DB), then available (Discord SNAPSHOT)
+    # User sees available products at BOTTOM of Discord (most recent = visible without scrolling)
+    products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
+
+
     print(f"[THEPOKEMANIA] {len(products)} produktow")
     return products
