@@ -12,6 +12,7 @@ import json
 import aiohttp
 
 SHOP = "thepokemania"
+SHOP_DISABLED = True  # TEMPORARY: disable until first snapshot settles (remove after 1 clean restart)
 BASE = "https://thepokemania.de"
 CATEGORY_URL = "/pokemon-tcg-sets/lingua-englisch"
 MAX_PAGES = 6
