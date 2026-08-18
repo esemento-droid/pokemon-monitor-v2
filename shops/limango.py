@@ -218,8 +218,12 @@ async def get_products():
             try:
                 async with aiohttp.ClientSession(headers=PC_HEADERS) as pc_session:
                     sitemap = await _load_sitemap(pc_session)
-            except Exception:
-                pass
+                if sitemap:
+                    print(f"[LIMANGO] Sitemap loaded: {len(sitemap)} sets")
+                else:
+                    print("[LIMANGO] WARNING: Sitemap empty!")
+            except Exception as e:
+                print(f"[LIMANGO] Sitemap load failed: {e}")
 
             matched_count = 0
             for p in products:

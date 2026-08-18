@@ -199,7 +199,7 @@ async def _load_sitemap(session):
     sets = {}
     for url in SITEMAP_URLS:
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 if resp.status != 200:
                     continue
                 xml = await resp.text()
@@ -236,7 +236,16 @@ def match_set_number(product_name, sitemap):
         if score > best_score:
             best_score = score
             best_num = num
-    return best_num if best_score >= 2 else None
+    # Require 2+ matching words, OR 1 word if it's long/unique (8+ chars)
+    if best_score >= 2:
+        return best_num
+    if best_score == 1:
+        # Check if the matching word is unique enough (8+ chars, not generic)
+        matching_words = name_words & set(sitemap.get(best_num, '').split('-'))
+        for w in matching_words:
+            if len(w) >= 8:  # "chrysanthemum", "koenigsegg" etc. are unique enough
+                return best_num
+    return None
 
 
 async def _fetch_klockoradar_price(session, set_number):
