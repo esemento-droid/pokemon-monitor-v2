@@ -84,15 +84,17 @@ def check_strefatcg_trigger(event_type, product):
     if not _matches_keywords(name):
         return
     
-    # Max price check
+    # Max price check — STRICT: if can't parse price, DO NOT trigger (safety)
+    MAX_PRICE = 1510  # Updated 2026-08-18 (was 1580, user wants 1510 max)
     try:
         price_str = product.get("price", "0")
         price_val = float(price_str.replace("PLN", "").replace("zł", "").replace("zl", "").replace(",", ".").replace(" ", "").strip())
-        if price_val > 1580:
-            log.info(f"[STCG-TRIGGER] SKIP (price {price_val} > 1580): '{name}'")
+        if price_val > MAX_PRICE:
+            log.info(f"[STCG-TRIGGER] SKIP (price {price_val} > {MAX_PRICE}): '{name}'")
             return
     except (ValueError, TypeError):
-        pass
+        log.warning(f"[STCG-TRIGGER] SKIP (cannot parse price '{product.get('price')}'): '{name}'")
+        return  # SAFETY: don't trigger if we can't verify price!
     
     log.info(f"[STCG-TRIGGER] MATCH! event={event_type} name='{name}' id={product_id}")
     
