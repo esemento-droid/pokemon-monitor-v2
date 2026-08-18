@@ -337,6 +337,15 @@ async def _async_process(process_name, shop_names_modules):
     await init_db()
     discord.start()
 
+    # SLOW process starts CF Bridge (replaces FlareSolverr Docker on :8191)
+    if process_name == "SLOW":
+        try:
+            from cf_bridge import start_bridge
+            await start_bridge()
+            logger.info(f"[{process_name}] CF Bridge started on :8191 (FlareSolverr replacement)")
+        except Exception as e:
+            logger.warning(f"[{process_name}] CF Bridge failed to start: {e} — shops will use Docker FS as fallback")
+
     tasks = []
     for name, module in shop_names_modules:
         tasks.append(asyncio.create_task(shop_worker(name, module, logger, process_name)))
