@@ -19,6 +19,8 @@ if not os.environ.get("DISPLAY"):
 
 log = logging.getLogger("monitor")
 
+BROWSER_TYPE = "stealth"
+
 SEARCH_URLS = [
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+tcg",
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+booster",
@@ -65,6 +67,113 @@ JSON.stringify(Array.from(document.querySelectorAll('.offer-box')).map(box => {
     return {name: label, pid: pid, url: href, price: priceText, img: img, unavail: unavail};
 }))
 """
+
+
+async def scan_with_page(page):
+    """Persistent browser interface - page already exists, just navigate."""
+    products = []
+    seen_ids = set()
+
+    # First URL - navigate + wait for CF to resolve
+    await page.goto(SEARCH_URLS[0], wait_until="domcontentloaded", timeout=45000)
+    await asyncio.sleep(12)
+
+    # Check CF resolution
+    title = await page.title()
+    if not title or "moment" in title.lower() or "checking" in title.lower():
+        log.warning("[mediaexpert] CF not resolved, waiting longer...")
+        await asyncio.sleep(15)
+        title = await page.title()
+        if not title or "moment" in title.lower():
+            log.error("[mediaexpert] CF block - cannot access")
+            return []
+
+    for search_url in SEARCH_URLS:
+        if search_url != SEARCH_URLS[0]:
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(12)
+
+            # Check CF
+            title = await page.title()
+            if not title or "moment" in title.lower() or "checking" in title.lower():
+                log.warning("[mediaexpert] CF challenge on %s, waiting...", search_url)
+                await asyncio.sleep(15)
+                title = await page.title()
+                if not title or "moment" in title.lower():
+                    log.error("[mediaexpert] CF block on %s", search_url)
+                    continue
+
+        # Dismiss cookies
+        await page.evaluate("""
+            (() => {
+                const bb = document.querySelectorAll('button');
+                for (const b of bb) {
+                    const t = (b.textContent || '').toLowerCase();
+                    if ((t.includes('akceptuj') || t.includes('zgadzam') || t.includes('rozumiem'))
+                        && b.offsetParent !== null) {
+                        b.click(); return;
+                    }
+                }
+            })()
+        """)
+        await asyncio.sleep(2)
+
+        # Scroll down to load lazy products
+        for _ in range(5):
+            await page.evaluate("window.scrollBy(0, 800)")
+            await asyncio.sleep(1.5)
+
+        # Extract products
+        raw = await page.evaluate(EXTRACT_JS)
+        if not raw:
+            log.warning("[mediaexpert] No data from %s", search_url)
+            continue
+
+        try:
+            items = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            log.error("[mediaexpert] JSON parse error")
+            continue
+
+        for item in items:
+            pid = item.get("pid", "")
+            name = item.get("name", "")
+            if not name or not pid:
+                continue
+            if pid in seen_ids:
+                continue
+
+            # Apply filters
+            name_lower = name.lower()
+            if any(kw in name_lower for kw in EXCLUDE_KW):
+                continue
+            if not any(kw in name_lower for kw in INCLUDE_KW):
+                continue
+
+            seen_ids.add(pid)
+
+            # Parse price (in grosze -> PLN)
+            price_raw = item.get("price", "")
+            price_str = _format_price(price_raw)
+
+            # URL
+            item_url = item.get("url", "")
+            if item_url and not item_url.startswith("http"):
+                item_url = "https://www.mediaexpert.pl" + item_url
+
+            products.append({
+                "id": f"mediaexpert_{pid}",
+                "name": name,
+                "price": price_str,
+                "shop": "mediaexpert",
+                "url": item_url,
+                "image": item.get("img", ""),
+                "stock": 0 if item.get("unavail") else 1,
+                "available": not item.get("unavail", False),
+            })
+
+    log.info(f"[MEDIAEXPERT] {len(products)} produktow")
+    return products
 
 
 async def get_products():

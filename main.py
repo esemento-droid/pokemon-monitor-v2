@@ -444,6 +444,7 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
     SCAN_TIMEOUT = 90  # Max seconds per scan — prevents hung pages
 
     while True:
+        start = datetime.now()
         try:
             # Run scan with timeout — no shop can hang forever
             products = await asyncio.wait_for(scan_fn(page), timeout=SCAN_TIMEOUT)
@@ -462,7 +463,8 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                 stats["ok"] += 1
                 stats["err"] = 0
                 stats["consecutive_err"] = 0
-                logger.info(f"[{name}] {len(products)} produktow")
+                scan_time = (datetime.now() - start).total_seconds()
+                logger.info(f"[{name}] {len(products)} produktow w {scan_time:.1f}s")
             else:
                 stats["err"] += 1
                 stats["consecutive_err"] += 1
