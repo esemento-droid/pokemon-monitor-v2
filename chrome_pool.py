@@ -210,10 +210,15 @@ class SubprocessPool:
                 return result if result else []
             except asyncio.TimeoutError:
                 logger.warning(f"[{self.name}] [{shop_name}] TIMEOUT {timeout}s — killing orphans")
-                # Kill any runner.py for this shop + its Chrome children
+                # Kill runner.py + all its Chrome children
                 import subprocess as sp
                 try:
                     sp.run(["pkill", "-9", "-f", f"runner.py {shop_name}"], capture_output=True, timeout=5)
+                except Exception:
+                    pass
+                # Also kill any Chrome started by that runner (by temp dir pattern)
+                try:
+                    sp.run(["pkill", "-9", "-P", "1", "-f", "chromium.*--remote-debugging"], capture_output=True, timeout=5)
                 except Exception:
                     pass
                 return []

@@ -363,28 +363,17 @@ async def subprocess_shop_worker(name, subprocess_pool, logger):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=DIR,
-                start_new_session=True,
             )
             try:
                 stdout, stderr = await proc.communicate()
-            except Exception:
-                # Kill entire process group on error
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except (ProcessLookupError, OSError):
-                    pass
+            except asyncio.CancelledError:
+                proc.kill()
+                await proc.wait()
                 raise
-            finally:
-                # ALWAYS kill process group — Chrome children survive parent exit!
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except (ProcessLookupError, OSError):
-                    pass
-                await asyncio.sleep(1)
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except (ProcessLookupError, OSError):
-                    pass
+            except Exception:
+                proc.kill()
+                await proc.wait()
+                raise
 
             if proc.returncode != 0:
                 raise RuntimeError(stderr.decode().strip()[-200:] if stderr else "unknown")
