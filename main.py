@@ -290,9 +290,10 @@ VENV_PYTHON = os.path.join(DIR, "venv", "bin", "python3")
 RUNNER = os.path.join(DIR, "runner.py")
 
 
-async def nodriver_worker(name, logger):
+async def nodriver_worker(name, logger, start_delay=10):
     """Subprocess worker for Chrome shops. Kills ENTIRE process tree on timeout."""
-    await asyncio.sleep(random.uniform(5, 30))
+    # Staggered start: each Chrome shop starts 30s after previous (prevents CPU overload)
+    await asyncio.sleep(start_delay + random.uniform(0, 5))
     stats = {"ok": 0, "err": 0, "consecutive_err": 0}
 
     while True:
@@ -438,10 +439,10 @@ async def _async_nodriver(process_name, shop_names):
     logger.info(f"=== {process_name} process starting ({len(shop_names)} shops via subprocess) ===")
 
     tasks = []
-    for name in shop_names:
-        tasks.append(asyncio.create_task(nodriver_worker(name, logger)))
+    for idx, name in enumerate(shop_names):
+        tasks.append(asyncio.create_task(nodriver_worker(name, logger, start_delay=idx * 30)))
 
-    logger.info(f"[{process_name}] {len(shop_names)} subprocess workers started")
+    logger.info(f"[{process_name}] {len(shop_names)} subprocess workers started (staggered 30s apart)")
 
     try:
         await asyncio.gather(*tasks, return_exceptions=True)
