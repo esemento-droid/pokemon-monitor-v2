@@ -289,79 +289,85 @@ async def _send_alarm(name, error, logger):
 VENV_PYTHON = os.path.join(DIR, "venv", "bin", "python3")
 RUNNER = os.path.join(DIR, "runner.py")
 
+# Semaphore: max 3 Chrome browsers running simultaneously (12 shops × 3 procs = 36 Chrome = load 18!)
+# With limit 3: max 3 × 3 = 9 Chrome procs = load ~4-6 (healthy for 4-core VPS)
+_chrome_semaphore = None
 
-async def nodriver_worker(name, logger, start_delay=10):
+
+async def nodriver_worker(name, logger, start_delay=10, semaphore=None):
     """Subprocess worker for Chrome shops. Kills ENTIRE process tree on timeout."""
     # Staggered start: each Chrome shop starts 30s after previous (prevents CPU overload)
     await asyncio.sleep(start_delay + random.uniform(0, 5))
     stats = {"ok": 0, "err": 0, "consecutive_err": 0}
 
     while True:
-        start = datetime.now()
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                VENV_PYTHON, "-u", RUNNER, name,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=DIR,
-                start_new_session=True,
-            )
+        # Acquire semaphore — wait for free Chrome slot before starting scan
+        async with semaphore:
+            start = datetime.now()
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT_NODRIVER)
-            except asyncio.TimeoutError:
-                logger.warning(f"[{name}] TIMEOUT {TIMEOUT_NODRIVER}s (subprocess)")
-                # Kill ENTIRE process group (catches Chrome children)
+                proc = await asyncio.create_subprocess_exec(
+                    VENV_PYTHON, "-u", RUNNER, name,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=DIR,
+                    start_new_session=True,
+                )
                 try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except (ProcessLookupError, OSError):
-                    pass
-                await asyncio.sleep(2)
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except (ProcessLookupError, OSError):
-                    pass
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    pass
-                await proc.wait()
-                stats["err"] += 1
-                stats["consecutive_err"] += 1
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=TIMEOUT_NODRIVER)
+                except asyncio.TimeoutError:
+                    logger.warning(f"[{name}] TIMEOUT {TIMEOUT_NODRIVER}s (subprocess)")
+                    # Kill ENTIRE process group (catches Chrome children)
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    except (ProcessLookupError, OSError):
+                        pass
+                    await asyncio.sleep(2)
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except (ProcessLookupError, OSError):
+                        pass
+                    try:
+                        proc.kill()
+                    except ProcessLookupError:
+                        pass
+                    await proc.wait()
+                    stats["err"] += 1
+                    stats["consecutive_err"] += 1
 
-                # Progressive cooldown for dead shops
-                consec = stats["consecutive_err"]
-                if consec >= 10:
-                    logger.warning(f"[{name}] 10+ timeouts — cooldown 30min")
-                    await asyncio.sleep(1800)
-                elif consec >= 5:
-                    logger.warning(f"[{name}] 5+ timeouts — cooldown 10min")
-                    await asyncio.sleep(600)
+                    # Progressive cooldown for dead shops
+                    consec = stats["consecutive_err"]
+                    if consec >= 10:
+                        logger.warning(f"[{name}] 10+ timeouts — cooldown 30min")
+                        await asyncio.sleep(1800)
+                    elif consec >= 5:
+                        logger.warning(f"[{name}] 5+ timeouts — cooldown 10min")
+                        await asyncio.sleep(600)
+                    else:
+                        await asyncio.sleep(random.randint(30, 60))
+                    continue
+
+                output = stdout.decode().strip()
+                if output:
+                    for line in output.split("\n"):
+                        if line.strip():
+                            logger.info(line.strip())
+
+                if proc.returncode != 0:
+                    err_msg = stderr.decode().strip()[-200:] if stderr else "unknown"
+                    logger.error(f"[{name}] EXIT {proc.returncode}: {err_msg}")
+                    stats["err"] += 1
+                    stats["consecutive_err"] += 1
                 else:
-                    await asyncio.sleep(random.randint(30, 60))
-                continue
+                    stats["ok"] += 1
+                    stats["err"] = 0
+                    stats["consecutive_err"] = 0
 
-            output = stdout.decode().strip()
-            if output:
-                for line in output.split("\n"):
-                    if line.strip():
-                        logger.info(line.strip())
-
-            if proc.returncode != 0:
-                err_msg = stderr.decode().strip()[-200:] if stderr else "unknown"
-                logger.error(f"[{name}] EXIT {proc.returncode}: {err_msg}")
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.error(f"[{name}] SUBPROCESS ERROR: {e}")
                 stats["err"] += 1
                 stats["consecutive_err"] += 1
-            else:
-                stats["ok"] += 1
-                stats["err"] = 0
-                stats["consecutive_err"] = 0
-
-        except asyncio.CancelledError:
-            return
-        except Exception as e:
-            logger.error(f"[{name}] SUBPROCESS ERROR: {e}")
-            stats["err"] += 1
-            stats["consecutive_err"] += 1
 
         # Fast cycle for healthy shops, slower for erroring ones
         if stats["consecutive_err"] == 0:
@@ -438,11 +444,15 @@ async def _async_nodriver(process_name, shop_names):
     logger = setup_logger(process_name)
     logger.info(f"=== {process_name} process starting ({len(shop_names)} shops via subprocess) ===")
 
+    # Max 3 Chrome browsers at once (12 shops × 3 Chrome procs each = 36 if unlimited = load 18)
+    # With semaphore(3): max 9 Chrome procs = load ~4-5 on 4 cores
+    semaphore = asyncio.Semaphore(3)
+
     tasks = []
     for idx, name in enumerate(shop_names):
-        tasks.append(asyncio.create_task(nodriver_worker(name, logger, start_delay=idx * 30)))
+        tasks.append(asyncio.create_task(nodriver_worker(name, logger, start_delay=idx * 10, semaphore=semaphore)))
 
-    logger.info(f"[{process_name}] {len(shop_names)} subprocess workers started (staggered 30s apart)")
+    logger.info(f"[{process_name}] {len(shop_names)} subprocess workers started (max 3 concurrent Chrome)")
 
     try:
         await asyncio.gather(*tasks, return_exceptions=True)
