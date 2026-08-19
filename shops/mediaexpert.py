@@ -5,7 +5,7 @@ Reason: CF requires headless=False fingerprint + mobile proxy IP.
          cf_bridge (headless=True) gets blocked. VPS IP banned.
 Method: scan_with_page (persistent browser) + JS extraction.
 Searches: "pokemon tcg" + "pokemon booster"
-Target scan time: 30-50s (down from 95s — optimized sleeps)
+Target scan time: 40-60s (goto 30s + CF 2-4s + scroll 1s per URL)
 """
 import asyncio
 import json
@@ -19,7 +19,7 @@ if not os.environ.get("DISPLAY"):
 log = logging.getLogger("monitor")
 
 BROWSER_TYPE = "stealth"
-SCAN_TIMEOUT = 90  # Tight but realistic: 2 URLs × ~20s each + overhead
+SCAN_TIMEOUT = 150  # 2 URLs × 30s goto + CF wait + scroll — needs headroom
 
 SEARCH_URLS = [
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+tcg",
@@ -80,17 +80,17 @@ async def scan_with_page(page):
 
     for i, search_url in enumerate(SEARCH_URLS):
         try:
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=40000)
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
         except Exception as e:
             log.warning(f"[mediaexpert] goto failed for URL {i+1}: {e}")
             continue
 
         # Quick CF check — on persistent browser, cookies usually pass CF instantly
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
         title = await page.title()
         if not title or "moment" in title.lower() or "checking" in title.lower():
             # CF challenge — wait but not forever
-            await asyncio.sleep(5)
+            await asyncio.sleep(4)
             title = await page.title()
             if not title or "moment" in title.lower():
                 log.warning(f"[mediaexpert] CF block on URL {i+1}, skipping")
@@ -112,7 +112,7 @@ async def scan_with_page(page):
 
         # Quick scroll to trigger lazy loading
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(1)
 
         # Extract products
         raw = await page.evaluate(EXTRACT_JS)
