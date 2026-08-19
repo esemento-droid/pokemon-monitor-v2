@@ -186,9 +186,12 @@ async def get_products():
 
                 # Extract LEGO set number from name (for price comparison)
                 set_number = None
-                set_match = re.search(r'\b(\d{5})\b', name)
+                set_match = re.search(r'\b(\d{4,6})\b', name)
                 if set_match:
-                    set_number = set_match.group(1)
+                    num = set_match.group(1)
+                    # Prefer 5-digit (most LEGO sets), accept 4-digit >= 1000
+                    if len(num) == 5 or len(num) == 6 or (len(num) == 4 and int(num) >= 1000):
+                        set_number = num
 
                 # Available = has stock AND has price
                 total_stock = item.get("totalStockAvailable", 0)

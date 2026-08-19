@@ -255,8 +255,9 @@ def match_set_number(product_name, sitemap):
     # Filter to only best-scoring candidates
     top = [(s, c, n) for s, c, n in candidates if s == best_score]
 
-    # Require minimum: score>=1 AND coverage>=30%
-    if best_score < 1 or best_coverage < 0.3:
+    # Require minimum: score>=2 AND coverage>=40%
+    # (score=1 matches too many false positives like "creator", "city", "parrot")
+    if best_score < 2 or best_coverage < 0.4:
         return None
 
     # Single clear winner
