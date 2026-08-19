@@ -213,23 +213,19 @@ async def _graphql_poll(page):
 
     pids = list(_product_catalog.keys())
     
-    # GraphQL supports batch — query all product IDs at once
-    # Use %22 for quotes in URL (proper URL encoding)
-    ids_str = ",".join(f'%22{pid}%22' for pid in pids)
-    query = (
-        'query Q{byId(identifierName:%22productId%22,identifierValues:[' + ids_str + '])'
-        '{id product_id price_gross promo_price_gross discount'
-        ' _embedded{ozg{status}pickupDate{pos_delivery_display_label customer_delivery_display_label}}}}'
-    )
-    
+    # Pass PIDs to JavaScript — let JS build the URL with proper encodeURIComponent
+    pids_json = json.dumps(pids)
     ts = int(time.time())
-    fetch_url = f"{GRAPHQL_BASE}/{ts}?query={query}"
     
-    # Use page.evaluate(fetch()) — runs as same-origin XHR (bypasses CF)
     fetch_js = """
-        async () => {
+        async (pidsJson, ts) => {
             try {
-                const resp = await fetch("%s", {
+                const pids = JSON.parse(pidsJson);
+                const idsStr = pids.map(id => '"' + id + '"').join(',');
+                const query = 'query QuerySimpleProductOfferByProduct{byId(identifierName:"productId",identifierValues:[' + idsStr + ']){id product_id price_gross promo_price_gross discount _embedded{ozg{status}pickupDate{pos_delivery_display_label customer_delivery_display_label}}}}';
+                const url = '/api/graphql/product-offer/query/' + ts + '?query=' + encodeURIComponent(query);
+                
+                const resp = await fetch(url, {
                     method: "GET",
                     headers: {"Accept": "application/json"},
                     credentials: "same-origin"
@@ -240,10 +236,13 @@ async def _graphql_poll(page):
                 return JSON.stringify({error: e.message});
             }
         }
-    """ % fetch_url
+    """
     
     try:
-        body = await asyncio.wait_for(page.evaluate(fetch_js), timeout=15)
+        body = await asyncio.wait_for(
+            page.evaluate(fetch_js, pids_json, ts),
+            timeout=15
+        )
         if not body:
             log.warning("[mediaexpert] GraphQL: empty response")
             return []
