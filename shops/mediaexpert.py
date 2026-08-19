@@ -203,7 +203,8 @@ async def _full_scan(page):
 async def _graphql_poll(page):
     """
     Fast GraphQL poll — no page navigation!
-    Uses page.request (shares browser cookies/session) to hit GraphQL API.
+    Uses page.evaluate(fetch()) to make same-origin XHR request.
+    This bypasses CF because it runs IN the page context (same cookies, same origin).
     Returns full product list with updated prices/availability.
     ~200ms per request vs 70s page navigation.
     """
@@ -213,32 +214,55 @@ async def _graphql_poll(page):
     pids = list(_product_catalog.keys())
     
     # GraphQL supports batch — query all product IDs at once
-    ids_str = ",".join(f'"{pid}"' for pid in pids)
+    ids_str = ",".join(f'\\"{pid}\\"' for pid in pids)
     query = (
-        'query Q{byId(identifierName:"productId",identifierValues:[' + ids_str + '])'
+        'query Q{byId(identifierName:\\"productId\\",identifierValues:[' + ids_str + '])'
         '{id product_id price_gross promo_price_gross discount'
         ' _embedded{ozg{status}pickupDate{pos_delivery_display_label customer_delivery_display_label}}}}'
     )
     
     ts = int(time.time())
-    url = f"{GRAPHQL_BASE}/{ts}?query={query}"
+    fetch_url = f"{GRAPHQL_BASE}/{ts}?query={query}"
+    
+    # Use page.evaluate(fetch()) — runs as same-origin XHR (bypasses CF)
+    fetch_js = f"""
+        async () => {{
+            try {{
+                const resp = await fetch("{fetch_url}", {{
+                    method: "GET",
+                    headers: {{"Accept": "application/json"}},
+                    credentials: "same-origin"
+                }});
+                if (!resp.ok) return JSON.stringify({{error: resp.status}});
+                return await resp.text();
+            }} catch(e) {{
+                return JSON.stringify({{error: e.message}});
+            }}
+        }}
+    """
     
     try:
-        resp = await page.request.get(url, timeout=15000)
-        if resp.status != 200:
-            log.warning(f"[mediaexpert] GraphQL status {resp.status}")
-            # Fallback to full scan on next iteration
-            global _last_full_refresh
-            _last_full_refresh = 0
+        body = await asyncio.wait_for(page.evaluate(fetch_js), timeout=15)
+        if not body:
+            log.warning("[mediaexpert] GraphQL: empty response")
             return []
         
-        body = await resp.text()
         data = json.loads(body)
+        
+        if "error" in data:
+            log.warning(f"[mediaexpert] GraphQL error: {data['error']}")
+            global _last_full_refresh
+            _last_full_refresh = 0  # Force full refresh
+            return []
+        
         offers = data.get("data", {}).get("byId", [])
         
+    except asyncio.TimeoutError:
+        log.warning("[mediaexpert] GraphQL timeout")
+        return []
     except Exception as e:
         log.warning(f"[mediaexpert] GraphQL error: {str(e)[:80]}")
-        _last_full_refresh = 0  # Force full refresh next time
+        _last_full_refresh = 0
         return []
     
     # Build product list from catalog + GraphQL price/availability
