@@ -1,17 +1,18 @@
 """
-TCGumisia Pre-Order Poller (via Mobile Proxy)
-=============================================
-Polls /pre-order page every 10s through mobile proxy (different IP than VPS).
+TCGumisia Proxy Poller (via Mobile Proxy)
+=========================================
+Polls /pokemon + /pre-order pages every 20s through mobile proxy (different IP than VPS).
 This avoids 429 rate limiting that happens when VPS IP hits tcgumisia too often.
 
 Runs as a standalone engine - reports to same detector.py pipeline.
-Only monitors /pre-order (where 30th drops appear).
-VPS scraper (shops/tcgumisia.py) handles /pokemon category separately.
+Monitors BOTH /pokemon (where 30th ETB lives) and /pre-order.
+VPS scraper (shops/tcgumisia.py) handles same categories but from VPS IP.
+Double coverage = catch flash restocks even if one IP has connection issues.
 
 Key design:
 - Mobile proxy (127.0.0.1:8888) = different external IP
 - Solves PoW once, reuses cookies for ~30min
-- Polls /pre-order every 10s (6 req/min = safe)
+- Polls both pages every 20s (12 req/min = safe)
 - Falls back to 30s on errors, recovers automatically
 """
 
@@ -27,6 +28,7 @@ logger = logging.getLogger("monitor")
 SHOP = "tcgumisia.pl"
 BASE_URL = "https://tcgumisia.pl"
 PREORDER_URL = f"{BASE_URL}/pre-order"
+POKEMON_URL = f"{BASE_URL}/pokemon"
 PROXY = "http://127.0.0.1:8888"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
@@ -137,11 +139,11 @@ def parse_products(html):
                 pass
 
         # Availability - check for "sold out" / "niedostępny" indicators
+        # NOTE: "Dodano do koszyka" appears on ALL items (it's a toast text, not a button).
+        # Only trust the availability dot text.
         available = True
-        if "niedostępn" in block.lower() or "sold" in block.lower() or "brak" in block.lower():
+        if "niedostępn" in block.lower() or "sold out" in block.lower():
             available = False
-        if "koszyk" in block.lower() or "dodaj" in block.lower():
-            available = True
 
         # Image
         image = ""
@@ -166,7 +168,7 @@ def parse_products(html):
 
 
 async def get_products():
-    """Single poll of /pre-order via mobile proxy. Called by engine_runner."""
+    """Single poll of /pokemon + /pre-order via mobile proxy. Called by engine_runner."""
     jar = aiohttp.CookieJar(unsafe=True)
     async with aiohttp.ClientSession(
         headers={"User-Agent": USER_AGENT},
@@ -177,36 +179,46 @@ async def get_products():
         if not ok:
             return []
 
-        # Fetch pre-order page (with retry on connection reset)
-        html = None
-        for attempt in range(3):
-            try:
-                async with session.get(
-                    PREORDER_URL, proxy=PROXY,
-                    timeout=aiohttp.ClientTimeout(total=20)
-                ) as resp:
-                    if resp.status == 429:
-                        logger.warning("[tcgumisia-proxy] 429 on pre-order (proxy)")
-                        return []
-                    if resp.status != 200:
-                        return []
-                    html = await resp.text()
-                break  # Success
-            except (aiohttp.ServerDisconnectedError, aiohttp.ClientOSError, ConnectionResetError) as e:
-                if attempt < 2:
-                    logger.warning(f"[tcgumisia-proxy] Connection error (attempt {attempt+1}/3): {e}")
-                    await asyncio.sleep(3 * (attempt + 1))
-                    continue
-                logger.error(f"[tcgumisia-proxy] Connection failed after 3 attempts: {e}")
-                return []
-            except Exception as e:
-                logger.error(f"[tcgumisia-proxy] Fetch error: {e}")
-                return []
+        all_products = []
+        seen_slugs = set()
 
-        if not html:
-            return []
+        # Fetch BOTH pages (ETB 30th is on /pokemon, NOT /pre-order!)
+        for page_url in [POKEMON_URL, PREORDER_URL]:
+            html = None
+            for attempt in range(3):
+                try:
+                    async with session.get(
+                        page_url, proxy=PROXY,
+                        timeout=aiohttp.ClientTimeout(total=20)
+                    ) as resp:
+                        if resp.status == 429:
+                            logger.warning(f"[tcgumisia-proxy] 429 on {page_url} (proxy)")
+                            break
+                        if resp.status != 200:
+                            break
+                        html = await resp.text()
+                    break  # Success
+                except (aiohttp.ServerDisconnectedError, aiohttp.ClientOSError, ConnectionResetError) as e:
+                    if attempt < 2:
+                        logger.warning(f"[tcgumisia-proxy] Connection error (attempt {attempt+1}/3): {e}")
+                        await asyncio.sleep(3 * (attempt + 1))
+                        continue
+                    logger.error(f"[tcgumisia-proxy] Connection failed after 3 attempts: {e}")
+                    break
+                except Exception as e:
+                    logger.error(f"[tcgumisia-proxy] Fetch error: {e}")
+                    break
 
-    products = parse_products(html)
-    if products:
-        logger.info(f"[tcgumisia-proxy] {len(products)} pre-order products")
-    return products
+            if not html:
+                continue
+
+            products = parse_products(html)
+            for p in products:
+                slug = p["url"].replace("https://tcgumisia.pl/", "")
+                if slug not in seen_slugs:
+                    seen_slugs.add(slug)
+                    all_products.append(p)
+
+        if all_products:
+            logger.info(f"[tcgumisia-proxy] {len(all_products)} products (pokemon+pre-order)")
+        return all_products
