@@ -217,10 +217,12 @@ async def _graphql_poll(page):
     pids_json = json.dumps(pids)
     ts = int(time.time())
     
+    # Embed values directly in JS string (evaluate takes only 1 arg)
     fetch_js = """
-        async (pidsJson, ts) => {
+        async () => {
             try {
-                const pids = JSON.parse(pidsJson);
+                const pids = %s;
+                const ts = %d;
                 const idsStr = pids.map(id => '"' + id + '"').join(',');
                 const query = 'query QuerySimpleProductOfferByProduct{byId(identifierName:"productId",identifierValues:[' + idsStr + ']){id product_id price_gross promo_price_gross discount _embedded{ozg{status}pickupDate{pos_delivery_display_label customer_delivery_display_label}}}}';
                 const url = '/api/graphql/product-offer/query/' + ts + '?query=' + encodeURIComponent(query);
@@ -236,11 +238,11 @@ async def _graphql_poll(page):
                 return JSON.stringify({error: e.message});
             }
         }
-    """
+    """ % (pids_json, ts)
     
     try:
         body = await asyncio.wait_for(
-            page.evaluate(fetch_js, pids_json, ts),
+            page.evaluate(fetch_js),
             timeout=15
         )
         if not body:
