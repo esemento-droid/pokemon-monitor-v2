@@ -214,9 +214,10 @@ async def _graphql_poll(page):
     pids = list(_product_catalog.keys())
     
     # GraphQL supports batch — query all product IDs at once
-    ids_str = ",".join(f'\\"{pid}\\"' for pid in pids)
+    # Use %22 for quotes in URL (proper URL encoding)
+    ids_str = ",".join(f'%22{pid}%22' for pid in pids)
     query = (
-        'query Q{byId(identifierName:\\"productId\\",identifierValues:[' + ids_str + '])'
+        'query Q{byId(identifierName:%22productId%22,identifierValues:[' + ids_str + '])'
         '{id product_id price_gross promo_price_gross discount'
         ' _embedded{ozg{status}pickupDate{pos_delivery_display_label customer_delivery_display_label}}}}'
     )
@@ -225,21 +226,21 @@ async def _graphql_poll(page):
     fetch_url = f"{GRAPHQL_BASE}/{ts}?query={query}"
     
     # Use page.evaluate(fetch()) — runs as same-origin XHR (bypasses CF)
-    fetch_js = f"""
-        async () => {{
-            try {{
-                const resp = await fetch("{fetch_url}", {{
+    fetch_js = """
+        async () => {
+            try {
+                const resp = await fetch("%s", {
                     method: "GET",
-                    headers: {{"Accept": "application/json"}},
+                    headers: {"Accept": "application/json"},
                     credentials: "same-origin"
-                }});
-                if (!resp.ok) return JSON.stringify({{error: resp.status}});
+                });
+                if (!resp.ok) return JSON.stringify({error: resp.status});
                 return await resp.text();
-            }} catch(e) {{
-                return JSON.stringify({{error: e.message}});
-            }}
-        }}
-    """
+            } catch(e) {
+                return JSON.stringify({error: e.message});
+            }
+        }
+    """ % fetch_url
     
     try:
         body = await asyncio.wait_for(page.evaluate(fetch_js), timeout=15)
