@@ -1,17 +1,25 @@
 """
 Scraper: mediaexpert.pl
 Silnik: NODRIVER (stealth patchright, headless=False + mobile proxy)
-Reason: CF requires headless=False fingerprint + mobile proxy IP.
-         cf_bridge (headless=True) gets blocked. VPS IP banned.
-Method: scan_with_page (persistent browser) + JS extraction.
-Searches: "pokemon tcg" + "pokemon booster"
-Target scan time: 40-60s (goto 30s + CF 2-4s + scroll 1s per URL)
+Method: HYBRID — first scan via page.goto (get product catalog),
+        subsequent scans via GraphQL API poll (instant, no navigation).
+        
+GraphQL endpoint: /api/graphql/product-offer/query
+- Returns: price_gross, promo_price_gross, availability (ozg status)
+- Works WITHOUT page navigation (uses existing CF cookies)
+- Response time: ~200ms vs 70s page load
+
+Architecture:
+1. First scan: goto search pages → extract products (names, IDs, images, URLs)
+2. All subsequent scans: GraphQL poll by product IDs → update prices/availability
+3. Every 30 min: full refresh via goto (catch new products)
 """
 import asyncio
 import json
 import logging
 import os
 import re
+import time
 
 if not os.environ.get("DISPLAY"):
     os.environ["DISPLAY"] = ":99"
@@ -19,12 +27,14 @@ if not os.environ.get("DISPLAY"):
 log = logging.getLogger("monitor")
 
 BROWSER_TYPE = "stealth"
-SCAN_TIMEOUT = 150  # 2 URLs × 30s goto + CF wait + scroll — needs headroom
+SCAN_TIMEOUT = 150  # Only used for full refresh (goto-based)
 
 SEARCH_URLS = [
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+tcg",
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+booster",
 ]
+
+GRAPHQL_BASE = "https://www.mediaexpert.pl/api/graphql/product-offer/query"
 
 EXCLUDE_KW = [
     "korea", "korean", "japan", "japanese", "kore", "japońsk", "jap",
@@ -66,15 +76,47 @@ JSON.stringify(Array.from(document.querySelectorAll('.offer-box')).map(box => {
 }))
 """
 
+# Persistent state (survives between scans — same worker, same asyncio task)
+_product_catalog = {}   # pid → {name, url, image} (from full goto scan)
+_last_full_refresh = 0  # timestamp of last goto-based scan
+FULL_REFRESH_INTERVAL = 1800  # 30 min — catch new products
+
 
 async def scan_with_page(page):
-    """Persistent browser interface - page already exists, just navigate.
-    
-    Optimized for speed:
-    - CF resolves in ~3-5s on subsequent visits (session cookies persist)
-    - First visit may take 5-10s for challenge
-    - Total target: 30-50s for both URLs
     """
+    HYBRID scan:
+    - If no catalog or >30min since last full scan: do full goto (slow but complete)
+    - Otherwise: GraphQL poll only (instant — ~1-2s for all products)
+    """
+    global _product_catalog, _last_full_refresh
+    
+    now = time.time()
+    need_full_refresh = (not _product_catalog) or (now - _last_full_refresh > FULL_REFRESH_INTERVAL)
+    
+    if need_full_refresh:
+        # Full scan: navigate to search pages, extract product catalog
+        products = await _full_scan(page)
+        if products:
+            # Update catalog
+            _product_catalog = {}
+            for p in products:
+                pid = p["id"].replace("mediaexpert_", "")
+                _product_catalog[pid] = {
+                    "name": p["name"],
+                    "url": p["url"],
+                    "image": p["image"],
+                }
+            _last_full_refresh = now
+            log.info(f"[MEDIAEXPERT] Full refresh: {len(_product_catalog)} products cataloged")
+        return products
+    else:
+        # Fast scan: GraphQL poll for price/availability updates
+        products = await _graphql_poll(page)
+        return products
+
+
+async def _full_scan(page):
+    """Full page navigation scan — used for initial catalog + periodic refresh."""
     products = []
     seen_ids = set()
 
@@ -85,18 +127,17 @@ async def scan_with_page(page):
             log.warning(f"[mediaexpert] goto failed for URL {i+1}: {e}")
             continue
 
-        # Quick CF check — on persistent browser, cookies usually pass CF instantly
+        # Quick CF check
         await asyncio.sleep(2)
         title = await page.title()
         if not title or "moment" in title.lower() or "checking" in title.lower():
-            # CF challenge — wait but not forever
             await asyncio.sleep(4)
             title = await page.title()
             if not title or "moment" in title.lower():
                 log.warning(f"[mediaexpert] CF block on URL {i+1}, skipping")
                 continue
 
-        # Dismiss cookies (first time only, fast no-op afterwards)
+        # Dismiss cookies
         await page.evaluate("""
             (() => {
                 const bb = document.querySelectorAll('button');
@@ -110,20 +151,18 @@ async def scan_with_page(page):
             })()
         """)
 
-        # Quick scroll to trigger lazy loading
+        # Scroll to trigger lazy loading
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await asyncio.sleep(1)
 
         # Extract products
         raw = await page.evaluate(EXTRACT_JS)
         if not raw:
-            log.warning(f"[mediaexpert] No data from URL {i+1}")
             continue
 
         try:
             items = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            log.error("[mediaexpert] JSON parse error")
             continue
 
         for item in items:
@@ -141,7 +180,6 @@ async def scan_with_page(page):
                 continue
 
             seen_ids.add(pid)
-
             price_str = _format_price(item.get("price", ""))
             item_url = item.get("url", "")
             if item_url and not item_url.startswith("http"):
@@ -158,10 +196,89 @@ async def scan_with_page(page):
                 "available": not item.get("unavail", False),
             })
 
-    # Sort: OOS first, available last (Discord scroll fix)
     products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
+    return products
 
-    log.info(f"[MEDIAEXPERT] {len(products)} produktow")
+
+async def _graphql_poll(page):
+    """
+    Fast GraphQL poll — no page navigation!
+    Uses page.request (shares browser cookies/session) to hit GraphQL API.
+    Returns full product list with updated prices/availability.
+    ~200ms per request vs 70s page navigation.
+    """
+    if not _product_catalog:
+        return []
+
+    pids = list(_product_catalog.keys())
+    
+    # GraphQL supports batch — query all product IDs at once
+    ids_str = ",".join(f'"{pid}"' for pid in pids)
+    query = (
+        'query Q{byId(identifierName:"productId",identifierValues:[' + ids_str + '])'
+        '{id product_id price_gross promo_price_gross discount'
+        ' _embedded{ozg{status}pickupDate{pos_delivery_display_label customer_delivery_display_label}}}}'
+    )
+    
+    ts = int(time.time())
+    url = f"{GRAPHQL_BASE}/{ts}?query={query}"
+    
+    try:
+        resp = await page.request.get(url, timeout=15000)
+        if resp.status != 200:
+            log.warning(f"[mediaexpert] GraphQL status {resp.status}")
+            # Fallback to full scan on next iteration
+            global _last_full_refresh
+            _last_full_refresh = 0
+            return []
+        
+        body = await resp.text()
+        data = json.loads(body)
+        offers = data.get("data", {}).get("byId", [])
+        
+    except Exception as e:
+        log.warning(f"[mediaexpert] GraphQL error: {str(e)[:80]}")
+        _last_full_refresh = 0  # Force full refresh next time
+        return []
+    
+    # Build product list from catalog + GraphQL price/availability
+    products = []
+    offer_map = {str(o.get("product_id", "")): o for o in offers}
+    
+    for pid, catalog_data in _product_catalog.items():
+        offer = offer_map.get(pid, {})
+        
+        # Price from GraphQL (in grosze)
+        price_gross = offer.get("price_gross")
+        promo_price = offer.get("promo_price_gross")
+        actual_price = promo_price if promo_price else price_gross
+        price_str = _format_price(str(actual_price)) if actual_price else "brak"
+        
+        # Availability: ozg.status = true means product is available for order
+        ozg = offer.get("_embedded", {}).get("ozg", {})
+        available = ozg.get("status", False) if ozg else False
+        
+        # Pickup info (optional — shows if any store has stock)
+        pickup = offer.get("_embedded", {}).get("pickupDate", {})
+        has_pickup = bool(pickup.get("pos_delivery_display_label"))
+        
+        # If no ozg but has pickup — treat as available
+        if not available and has_pickup:
+            available = True
+        
+        products.append({
+            "id": f"mediaexpert_{pid}",
+            "name": catalog_data["name"],
+            "price": price_str,
+            "shop": "mediaexpert",
+            "url": catalog_data["url"],
+            "image": catalog_data["image"],
+            "stock": 1 if available else 0,
+            "available": available,
+        })
+    
+    products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
+    log.info(f"[MEDIAEXPERT] GraphQL poll: {len(products)} products, {sum(1 for p in products if p['available'])} avail")
     return products
 
 
@@ -171,6 +288,8 @@ def _format_price(price_raw):
         return "brak"
     try:
         grosze = int(re.sub(r'[^0-9]', '', str(price_raw)))
+        if grosze == 0:
+            return "brak"
         pln = grosze / 100.0
         return f"{pln:.2f} zl"
     except (ValueError, TypeError):
