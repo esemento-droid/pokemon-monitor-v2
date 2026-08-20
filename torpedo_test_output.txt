@@ -1,10 +1,14 @@
-2026-08-20 10:44:01,235 [JC-TORPEDO] [DAEMON] Browser started (patchright stealth + proxy)
-2026-08-20 10:44:10,421 [JC-TORPEDO] [DAEMON] [t11008543@gmail.com] Logged in ✓
-2026-08-20 10:44:12,421 [JC-TORPEDO] [DAEMON] All 1 accounts ready. Waiting for trigger...
-2026-08-20 10:44:12,421 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437 ===
-2026-08-20 10:44:15,466 [JC-TORPEDO] [t11008543@gmail.com] ATC done (3.0s)
-2026-08-20 10:44:20,549 [JC-TORPEDO] [t11008543@gmail.com] Checkout click (8.1s)
-2026-08-20 10:44:30,700 [JC-TORPEDO] [t11008543@gmail.com] Checkout rendered (18.3s)
-2026-08-20 10:44:34,233 [JC-TORPEDO] [t11008543@gmail.com] Submitting (21.8s)
-2026-08-20 10:44:39,370 [JC-TORPEDO] [t11008543@gmail.com] ❌ Failed (26.9s) URL: https://japancollectibles.shop/category/?q=#top
-2026-08-20 10:44:39,482 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 27.1s ===
+2026-08-20 10:46:06,782 [JC-TORPEDO] [DAEMON] Browser started (patchright stealth + proxy)
+2026-08-20 10:46:15,782 [JC-TORPEDO] [DAEMON] [t11008543@gmail.com] Logged in ✓
+2026-08-20 10:46:17,785 [JC-TORPEDO] [DAEMON] All 1 accounts ready. Waiting for trigger...
+2026-08-20 10:46:17,785 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437 ===
+2026-08-20 10:46:20,929 [JC-TORPEDO] [t11008543@gmail.com] ATC done (3.1s)
+2026-08-20 10:46:26,015 [JC-TORPEDO] [t11008543@gmail.com] Checkout click (8.2s)
+2026-08-20 10:46:36,169 [JC-TORPEDO] [t11008543@gmail.com] Checkout rendered (18.4s)
+2026-08-20 10:46:36,179 [JC-TORPEDO] [t11008543@gmail.com] Payment: none
+2026-08-20 10:46:38,190 [JC-TORPEDO] [t11008543@gmail.com] Delivery: none
+2026-08-20 10:46:39,198 [JC-TORPEDO] [t11008543@gmail.com] Checkboxes: 0 clicked
+2026-08-20 10:46:39,707 [JC-TORPEDO] [t11008543@gmail.com] PRE-SUBMIT state: {'checked_radios': [], 'checked_checkboxes': 0, 'submit_btn': 'NOT FOUND', 'url': 'https://japancollectibles.shop/cart/add/7437'}
+2026-08-20 10:46:39,707 [JC-TORPEDO] [t11008543@gmail.com] Submitting (21.9s)
+2026-08-20 10:46:44,794 [JC-TORPEDO] [t11008543@gmail.com] ❌ Failed (27.0s) URL: https://japancollectibles.shop/category/?q=#top
+2026-08-20 10:46:44,913 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 27.1s ===
