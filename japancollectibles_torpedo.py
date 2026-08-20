@@ -197,6 +197,19 @@ async def torpedo_buy(account, product_id, product_url=""):
                     break
                 await page.wait_for_timeout(1000)
 
+            # DEBUG: dump page state to understand what Angular rendered
+            debug_state = await page.evaluate("""() => {
+                const radios = document.querySelectorAll('input[type="radio"]');
+                const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+                const text = document.body.innerText.substring(0, 3000);
+                const url = window.location.href;
+                const radioInfo = [...radios].map(r => ({name: r.name, id: r.id, value: r.value, visible: r.offsetParent !== null}));
+                return {url, radios: radioInfo.length, radioDetails: radioInfo.slice(0, 10), checkboxes: checkboxes.length, textSnippet: text.substring(0, 1500)};
+            }""")
+            log.info(f"[{email}] DEBUG state: url={debug_state.get('url')}, radios={debug_state.get('radios')}, checkboxes={debug_state.get('checkboxes')}")
+            log.info(f"[{email}] DEBUG radioDetails: {debug_state.get('radioDetails')}")
+            log.info(f"[{email}] DEBUG text: {debug_state.get('textSnippet', '')[:500]}")
+
             # === PAYMENT: click BLIK row ===
             payment_result = await page.evaluate("""() => {
                 const rows = document.querySelectorAll('tr, div, label, li');
