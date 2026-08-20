@@ -229,17 +229,35 @@ class TorpedoDaemon:
             current_url = page.url
             if '/order' not in current_url:
                 log.info(f"[{email}] order() click didn't navigate, forcing form submit...")
-                await page.evaluate("""() => {
-                    // Get cart_id from Angular scope
-                    const scope = angular.element(document.querySelector('[data-ng-controller="CartCtrl"]')).scope();
-                    const cartId = scope?.data?.cartSelected?.id || '';
-                    const form = document.getElementById('orderForm');
-                    if (form) {
-                        const input = form.querySelector('input[name="cart_id"]');
-                        if (input) input.value = cartId;
-                        form.submit();
+                cart_id = await page.evaluate("""() => {
+                    const input = document.querySelector('#orderForm input[name="cart_id"]');
+                    const val = input ? input.value : '';
+                    // If Angular didn't render the value, try getting from scope via element
+                    if (!val || val.includes('{')) {
+                        // Try __ngContext or data attribute
+                        const ctrl = document.querySelector('[data-ng-controller="CartCtrl"][data-ng-init*="CLASSIC"]');
+                        if (ctrl && ctrl.__ngContext__) return '';
                     }
+                    return val;
                 }""")
+                log.info(f"[{email}] cart_id from DOM: '{cart_id}'")
+                
+                if cart_id and not '{' in cart_id:
+                    # Submit form with real cart_id
+                    await page.evaluate(f"""() => {{
+                        const form = document.getElementById('orderForm');
+                        if (form) {{
+                            form.querySelector('input[name="cart_id"]').value = '{cart_id}';
+                            form.submit();
+                        }}
+                    }}""")
+                else:
+                    # Force submit form as-is (Angular may have bound it)
+                    await page.evaluate("""() => {
+                        const form = document.getElementById('orderForm');
+                        if (form) form.submit();
+                    }""")
+                
                 # Wait for navigation to /order
                 try:
                     await page.wait_for_url("**/order**", timeout=10000)
