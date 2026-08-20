@@ -167,33 +167,39 @@ async def torpedo_buy(account, product_id):
             r = await s.post(
                 f"{SHOP_URL}/order",
                 data={"cart_id": cart_id},
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Origin": SHOP_URL,
+                    "Referer": f"{SHOP_URL}/cart/",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Upgrade-Insecure-Requests": "1",
+                },
                 proxy=PROXY,
                 timeout=aiohttp.ClientTimeout(total=8),
                 allow_redirects=True,
             )
             order_html = await r.text()
+            log.info(f"[{email}] Order page: {len(order_html)} bytes, URL: {r.url}")
 
             # Extract csrf_token for order_finish
             csrf_match = re.search(r'name="csrf_token"\s*value="([^"]+)"', order_html)
             csrf_token = csrf_match.group(1) if csrf_match else ""
 
-            # Extract shipment IDs (radio buttons rendered server-side)
-            # Pattern: name="shipment" ... value="ID"
+            # Extract shipment IDs
             shipment_ids = re.findall(r'name="shipment"[^>]*value="([^"{\[]+)"', order_html)
-            # Also try: id="param-delivery-XXX"
             if not shipment_ids:
                 shipment_ids = re.findall(r'id="param-delivery-([^"]+)"', order_html)
-            # Also try data-ng-value or ng-repeat pattern
             if not shipment_ids:
-                shipment_ids = re.findall(r'value="(\d+)"[^>]*name="shipment"', order_html)
+                # Try broader: any value in shipment section that looks like an ID
+                shipment_ids = re.findall(r'shipment[^>]*value="(\w{3,})"', order_html)
 
-            log.info(f"[{email}] Order page: csrf={'yes' if csrf_token else 'NO'}, shipments={shipment_ids} ({time.time()-t0:.2f}s)")
+            log.info(f"[{email}] Order page: csrf={'yes' if csrf_token else 'NO'}, shipments={shipment_ids[:3]} ({time.time()-t0:.2f}s)")
 
             if not csrf_token:
-                log.error(f"[{email}] No csrf_token on order page!")
+                # Maybe page didn't render properly — dump first 1000 chars for debug
+                log.error(f"[{email}] No csrf! HTML start: {order_html[:500]}")
                 return False
 
-            # Pick first shipment (Kurier Inpost = typically first or only option)
             shipment_id = shipment_ids[0] if shipment_ids else ""
 
         except Exception as e:
