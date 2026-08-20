@@ -114,11 +114,16 @@ async def torpedo_buy(account, product_id):
         # === 3. ADD TO CART (Sky-Shop internal API) ===
         try:
             r = await s.post(
-                f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/{cart_id}",
+                f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/{cart_id}/items",
                 json={"productId": int(product_id), "quantity": 1, "parameters": []},
+                headers={"Content-Type": "application/json;charset=UTF-8", "Accept": "application/json, text/plain, */*", "currency": "PLN", "lang": "pl", "Origin": SHOP_URL, "Referer": f"{SHOP_URL}/-p{product_id}"},
                 proxy=PROXY,
                 timeout=aiohttp.ClientTimeout(total=5),
             )
+            if r.status != 200:
+                body = await r.text()
+                log.error(f"[{email}] ATC HTTP {r.status}: {body[:200]}")
+                return False
             atc_data = await r.json()
             can_buy = atc_data.get("cart", {}).get("canBuy", False)
             items = atc_data.get("cart", {}).get("items", [])
