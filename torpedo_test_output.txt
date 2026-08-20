@@ -1,14 +1,15 @@
-2026-08-20 11:52:47,948 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
-2026-08-20 11:52:49,927 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.73s)
-2026-08-20 11:52:50,184 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (1.99s)
-2026-08-20 11:52:50,614 [JC-TORPEDO] [t11008543@gmail.com] Cleared 1 items from cart
-2026-08-20 11:52:50,955 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (product 7437, 70,00 zł) (2.76s)
-2026-08-20 11:52:51,408 [JC-TORPEDO] [t11008543@gmail.com] Order page: 73003 bytes, URL: https://japancollectibles.shop/order
-2026-08-20 11:52:51,408 [JC-TORPEDO] [t11008543@gmail.com] Order page: csrf=NO, shipments=['{{:id:}}'] (3.21s)
-2026-08-20 11:52:51,409 [JC-TORPEDO] [t11008543@gmail.com] No csrf! HTML start: <!DOCTYPE html>
-<html lang="pl" data-currency="PLN"  class="prevent-scroll prevent-scroll-desktop ">
-	<head>
-		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-		<meta name="description" content="Sklep, który wprowadził Japońskie Karty Pokemon na Polski rynek! Najtaniej i najszybciej w Polsce!">
-		<meta name="keywords" content="Sklep, internetowy, karty, pokemon, karty pokemon, japońskie karty pokemon, karty ocenione, karty na sztuki, karty psa, karty ars, karty tag, karty cgc
-2026-08-20 11:52:51,410 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 3.46s ===
+2026-08-20 11:54:00,071 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
+2026-08-20 11:54:02,349 [JC-TORPEDO] [t11008543@gmail.com] Login OK (2.03s)
+2026-08-20 11:54:03,168 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (2.85s)
+2026-08-20 11:54:03,674 [JC-TORPEDO] [t11008543@gmail.com] Cleared 1 items from cart
+2026-08-20 11:54:04,074 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (product 7437, 70,00 zł) (3.76s)
+2026-08-20 11:54:04,805 [JC-TORPEDO] [t11008543@gmail.com] Order page: 73004 bytes, URL: https://japancollectibles.shop/order
+2026-08-20 11:54:04,807 [JC-TORPEDO] [t11008543@gmail.com] Order: csrf=NO, shipments=['{{:id:}}'] (4.49s)
+2026-08-20 11:54:04,807 [JC-TORPEDO] [t11008543@gmail.com] No csrf! Near 'csrf': _orderFormChange">
+    <input type="hidden" name="csrf_token" value="">
+    <input type="hidden" name="ga_client_id" value="">
+    <input type="hidden" name="ga_session_id" value="">
+    <div class="cart-summary-body">
+        <div class="row">
+     
+2026-08-20 11:54:04,808 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 4.74s ===
