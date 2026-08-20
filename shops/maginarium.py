@@ -1,8 +1,8 @@
 """
-Scraper: maginarium.pl (WooCommerce + Cloudflare)
+Scraper: maginarium.pl (WooCommerce — NO Cloudflare, direct aiohttp)
 Search URL: /?s=Pokemon+tcg+&post_type=product
-15+ pages, parallel fetch via FlareSolverr.
-Category: SLOW (FlareSolverr)
+15+ pages, parallel fetch.
+Category: SLOW (many pages)
 """
 
 import asyncio
@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 SHOP = "maginarium"
 BASE = "https://maginarium.pl"
 SEARCH_PARAMS = "?s=Pokemon+tcg+&post_type=product"
-FLARESOLVERR_URL = "http://localhost:8191/v1"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
 MAX_PAGES = 30
 
 EXCLUDE = [
@@ -29,15 +29,18 @@ EXCLUDE = [
 ]
 
 
-async def _fetch_flare(session: aiohttp.ClientSession, url: str) -> str:
-    payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
-    try:
-        async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=45)) as resp:
-            data = await resp.json()
-        if data.get("status") == "ok":
-            return data.get("solution", {}).get("response", "")
-    except Exception:
-        pass
+async def _fetch_page(session: aiohttp.ClientSession, url: str) -> str:
+    """Direct HTTP fetch (no CF on this site)."""
+    for attempt in range(2):
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                if resp.status == 200:
+                    return await resp.text()
+                if resp.status == 404:
+                    return ""  # Page doesn't exist (past last page)
+        except Exception:
+            if attempt == 0:
+                await asyncio.sleep(1)
     return ""
 
 
@@ -104,17 +107,38 @@ async def get_products() -> list[dict]:
     products = []
     seen: set = set()
 
-    async with aiohttp.ClientSession() as session:
-        # Fetch pages sequentially (FlareSolverr handles 1 request at a time)
-        for page in range(1, MAX_PAGES + 1):
-            url = f"{BASE}/page/{page}/{SEARCH_PARAMS}" if page > 1 else f"{BASE}/{SEARCH_PARAMS}"
-            html = await _fetch_flare(session, url)
-            if not html:
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        # Page 1 first (to check if site responds)
+        url1 = f"{BASE}/{SEARCH_PARAMS}"
+        html1 = await _fetch_page(session, url1)
+        if not html1:
+            print("[MAGINARIUM] blad pobierania strony 1")
+            return []
+
+        products.extend(_parse_page(html1, seen))
+
+        # Parallel fetch remaining pages (no CF = safe)
+        # Fetch in batches of 5 to be polite
+        for batch_start in range(2, MAX_PAGES + 1, 5):
+            batch_end = min(batch_start + 5, MAX_PAGES + 1)
+            urls = [f"{BASE}/page/{p}/{SEARCH_PARAMS}" for p in range(batch_start, batch_end)]
+            tasks = [_fetch_page(session, u) for u in urls]
+            pages = await asyncio.gather(*tasks)
+
+            empty_count = 0
+            for html in pages:
+                if not html:
+                    empty_count += 1
+                    continue
+                new = _parse_page(html, seen)
+                if not new:
+                    empty_count += 1
+                else:
+                    products.extend(new)
+
+            # If most pages in batch are empty, we've hit the end
+            if empty_count >= 3:
                 break
-            new_products = _parse_page(html, seen)
-            if not new_products:
-                break  # empty page = end of results
-            products.extend(new_products)
 
     print(f"[MAGINARIUM] {len(products)} produktow")
     return products
