@@ -188,6 +188,7 @@ class DiscordSender:
             PROXY_SHOPS = {
                 "pikashop", "bookland", "gameover", "basanti", "cardwolf",
                 "aleplanszowki", "dragoneye", "twojekarty", "poketrader",
+                "empik",
                 "missaga", "karcianybunkier", "magiccafe", "hearts",
                 "jaskiniatrolla", "piwniczaki", "sklepkleks", "pokespot"
             }

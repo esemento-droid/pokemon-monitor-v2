@@ -60,7 +60,7 @@ JSON.stringify((function(){
             const priceText = priceEl ? priceEl.textContent.trim() : '';
             const priceMatch = priceText.match(/([\\d]+[,.]?[\\d]*)\\s*z/);
             const price = priceMatch ? priceMatch[1].replace(',', '.') : '';
-            const img = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
+            const img = imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('data-lazy-img') || imgEl.getAttribute('data-original') || imgEl.getAttribute('srcset')?.split(' ')[0] || imgEl.src || '') : '';
             const mpMatch = href.match(/mpShopId=(\\d+)/);
             const shopId = mpMatch ? mpMatch[1] : '0';
             result.push({pid: pidMatch[1], name: name, price: price, img: img, url: href, shopId: shopId});
@@ -139,13 +139,20 @@ async def scan_with_page(page):
                 shop_id = item.get("shopId", "0")
                 stock_label = "empik" if shop_id == "0" else f"marketplace_{shop_id}"
 
+                # Fix image URL
+                img_url = item.get("img", "")
+                if img_url.startswith("//"):
+                    img_url = "https:" + img_url
+                if img_url.startswith("data:") or not img_url:
+                    img_url = ""
+
                 products.append({
                     "id": f"empik_{pid}",
                     "name": name,
                     "price": price_str,
                     "shop": "empik",
                     "url": url_product,
-                    "image": item.get("img", ""),
+                    "image": img_url,
                     "stock": stock_label,
                     "available": bool(price_val),
                 })
