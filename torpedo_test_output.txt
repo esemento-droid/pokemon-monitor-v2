@@ -1,19 +1,11 @@
-1. Login page csrf: aac33157fc0b3ff178f6... (0.77s)
-2. Login: OK (1.84s)
-   Cookies: ['PHPSESSID', 'SERVERID', 'autologin', 'loggedInNow']
-3. Cart: efe9ca11-079... items=1 (2.29s)
-4. Cleared 1 items
-5. ATC: OK price=70,00 zł (2.97s)
-6. Order page: 73004b csrf="" ships=['{{:id:}}'] (3.47s)
-   ship_data: []
-   Cookies now: ['PHPSESSID=1nd0rib022susih', 'SERVERID=apache-web', 'autologin=eyJ1c2VyX2lkIjo', 'loggedInNow=true', 'device_view=full', 'sky2_cart_id=efe9ca11-079a-4']
-   form section: div class="container container-wrapper ">
-                            
-<form method="POST" action="/order_finish/" class="core_parseForm core_orderFormChange">
-    <input type="hidden" name="csrf_token" value="">
-    <input type="hidden" name="ga_client_id" value="">
-    <input type="hidden" name="g
-7. Submitting: {"csrf_token": "", "payment": "21", "shipment": "{{:id:}}", "user_country": "PL", "register_link_to_rules": "1", "register_must_accept": "1", "dotpay_rules_agreed": "1", "is_js": "1", "code_discount":
-   Result: HTTP 403 URL=https://japancollectibles.shop/order_finish/
-   Body start: <style> @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;600&display=swap'); body { width: 100%; height: 100%; margin: 0px; overflow: hidden; font-family: 'Rubik', sans-serif; display: block; background-position: center center; background-size: cover; background-repeat: repeat-y;
-   TOTAL TIME: 3.59s
+2026-08-20 12:02:24,124 [JC-TORPEDO] [DAEMON] Browser started
+2026-08-20 12:02:35,946 [JC-TORPEDO] [DAEMON] [t11008543@gmail.com] Logged in ✓
+2026-08-20 12:02:37,949 [JC-TORPEDO] [DAEMON] 1 accounts ready
+2026-08-20 12:02:37,949 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437 (1 accounts) ===
+2026-08-20 12:02:45,461 [JC-TORPEDO] [t11008543@gmail.com] ATC click (7.5s)
+2026-08-20 12:02:56,145 [JC-TORPEDO] [t11008543@gmail.com] Checkout page (18.2s)
+2026-08-20 12:02:56,326 [JC-TORPEDO] [t11008543@gmail.com] Payment: BLIK (18.4s)
+2026-08-20 12:03:00,849 [JC-TORPEDO] [t11008543@gmail.com] Delivery selected (22.9s)
+2026-08-20 12:03:03,435 [JC-TORPEDO] [t11008543@gmail.com] Submitting (25.5s)
+2026-08-20 12:03:09,902 [JC-TORPEDO] [t11008543@gmail.com] ✅ ORDER in 32.0s! → https://e.blik.com/blik_web/index.html
+2026-08-20 12:03:09,903 [JC-TORPEDO] === TORPEDO DONE: 1/1 in 32.0s ===
