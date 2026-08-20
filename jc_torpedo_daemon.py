@@ -173,14 +173,14 @@ class TorpedoDaemon:
             return False
 
         try:
-            # === STEP 1: ATC (goto /cart/add/{id}) ===
-            await page.goto(f"{SHOP_URL}/cart/add/{product_id}", wait_until="domcontentloaded", timeout=10000)
-            await page.wait_for_timeout(1000)
-            # Navigate to /cart/ (Angular router needs /cart/ for checkout flow)
-            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=10000)
-            log.info(f"[{email}] ATC + cart nav ({time.time()-t0:.1f}s)")
+            # === STEP 1: ATC — go to product page and click "Do koszyka" ===
+            product_url = f"{SHOP_URL}/Pokemon-TCG-Angielski-Mega-Heroes-Mini-Tin-p{product_id}" if not product_id.startswith("http") else product_id
+            # Generic URL that works for any product ID
+            product_url = f"{SHOP_URL}/-p{product_id}"
+            await page.goto(product_url, wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(2000)
 
-            # Remove overlays
+            # Dismiss overlays
             await page.evaluate("""() => {
                 document.getElementById('cc--main')?.remove();
                 document.getElementById('cm')?.remove();
@@ -188,12 +188,29 @@ class TorpedoDaemon:
                 document.querySelector('.skyshop-alert-conditional-access')?.remove();
             }""")
 
-            # Wait for Angular to hydrate cart (product appears, not "Koszyk jest pusty")
+            # Click "Do koszyka" button
+            try:
+                atc_btn = page.locator("button:has-text('Do koszyka'), button:has-text('Dodaj do koszyka')").first
+                await atc_btn.wait_for(state="visible", timeout=8000)
+                await atc_btn.click(force=True)
+                log.info(f"[{email}] ATC click OK ({time.time()-t0:.1f}s)")
+            except Exception as e:
+                log.error(f"[{email}] ATC button not found: {e}")
+                return False
+
+            await page.wait_for_timeout(2000)
+
+            # Go to cart
+            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=10000)
+            log.info(f"[{email}] Cart page ({time.time()-t0:.1f}s)")
+
+            # === STEP 2: Wait for cart to load, then click "Przejdź do kasy" ===
+            # Wait for Angular to hydrate cart (product appears)
             for _ in range(20):
                 cart_ready = await page.evaluate("""() => {
                     const text = document.body.innerText;
                     const hasProduct = !text.includes('Koszyk jest pusty') && 
-                                       (text.includes('Suma') && !text.includes('0,00 zł'));
+                                       text.includes('Suma') && !text.includes('0,00 zł');
                     const btn = document.querySelector('button[data-ng-click="order()"]');
                     return hasProduct || (btn && !btn.disabled);
                 }""")
@@ -203,27 +220,19 @@ class TorpedoDaemon:
 
             log.info(f"[{email}] Cart hydrated ({time.time()-t0:.1f}s)")
 
-            # === DEBUG: save full page HTML for analysis ===
-            html_content = await page.content()
-            debug_path = Path(f"/tmp/jc_torpedo_cart_dump.html")
-            debug_path.write_text(html_content)
-            log.info(f"[{email}] Cart HTML dumped to {debug_path} ({len(html_content)} bytes)")
-            
-            # Also dump what Angular state looks like
-            ang_state = await page.evaluate("""() => {
-                const btn = document.querySelector('button[data-ng-click="order()"]');
-                const btnInfo = btn ? {text: btn.textContent.trim(), disabled: btn.disabled, visible: btn.offsetParent !== null, ngDisabled: btn.getAttribute('data-ng-disabled')} : 'NOT_FOUND';
-                const cartText = document.querySelector('.cart')?.innerText?.substring(0, 500) || 'no .cart';
-                return {orderBtn: btnInfo, cartSnippet: cartText};
-            }""")
-            log.info(f"[{email}] Angular state: {json.dumps(ang_state, ensure_ascii=False, default=str)}")
+            # Click "Przejdź do kasy"
+            try:
+                order_btn = page.locator('button[data-ng-click="order()"]:not([disabled])').first
+                await order_btn.wait_for(state="visible", timeout=10000)
+                await order_btn.click()
+            except:
+                # Fallback: force Angular scope
+                await page.evaluate("""() => {
+                    const btn = document.querySelector('button[data-ng-click="order()"]');
+                    if (btn && !btn.disabled) btn.click();
+                }""")
 
-            # === STEP 2: Navigate to /order directly (POST via goto, Angular handles it) ===
-            # Sky-Shop: /order page renders checkout IF cart has items
-            # Bypass "Przejdź do kasy" button — go directly
-            await page.goto(f"{SHOP_URL}/order", wait_until="domcontentloaded", timeout=15000)
-            await page.wait_for_timeout(3000)
-            log.info(f"[{email}] Order page navigated ({time.time()-t0:.1f}s) URL: {page.url}")
+            log.info(f"[{email}] Checkout click ({time.time()-t0:.1f}s)")
 
             # === STEP 3: Wait for checkout render ===
             # After click, Sky-Shop navigates to /order (full page or Angular route)
