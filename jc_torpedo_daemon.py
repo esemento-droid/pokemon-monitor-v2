@@ -301,6 +301,15 @@ class TorpedoDaemon:
             log.error("[FIRE] No staged accounts!")
             return 0
 
+        # Skip accounts that already bought this product
+        completed = _load_completed()
+        pid_str = str(product_id)
+        active = [e for e in active if e not in completed.get(pid_str, [])]
+
+        if not active:
+            log.info(f"[FIRE] All accounts already completed product {product_id} — skip")
+            return 0
+
         log.info(f"=== 🚀 TORPEDO FIRE product={product_id} ({len(active)} accounts) ===")
         await self._discord(f"🚀 **TORPEDO FIRE** product {product_id} — {len(active)} accounts")
 
@@ -576,18 +585,22 @@ class TorpedoDaemon:
 
 
 def _mark_completed(product_id, email):
-    data = {}
-    if COMPLETED_FILE.exists():
-        try:
-            data = json.loads(COMPLETED_FILE.read_text())
-        except:
-            pass
+    data = _load_completed()
     pid = str(product_id)
     if pid not in data:
         data[pid] = []
     if email not in data[pid]:
         data[pid].append(email)
     COMPLETED_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _load_completed():
+    if COMPLETED_FILE.exists():
+        try:
+            return json.loads(COMPLETED_FILE.read_text())
+        except:
+            pass
+    return {}
 
 
 # ==============================================================
