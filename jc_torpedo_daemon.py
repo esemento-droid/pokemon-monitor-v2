@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """
-JC Torpedo Daemon — persistent browser, same checkout flow as working bot.
+JC Torpedo Daemon — FINAL VERSION
 
-Copied EXACTLY from japancollectibles_autobuy.py (which works) but:
-- Browser always running (no cold start)
-- Accounts pre-logged (no login time)
-- Reduced waits (minimum needed)
-- 4 accounts fire in PARALLEL (not sequential)
-- Trigger via file: echo "PRODUCT_ID URL" > /tmp/jc_torpedo_fire.txt
+Architecture (proven in tests):
+  - 1 patchright browser, 4 contexts (separate sessions per account)
+  - Each account pre-staged on /order (BLIK + Kurier Inpost + checkboxes)
+  - Heartbeat every 5 min (keep session alive)
+  - Full re-stage every 30 min (fresh csrf, fresh state)
+  - On trigger: API cart swap + click submit = ~2s
 
-Target: ~10s total (vs 70s per account old bot)
+Trigger:
+  - File: echo "PRODUCT_ID PRODUCT_URL" > /tmp/jc_torpedo_fire.txt
+  - Or: --fire PID --url URL (one-shot mode)
+
+Usage:
+  DISPLAY=:99 ./venv/bin/python3 jc_torpedo_daemon.py --daemon
+  DISPLAY=:99 ./venv/bin/python3 jc_torpedo_daemon.py --fire 9419 --url "https://japancollectibles.shop/Pokemon-TCG-Pakiet-Celebracyjny-na-30-lecie-p9419"
+  DISPLAY=:99 ./venv/bin/python3 jc_torpedo_daemon.py --test --fire 7437
 """
 import asyncio
 import json
@@ -48,17 +55,30 @@ TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 PROXY = {"server": "http://127.0.0.1:8888"}
-SESSION_REFRESH = 2700  # 45 min
+
+# A cheap available product to stage checkout with (Mini Tin 70 PLN, qty=17)
+STAGE_PID = 7437
+STAGE_URL = f"{SHOP_URL}/Pokemon-TCG-Angielski-Mega-Heroes-Mini-Tin-p{STAGE_PID}"
+
+HEARTBEAT_INTERVAL = 300  # 5 min
+RESTAGE_INTERVAL = 1800   # 30 min
 
 
 class TorpedoDaemon:
     def __init__(self, accounts):
         self.accounts = accounts
         self.browser = None
-        self.contexts = {}  # email -> context (separate sessions!)
-        self.pages = {}  # email -> page
-        self.last_login = {}
         self._pw = None
+        # Per-account state
+        self.contexts = {}   # email -> browser context
+        self.pages = {}      # email -> page (on /order, pre-staged)
+        self.staged = {}     # email -> True if checkout is staged
+        self.last_heartbeat = {}
+        self.last_stage = {}
+
+    # ==============================================================
+    # STARTUP
+    # ==============================================================
 
     async def start(self):
         from patchright.async_api import async_playwright
@@ -68,245 +88,327 @@ class TorpedoDaemon:
             args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
             proxy=PROXY,
         )
-        log.info("[DAEMON] Browser started")
+        log.info("[DAEMON] Browser started (patchright stealth + proxy)")
 
+        # Login + stage all accounts
         for acc in self.accounts:
-            await self._login(acc)
-            await asyncio.sleep(2)
-
-        log.info(f"[DAEMON] {len(self.pages)} accounts ready")
-
-    async def _login(self, account):
-        """Login account — SAME flow as working japancollectibles_autobuy.py"""
-        email = account["email"]
-        # Each account gets own context (separate cookies/session)
-        ctx = await self.browser.new_context(viewport={"width": 1280, "height": 900}, user_agent=UA)
-        page = await ctx.new_page()
-
-        try:
-            # Dismiss age gate + go to login
-            await page.goto(SHOP_URL, wait_until="domcontentloaded", timeout=20000)
-            await page.wait_for_timeout(2000)
-            await page.evaluate("""() => {
-                document.getElementById('cc--main')?.remove();
-                const btn = document.querySelector('.skyshop-alert-conditional-access button');
-                if (btn) btn.click();
-            }""")
-            await page.wait_for_timeout(1000)
-
-            await page.goto(f"{SHOP_URL}/login", wait_until="domcontentloaded", timeout=15000)
-            await page.wait_for_timeout(2000)
-            await page.evaluate("""() => {
-                document.getElementById('cc--main')?.remove();
-                document.querySelector('.fixed-elements')?.remove();
-            }""")
-
-            await page.wait_for_selector("input#email", timeout=10000)
-            await page.fill("input#email", email)
-            await page.fill("input[name='password']", account["password"])
-            await page.click("button[name='submit']", force=True)
-            await page.wait_for_timeout(3000)
-
-            content = await page.content()
-            if "Moje konto" in content or "Wyloguj" in content:
-                self.contexts[email] = ctx
-                self.pages[email] = page
-                self.last_login[email] = time.time()
-                log.info(f"[DAEMON] [{email}] Logged in ✓")
-            else:
-                log.error(f"[DAEMON] [{email}] Login FAILED")
-                await ctx.close()
-        except Exception as e:
-            log.error(f"[DAEMON] [{email}] Login error: {e}")
             try:
-                await ctx.close()
+                await self._full_stage(acc)
+            except Exception as e:
+                log.error(f"[DAEMON] [{acc['email']}] Stage failed: {e}")
+            await asyncio.sleep(3)
+
+        ok = sum(1 for v in self.staged.values() if v)
+        log.info(f"[DAEMON] {ok}/{len(self.accounts)} accounts staged and ready 🚀")
+
+    # ==============================================================
+    # LOGIN + STAGE (full checkout prep)
+    # ==============================================================
+
+    async def _full_stage(self, account):
+        """Login, ATC stage product, go to /order, select BLIK+delivery+checkboxes."""
+        email = account["email"]
+        
+        # Close old context if exists
+        if email in self.contexts:
+            try:
+                await self.contexts[email].close()
             except:
                 pass
 
+        ctx = await self.browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            user_agent=UA,
+        )
+        page = await ctx.new_page()
+        self.contexts[email] = ctx
+        self.pages[email] = page
+        self.staged[email] = False
+
+        # --- LOGIN ---
+        await page.goto(f"{SHOP_URL}/login", wait_until="domcontentloaded", timeout=20000)
+        await page.wait_for_timeout(2000)
+        await page.evaluate("""() => {
+            document.getElementById('cc--main')?.remove();
+            const btn = document.querySelector('.skyshop-alert-conditional-access button');
+            if (btn) btn.click();
+        }""")
+        await page.wait_for_timeout(1000)
+        await page.fill("input#email", email, timeout=5000)
+        await page.fill("input[name='password']", account["password"], timeout=5000)
+        await page.click("button[name='submit']", force=True)
+        await page.wait_for_timeout(3000)
+
+        content = await page.content()
+        if "Moje konto" not in content and "Wyloguj" not in content:
+            log.error(f"[{email}] Login FAILED")
+            return
+
+        log.info(f"[{email}] Logged in ✓")
+
+        # --- CLEAR CART ---
+        await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
+        await page.wait_for_timeout(2000)
+        await page.evaluate("""() => {
+            document.getElementById('cc--main')?.remove();
+            document.querySelector('.fixed-elements')?.remove();
+            document.querySelectorAll('[data-click="deleteCartItem"], .icon-close_24, [data-ng-click*="delete"]').forEach(b => b.click());
+        }""")
+        await page.wait_for_timeout(2000)
+
+        # --- ATC STAGE PRODUCT ---
+        await page.goto(STAGE_URL, wait_until="domcontentloaded", timeout=15000)
+        await page.wait_for_timeout(2000)
+        await page.evaluate("""() => {
+            document.getElementById('cc--main')?.remove();
+            document.querySelector('.fixed-elements')?.remove();
+        }""")
+        atc_btn = page.locator("button:has-text('Do koszyka'), button[aria-label*='Dodaj do koszyka']").first
+        await atc_btn.wait_for(state="visible", timeout=8000)
+        await atc_btn.click(force=True)
+        await page.wait_for_timeout(2000)
+        try:
+            r = page.locator("text=Realizuj zamówienie")
+            if await r.is_visible(timeout=2000):
+                await r.click()
+        except:
+            pass
+
+        # --- GO TO CART → CHECKOUT ---
+        await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
+        await page.wait_for_timeout(3000)
+        await page.evaluate("""() => {
+            document.getElementById('cc--main')?.remove();
+            document.querySelector('.fixed-elements')?.remove();
+        }""")
+        checkout_btn = page.locator("button[data-ng-click='order()']:not([disabled])")
+        await checkout_btn.wait_for(state="visible", timeout=20000)
+        await checkout_btn.click(force=True)
+        await page.wait_for_url("**/order**", timeout=15000)
+        await page.wait_for_timeout(3000)
+
+        # --- SELECT BLIK ---
+        await page.evaluate("""() => {
+            document.getElementById('cc--main')?.remove();
+            document.querySelector('.fixed-elements')?.remove();
+        }""")
+        for _ in range(15):
+            has = await page.evaluate("() => document.body.innerText.includes('BLIK')")
+            if has:
+                break
+            await page.wait_for_timeout(1000)
+
+        blik = page.locator("text=BLIK").first
+        await blik.wait_for(state="visible", timeout=10000)
+        await blik.click(force=True)
+        await page.wait_for_timeout(3000)
+
+        # --- SELECT DELIVERY ---
+        for _ in range(15):
+            has = await page.evaluate("() => document.body.innerText.includes('Kurier Inpost')")
+            if has:
+                break
+            await page.wait_for_timeout(1000)
+
+        try:
+            d = page.locator("text=Kurier Inpost - Gabaryt C >> visible=true")
+            if await d.count() > 0:
+                await d.first.click(force=True)
+            else:
+                d = page.locator("input#param-delivery-6512b")
+                if await d.count() > 0:
+                    await d.evaluate("el => el.closest('tr,div')?.click() || el.click()")
+                else:
+                    await page.evaluate("""() => {
+                        const rows = document.querySelectorAll('tr, div, label');
+                        for (const r of rows) {
+                            if (r.textContent.includes('Kurier') && r.textContent.includes('Inpost')) {
+                                const radio = r.querySelector('input[type="radio"]');
+                                if (radio) radio.click(); else r.click();
+                                return;
+                            }
+                        }
+                    }""")
+        except:
+            pass
+
+        await page.wait_for_timeout(1500)
+
+        # --- CHECKBOXES ---
+        await page.evaluate("""() => {
+            window.scrollTo(0, document.body.scrollHeight);
+            document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (cb.getAttribute('data-valid')?.includes('required') && !cb.checked) cb.click();
+            });
+        }""")
+        await page.wait_for_timeout(500)
+
+        # --- VERIFY ---
+        state = await page.evaluate("""() => {
+            const csrf = document.querySelector('input[name=csrf_token]')?.value || '';
+            const btn = document.querySelector('button[name=finish]');
+            const radios = [...document.querySelectorAll('input[type=radio]:checked')].map(r => r.name + '=' + r.value);
+            return {csrf: csrf.length > 10, btn_ok: btn && !btn.disabled, radios};
+        }""")
+
+        if state.get("csrf") and state.get("btn_ok"):
+            self.staged[email] = True
+            self.last_stage[email] = time.time()
+            self.last_heartbeat[email] = time.time()
+            log.info(f"[{email}] ✅ STAGED (radios={state['radios']})")
+        else:
+            log.error(f"[{email}] ❌ Stage incomplete: {state}")
+
+    # ==============================================================
+    # FIRE TORPEDO (~2s)
+    # ==============================================================
+
     async def fire(self, product_id, product_url=""):
-        """Fire on all accounts in PARALLEL — same checkout flow as working bot."""
+        """Fire on all staged accounts in PARALLEL."""
         t0 = time.time()
-        if not product_url:
-            product_url = f"{SHOP_URL}/-p{product_id}"
+        active = [email for email, ok in self.staged.items() if ok]
 
-        log.info(f"=== 🚀 TORPEDO FIRE product={product_id} ({len(self.pages)} accounts) ===")
-        await self._discord(f"🚀 **TORPEDO** product {product_id} — {len(self.pages)} accounts")
+        if not active:
+            log.error("[FIRE] No staged accounts!")
+            return 0
 
-        tasks = [self._buy(email, product_id, product_url, t0) for email in self.pages]
+        log.info(f"=== 🚀 TORPEDO FIRE product={product_id} ({len(active)} accounts) ===")
+        await self._discord(f"🚀 **TORPEDO FIRE** product {product_id} — {len(active)} accounts")
+
+        tasks = [self._fire_one(email, product_id, t0) for email in active]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         total = time.time() - t0
         ok = sum(1 for r in results if r is True)
-        log.info(f"=== TORPEDO DONE: {ok}/{len(tasks)} in {total:.1f}s ===")
-        await self._discord(f"{'✅' if ok else '❌'} **TORPEDO** {product_id} | {ok}/{len(tasks)} | {total:.1f}s")
+        failed = [email for email, r in zip(active, results) if r is not True]
+
+        log.info(f"=== TORPEDO DONE: {ok}/{len(active)} in {total:.2f}s ===")
+        await self._discord(f"{'✅' if ok else '❌'} **TORPEDO** {product_id} | {ok}/{len(active)} | {total:.1f}s")
+
+        # Mark staged=False for accounts that fired (need re-stage)
+        for email in active:
+            self.staged[email] = False
+
         return ok
 
-    async def _buy(self, email, product_id, product_url, t0):
+    async def _fire_one(self, email, product_id, t0):
         """
-        Buy flow — COPIED from japancollectibles_autobuy.py (which works).
-        Only difference: no login (already logged in), reduced waits.
+        HOT PATH — target <2s:
+        1. API: clear cart + ATC target product (0.5-1s)
+        2. Click "Zamawiam i płacę" (1s)
         """
         page = self.pages.get(email)
         if not page:
             return False
 
         try:
-            # === 1. CLEAR CART ===
-            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
-            await page.wait_for_timeout(2000)
-            await page.evaluate("""() => {
-                document.getElementById('cc--main')?.remove();
-                document.querySelector('.fixed-elements')?.remove();
-            }""")
-            await page.evaluate("""() => {
-                const delBtns = document.querySelectorAll('[data-click="deleteCartItem"], button[aria-label*="Usuń"], .icon-close_24, [data-ng-click*="delete"]');
-                delBtns.forEach(btn => btn.click());
-            }""")
-            await page.wait_for_timeout(1500)
+            # === API CART SWAP (from browser JS — same session) ===
+            swap_result = await page.evaluate(f"""async () => {{
+                const cartId = document.cookie.match(/sky2_cart_id=([^;]+)/)?.[1];
+                if (!cartId) return {{error: 'no_cart_id'}};
 
-            # === 2. ADD TO CART (go to product page, click "Do koszyka") ===
-            await page.goto(product_url, wait_until="domcontentloaded", timeout=15000)
-            await page.wait_for_timeout(2000)
-            await page.evaluate("""() => {
-                document.getElementById('cc--main')?.remove();
-                document.querySelector('.fixed-elements')?.remove();
-            }""")
+                // Clear cart
+                const cartResp = await fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/' + cartId, {{
+                    headers: {{'Accept':'application/json','currency':'PLN','lang':'pl'}}
+                }});
+                const cartData = await cartResp.json();
+                const items = cartData.cart?.items || [];
+                
+                await Promise.all(items.map(item =>
+                    fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/' + cartId + '/items/' + item.id, {{
+                        method: 'DELETE',
+                        headers: {{'Accept':'application/json','currency':'PLN','lang':'pl'}}
+                    }})
+                ));
 
-            atc_btn = page.locator("button:has-text('Do koszyka'), button[aria-label*='Dodaj do koszyka']").first
-            await atc_btn.wait_for(state="visible", timeout=8000)
-            await atc_btn.click(force=True)
-            log.info(f"[{email}] ATC click ({time.time()-t0:.1f}s)")
-            await page.wait_for_timeout(2000)
+                // ATC target product
+                const atcResp = await fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/' + cartId + '/items', {{
+                    method: 'POST',
+                    headers: {{'Content-Type':'application/json','Accept':'application/json','currency':'PLN','lang':'pl'}},
+                    body: JSON.stringify({{productId: {product_id}, quantity: 1, parameters: []}})
+                }});
+                const atcData = await atcResp.json();
+                
+                if (atcData.addedCartItem) {{
+                    return {{ok: true, price: atcData.addedCartItem.priceSummary?.final?.grossDisplay}};
+                }} else {{
+                    return {{ok: false, error: atcData.message || atcData.errorCode || 'unknown'}};
+                }}
+            }}""")
 
-            # Dismiss popup
-            try:
-                realize = page.locator("text=Realizuj zamówienie")
-                if await realize.is_visible(timeout=3000):
-                    await realize.click()
-                    await page.wait_for_timeout(1000)
-            except:
-                pass
+            if not swap_result.get("ok"):
+                log.error(f"[{email}] ATC failed: {swap_result.get('error')}")
+                return False
 
-            # === 3. CART → CHECKOUT ===
-            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
-            await page.wait_for_timeout(3000)
-            await page.evaluate("""() => {
-                document.getElementById('cc--main')?.remove();
-                document.querySelector('.fixed-elements')?.remove();
-            }""")
+            log.info(f"[{email}] ATC OK ({swap_result.get('price')}) ({time.time()-t0:.2f}s)")
 
-            # Wait for checkout button enabled
-            checkout_btn = page.locator("button[data-ng-click='order()']:not([disabled])")
-            await checkout_btn.wait_for(state="visible", timeout=15000)
-            await checkout_btn.click(force=True)
-
-            # Wait for /order page
-            await page.wait_for_url("**/order**", timeout=15000)
-            await page.wait_for_timeout(3000)
-            log.info(f"[{email}] Checkout page ({time.time()-t0:.1f}s)")
-
-            # === 4. PAYMENT: BLIK ===
-            await page.evaluate("""() => {
-                document.getElementById('cc--main')?.remove();
-                document.querySelector('.fixed-elements')?.remove();
-            }""")
-
-            for _ in range(10):
-                has = await page.evaluate("() => document.body.innerText.includes('BLIK')")
-                if has:
-                    break
-                await page.wait_for_timeout(1500)
-
-            payment_el = page.locator("text=BLIK").first
-            await payment_el.wait_for(state="visible", timeout=10000)
-            await payment_el.click(force=True)
-            log.info(f"[{email}] Payment: BLIK ({time.time()-t0:.1f}s)")
-            await page.wait_for_timeout(3000)
-
-            # === 5. DELIVERY: Kurier Inpost ===
-            for _ in range(10):
-                has = await page.evaluate("() => document.body.innerText.includes('Kurier Inpost')")
-                if has:
-                    break
-                await page.wait_for_timeout(1500)
-
-            delivery_clicked = False
-            try:
-                del_el = page.locator("text=Kurier Inpost - Gabaryt C >> visible=true")
-                if await del_el.count() > 0:
-                    await del_el.first.click(force=True)
-                    delivery_clicked = True
-                else:
-                    del_el = page.locator("input#param-delivery-6512b")
-                    if await del_el.count() > 0:
-                        await del_el.evaluate("el => el.closest('tr, div')?.click() || el.click()")
-                        delivery_clicked = True
-                    else:
-                        del_el = page.locator("td:has-text('Kurier Inpost'), div:has-text('Kurier Inpost')").first
-                        await del_el.click(force=True, timeout=5000)
-                        delivery_clicked = True
-            except:
-                pass
-
-            if not delivery_clicked:
-                await page.evaluate("""() => {
-                    const rows = document.querySelectorAll('tr, div, label');
-                    for (const r of rows) {
-                        if (r.textContent.includes('Kurier') && r.textContent.includes('Inpost')) {
-                            const radio = r.querySelector('input[type="radio"]');
-                            if (radio) { radio.click(); return; }
-                            r.click(); return;
-                        }
-                    }
-                }""")
-
-            log.info(f"[{email}] Delivery selected ({time.time()-t0:.1f}s)")
-            await page.wait_for_timeout(1500)
-
-            # === 6. CHECKBOXES ===
-            await page.evaluate("""() => {
-                window.scrollTo(0, document.body.scrollHeight);
-            }""")
-            await page.wait_for_timeout(500)
-            await page.evaluate("""() => {
-                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                    const req = cb.getAttribute('data-valid')?.includes('required');
-                    if (req && !cb.checked) cb.click();
-                });
-            }""")
-            await page.wait_for_timeout(500)
-
-            # === 7. SUBMIT ===
-            log.info(f"[{email}] Submitting ({time.time()-t0:.1f}s)")
-            order_btn = page.locator("button[name='finish']").first
-            await order_btn.wait_for(state="visible", timeout=5000)
-            await order_btn.click(force=True)
-
+            # === CLICK SUBMIT ===
+            await page.click("button[name='finish']", force=True)
             await page.wait_for_timeout(5000)
+
             final_url = page.url
             total = time.time() - t0
-
-            success = any(kw in final_url.lower() for kw in ["potwierdzenie", "thank", "tpay", "blik", "przelewy24"])
-            if not success:
-                content = await page.content()
-                success = any(kw in content.lower() for kw in ["zamówienie zostało złożone", "dziękujemy"])
+            success = any(kw in final_url.lower() for kw in ["autopay", "blik", "tpay", "przelewy24", "potwierdzenie", "thank", "pay"])
 
             if success:
-                log.info(f"[{email}] ✅ ORDER in {total:.1f}s! → {final_url[:60]}")
+                log.info(f"[{email}] ✅ ORDER in {total:.2f}s! → {final_url[:60]}")
                 _mark_completed(product_id, email)
                 return True
             else:
-                log.error(f"[{email}] ❌ Failed ({total:.1f}s) URL: {final_url[:60]}")
-                await page.screenshot(path=f"/tmp/jc_torpedo_{email.split('@')[0]}.png")
+                log.error(f"[{email}] ❌ Submit failed ({total:.2f}s) URL: {final_url[:60]}")
                 return False
 
         except Exception as e:
             log.error(f"[{email}] Exception: {e}")
             return False
 
-    async def daemon_loop(self):
-        """Watch trigger file + refresh sessions."""
+    # ==============================================================
+    # MAINTENANCE (heartbeat + re-stage)
+    # ==============================================================
+
+    async def _heartbeat(self, email):
+        """Keep session alive (fetch cart API)."""
+        page = self.pages.get(email)
+        if not page:
+            return
+        try:
+            await page.evaluate("""() => fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/latest', {headers: {'Accept':'application/json','currency':'PLN','lang':'pl'}})""")
+            self.last_heartbeat[email] = time.time()
+        except:
+            pass
+
+    async def maintenance(self):
+        """Run heartbeats and re-stages."""
+        now = time.time()
+        for acc in self.accounts:
+            email = acc["email"]
+            if email not in self.pages:
+                continue
+
+            # Heartbeat every 5 min
+            if now - self.last_heartbeat.get(email, 0) > HEARTBEAT_INTERVAL:
+                await self._heartbeat(email)
+
+            # Re-stage every 30 min OR if not staged
+            if not self.staged.get(email) or (now - self.last_stage.get(email, 0) > RESTAGE_INTERVAL):
+                log.info(f"[DAEMON] Re-staging {email}...")
+                try:
+                    await self._full_stage(acc)
+                except Exception as e:
+                    log.error(f"[DAEMON] Re-stage {email} failed: {e}")
+                await asyncio.sleep(3)
+
+    # ==============================================================
+    # DAEMON LOOP
+    # ==============================================================
+
+    async def run(self):
+        """Main daemon loop: watch trigger + maintenance."""
+        log.info("[DAEMON] Running. Watching /tmp/jc_torpedo_fire.txt")
+        last_maintenance = 0
+
         while True:
+            # Check trigger
             if FIRE_FILE.exists():
                 try:
                     content = FIRE_FILE.read_text().strip()
@@ -319,21 +421,17 @@ class TorpedoDaemon:
                 except Exception as e:
                     log.error(f"[DAEMON] Fire error: {e}")
 
-            # Session refresh
+            # Maintenance every 60s
             now = time.time()
-            for acc in self.accounts:
-                email = acc["email"]
-                if email in self.pages and (now - self.last_login.get(email, 0)) > SESSION_REFRESH:
-                    log.info(f"[DAEMON] Refreshing {email}")
-                    try:
-                        await self.contexts[email].close()
-                    except:
-                        pass
-                    del self.pages[email]
-                    del self.contexts[email]
-                    await self._login(acc)
+            if now - last_maintenance > 60:
+                await self.maintenance()
+                last_maintenance = now
 
             await asyncio.sleep(0.5)
+
+    # ==============================================================
+    # HELPERS
+    # ==============================================================
 
     async def _discord(self, msg):
         try:
@@ -364,32 +462,43 @@ def _mark_completed(product_id, email):
     COMPLETED_FILE.write_text(json.dumps(data, indent=2))
 
 
+# ==============================================================
+# CLI
+# ==============================================================
+
 async def main():
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--fire", "-f", help="Product ID (one-shot)")
+    parser = argparse.ArgumentParser(description="JC Torpedo Daemon — ~2s buy")
+    parser.add_argument("--fire", "-f", help="Product ID to buy NOW")
     parser.add_argument("--url", "-u", default="", help="Product URL")
-    parser.add_argument("--test", action="store_true", help="Test account only")
-    parser.add_argument("--daemon", action="store_true", help="Run as daemon")
+    parser.add_argument("--test", action="store_true", help="Use test account (Marian)")
+    parser.add_argument("--daemon", action="store_true", help="Run as daemon (watch trigger file)")
     args = parser.parse_args()
 
     accounts = [TEST_ACCOUNT] if args.test else ACCOUNTS
     daemon = TorpedoDaemon(accounts)
+
     await daemon.start()
 
     if args.fire:
         await daemon.fire(args.fire, args.url)
         await daemon.browser.close()
     elif args.daemon:
-        log.info("[DAEMON] Running (watch /tmp/jc_torpedo_fire.txt)")
         try:
-            await daemon.daemon_loop()
+            await daemon.run()
         except KeyboardInterrupt:
-            pass
+            log.info("[DAEMON] Shutting down")
         finally:
             await daemon.browser.close()
     else:
-        print("--fire PID or --daemon")
+        print("Usage:")
+        print("  --daemon              Run forever, watch /tmp/jc_torpedo_fire.txt")
+        print("  --fire PID            Buy product NOW (one-shot)")
+        print("  --fire PID --test     Buy on test account")
+        print("")
+        print("Trigger (from japancollectibles_trigger.py):")
+        print("  echo '9419 https://japancollectibles.shop/...' > /tmp/jc_torpedo_fire.txt")
+        await daemon.browser.close()
 
 
 if __name__ == "__main__":
