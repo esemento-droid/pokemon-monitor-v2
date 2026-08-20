@@ -70,8 +70,12 @@ def _is_lego_set(product):
                          "płytka", "płytk", "baseplate",
                          "pojemnik", "lunch", "bidon", "butelk", "śniadani",
                          "zestaw na", "częściowy zestaw", "lampk", "latark",
-                         "kubek", "kubk", "haczyk", "wieszak", "półka",
-                         "organizer", "ramka", "zegar"]
+                         "kubek", "kubk", "haczyk", "wieszak", "półka", "półk",
+                         "organizer", "ramka", "zegar",
+                         "regał", "regal", "szuflad", "szafk", "stolik",
+                         "biurk", "komoda", "łóżk", "łóżeczk", "dywan",
+                         "naklejk", "tapeta", "zasłon", "firanka", "pościel",
+                         "ręcznik", "koc ", "poduszk", "mata piankowa"]
     if any(kw in name for kw in clothing_keywords):
         return False
     
