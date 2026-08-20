@@ -1,5 +1,5 @@
-2026-08-20 11:48:37,026 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
-2026-08-20 11:48:38,752 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.46s)
-2026-08-20 11:48:39,027 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (1.73s)
-2026-08-20 11:48:39,238 [JC-TORPEDO] [t11008543@gmail.com] ATC error: 404, message='Attempt to decode JSON with unexpected mimetype: text/html; charset=utf-8', url='https://japancollectibles.shop/proxy_public_api?endpoint=/sky2/api-public/carts/efe9ca11-079a-444f-b66e-426087cfce71'
-2026-08-20 11:48:39,240 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 2.21s ===
+2026-08-20 11:49:33,175 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
+2026-08-20 11:49:35,081 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.60s)
+2026-08-20 11:49:35,445 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (1.97s)
+2026-08-20 11:49:35,711 [JC-TORPEDO] [t11008543@gmail.com] ATC failed - no items in cart
+2026-08-20 11:49:35,712 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 2.54s ===
