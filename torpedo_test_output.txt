@@ -1,0 +1,11 @@
+2026-08-20 10:37:11,326 [JC-TORPEDO] === TEST MODE: Marian Wasilewski ===
+2026-08-20 10:37:11,326 [JC-TORPEDO] [t11008543@gmail.com] TORPEDO START product=7437
+2026-08-20 10:37:12,518 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.19s)
+2026-08-20 10:37:12,767 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (1.44s)
+2026-08-20 10:37:18,549 [JC-TORPEDO] [t11008543@gmail.com] Cart page loaded (7.22s)
+2026-08-20 10:37:23,537 [JC-TORPEDO] [t11008543@gmail.com] Checkout page (12.21s)
+2026-08-20 10:37:33,637 [JC-TORPEDO] [t11008543@gmail.com] Payment: none
+2026-08-20 10:37:36,651 [JC-TORPEDO] [t11008543@gmail.com] Delivery: none
+2026-08-20 10:37:39,171 [JC-TORPEDO] [t11008543@gmail.com] Checkboxes: 0 clicked
+2026-08-20 10:37:40,173 [JC-TORPEDO] [t11008543@gmail.com] Submitting order... (28.85s)
+2026-08-20 10:37:50,226 [JC-TORPEDO] [t11008543@gmail.com] ❌ Order unclear (38.9s) URL: https://japancollectibles.shop/cart/
