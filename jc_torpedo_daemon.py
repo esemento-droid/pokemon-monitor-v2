@@ -220,6 +220,33 @@ class TorpedoDaemon:
 
             log.info(f"[{email}] Checkout rendered ({time.time()-t0:.1f}s)")
 
+            # === DEBUG: full DOM analysis of checkout ===
+            debug_dom = await page.evaluate("""() => {
+                const text = document.body.innerText;
+                // Find BLIK in DOM — what element is it?
+                const allEls = document.querySelectorAll('*');
+                let blikEl = null;
+                let blikInfo = 'not_found';
+                for (const el of allEls) {
+                    if (el.childNodes.length <= 3 && el.textContent.trim() === 'BLIK') {
+                        blikEl = el;
+                        blikInfo = {tag: el.tagName, class: el.className.substring(0,80), parent: el.parentElement?.tagName + '.' + el.parentElement?.className.substring(0,50), ngClick: el.getAttribute('data-ng-click') || el.parentElement?.getAttribute('data-ng-click') || 'none'};
+                        break;
+                    }
+                }
+                // Find all clickable elements in order/checkout section
+                const orderSection = document.querySelector('[data-ng-controller*="Order"], .order, .checkout, [class*="order"]');
+                const orderInfo = orderSection ? {tag: orderSection.tagName, class: orderSection.className.substring(0,60), childCount: orderSection.children.length} : 'no_order_section';
+                // Find radio-like elements (md-radio, custom)
+                const mdRadios = document.querySelectorAll('md-radio-button, [role="radio"], .radio, [data-ng-click*="set"]');
+                const mdInfo = [...mdRadios].slice(0,8).map(r => ({tag: r.tagName, text: r.textContent.trim().substring(0,30), ngClick: r.getAttribute('data-ng-click')?.substring(0,60) || 'none', class: r.className.substring(0,40)}));
+                // Standard inputs
+                const inputs = document.querySelectorAll('input');
+                const inputInfo = [...inputs].slice(0,10).map(i => ({type: i.type, name: i.name, id: i.id}));
+                return {blikInfo, orderInfo, mdRadios: mdInfo.length, mdDetails: mdInfo, inputs: inputInfo, url: window.location.href, hasOrder: text.includes('Zamawiam')};
+            }""")
+            log.info(f"[{email}] DOM ANALYSIS: {json.dumps(debug_dom, ensure_ascii=False, default=str)}")
+
             # === STEP 4: Select payment (BLIK) ===
             pay_result = await page.evaluate("""() => {
                 const rows = document.querySelectorAll('tr, div, label, li, span');
