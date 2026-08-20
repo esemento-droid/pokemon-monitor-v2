@@ -12,6 +12,7 @@ import os
 log = logging.getLogger("monitor")
 
 SHOP = "bonito"
+SHOP_DISABLED = True  # Both VPS IP and mobile IP blocked by bot protection. Needs new IP (Play SIM).
 SCAN_TIMEOUT = 150
 SEARCH_URL = "https://bonito.pl/szukaj?fraza=pokemon+tcg"
 

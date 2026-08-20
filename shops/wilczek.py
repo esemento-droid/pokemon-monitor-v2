@@ -1,9 +1,11 @@
 """
-Scraper: wilczek.poznan.pl — uses cf_solver (patchright) for JS rendering
+Scraper: wilczek.poznan.pl — standalone patchright (JS render, VPS IP)
 Site is SPA — products load via JavaScript, plain HTTP returns empty page.
-Uses existing cf_solver browser (shared context pool) = no extra Chrome.
+No bot protection, just needs JS execution. Uses VPS IP (no proxy).
+SHOP_GROUP = VERY_SLOW (browser launch per scan)
 """
 import re
+import os
 import logging
 import asyncio
 from bs4 import BeautifulSoup
@@ -12,6 +14,7 @@ logger = logging.getLogger(__name__)
 SHOP = "wilczek"
 URL = "https://wilczek.poznan.pl/product/search?query=Pokemon+tcg+&filter=1"
 BASE = "https://wilczek.poznan.pl"
+SCAN_TIMEOUT = 60
 
 EXCLUDE = [
     "japonsk", "japanese", "korean", "chinsk", "chinese", "sleeves", "koszulk", "toploader",
@@ -73,13 +76,22 @@ def _parse_html(html):
 
 
 async def get_products():
-    """Uses cf_solver to render JS page — no extra Chrome process."""
-    from cf_solver import solve
-
-    html = await solve(URL, timeout=30)
-    if not html:
-        logger.error("[wilczek] cf_solver returned None")
-        return []
+    """Standalone patchright — VPS IP, no proxy, JS render."""
+    from patchright.async_api import async_playwright
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+        )
+        try:
+            page = await browser.new_page(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            )
+            await page.goto(URL, wait_until="networkidle", timeout=30000)
+            await asyncio.sleep(2)
+            html = await page.content()
+        finally:
+            await browser.close()
 
     products = _parse_html(html)
     products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
