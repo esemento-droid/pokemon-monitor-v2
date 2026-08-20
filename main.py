@@ -40,7 +40,7 @@ from engines.engine_runner import run_engines_process
 NODRIVER_SHOPS = {
     "empik", "mediaexpert", "proshop", "boosterpoint",
     "strefamarzen", "tantis",
-    "bonito", "libristo",
+    "libristo",
 }
 
 SHOPIFY_SHOPS = {"pokeloot", "skladgier"}

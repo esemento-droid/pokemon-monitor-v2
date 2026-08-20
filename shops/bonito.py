@@ -1,20 +1,18 @@
 """
-Scraper: bonito.pl — bot protection JS verification
-Method: playwright standard browser (headless, VPS IP - no proxy)
-NOTE: Orange IP 37.47.130.139 is BANNED. VPS IP (146.59.45.228) works with JS challenge.
-BROWSER_TYPE = "standard" — uses VPS IP directly (not mobile proxy)
-SCAN_TIMEOUT = 150 — needs time for JS challenge
+Scraper: bonito.pl — stealth patchright, NO proxy (VPS IP only)
+NOTE: Orange mobile IP is BANNED. Uses VPS IP with stealth browser for JS challenge.
+Runs as FAST shop (standalone patchright, not in NODRIVER pool) — pool uses proxy which is banned.
 """
 import asyncio
 import json
 import logging
 import re
+import os
 
 log = logging.getLogger("monitor")
 
 SHOP = "bonito"
-BROWSER_TYPE = "stealth"  # stealth patchright passes JS challenges better
-SCAN_TIMEOUT = 150  # JS challenge needs patience
+SCAN_TIMEOUT = 150
 SEARCH_URL = "https://bonito.pl/szukaj?fraza=pokemon+tcg"
 
 EXCLUDE = [
@@ -67,8 +65,11 @@ JSON.stringify((function(){
 """
 
 
-async def scan_with_page(page):
-    """Persistent browser interface — page already exists, just navigate."""
+SHOP_GROUP = "SLOW"  # Needs browser, don't put in FAST (blocks event loop)
+
+
+async def _scrape_with_page(page):
+    """Core scraping logic — given a page, navigate and extract."""
     products = []
 
     await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=45000)
@@ -176,15 +177,23 @@ async def scan_with_page(page):
 
 
 async def get_products():
-    """Legacy interface — for testing only."""
+    """Standalone stealth patchright — NO PROXY (VPS IP, mobile is banned)."""
     from patchright.async_api import async_playwright
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
-            args=['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-dev-shm-usage']
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+            ],
+            env={**os.environ, 'DISPLAY': ':99'},
         )
         try:
-            page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-            return await scan_with_page(page)
+            page = await browser.new_page(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            )
+            return await _scrape_with_page(page)
         finally:
             await browser.close()
