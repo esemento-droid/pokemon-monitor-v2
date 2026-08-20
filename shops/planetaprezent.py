@@ -12,6 +12,7 @@ import subprocess
 
 logger = logging.getLogger(__name__)
 SHOP = "planetaprezent.pl"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 API_URL = "https://planetaprezent.pl/collections/pokemon-tcg/products.json?limit=250"
 EXCLUDE_KEYWORDS = [
     "album", "deck box", "pudelko", "pudełko", "sleeves", "protector", "koszulk", "toploader",

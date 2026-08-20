@@ -5,6 +5,7 @@ import re
 from bs4 import BeautifulSoup
 
 SHOP = "hearts"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 BASE = "https://hearts.pub"
 SEARCH_URL = f"{BASE}/sklep/szukaj?s=pokemon&resultsPerPage=200"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}

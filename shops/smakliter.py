@@ -9,6 +9,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "smakliter"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 BASE = "https://smakliter.pl"
 SEARCH_URL = (
     f"{BASE}/?catId=&pageNo=0&flag=&menuFilter=&featureValueId="

@@ -4,6 +4,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "blindbox"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 BASE = "https://www.blindbox.pl"
 CAT_URL = f"{BASE}/merchandise/karty-przetargowe/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}

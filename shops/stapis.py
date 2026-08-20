@@ -1,6 +1,8 @@
 import aiohttp
 from bs4 import BeautifulSoup
 
+SHOP = "stapis"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 URL = "https://stapis.com.pl/?product_cat=pokemon-tcg"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 

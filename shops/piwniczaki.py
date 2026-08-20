@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 SHOP = "piwniczaki"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 BASE_URL = "https://www.sklep-piwniczaki.pl"
 CAT_URL = f"{BASE_URL}/pokemon-tcg"
 MAX_PAGES = 5

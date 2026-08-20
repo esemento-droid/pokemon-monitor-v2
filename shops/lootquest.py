@@ -1,6 +1,7 @@
 import aiohttp
 
 SHOP = "lootquest"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 BASE = "https://lootquest.pl/wp-json/wc/store/v1/products"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 EXCLUDE = [

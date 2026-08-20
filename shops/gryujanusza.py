@@ -10,6 +10,7 @@ Speed: ~0.5-2s (one HTTP call, no pagination needed for 34 products)
 import aiohttp
 
 SHOP = "gryujanusza"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 URL = "https://gryujanusza.pl/collections/tcg-pokemon/products.json?limit=250"
 
 EXCLUDE_KEYWORDS = [

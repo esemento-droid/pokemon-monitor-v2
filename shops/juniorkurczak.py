@@ -1,6 +1,7 @@
 import aiohttp
 
 SHOP = "juniorkurczak"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 API_URL = "https://app.ecwid.com/api/v3/111352604/products"
 TOKEN = "public_nt3ritVaCxYq4mZtH1cFzQpcjFzSqBy7"
 CATEGORY = 175912935

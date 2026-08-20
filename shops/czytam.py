@@ -4,6 +4,7 @@ import asyncio
 import re
 
 SHOP = "czytam.pl"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 BASE = "https://czytam.pl"
 CAT = "/seria/pokemon"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"}
