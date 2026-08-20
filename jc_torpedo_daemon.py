@@ -75,7 +75,7 @@ STAGE_PRODUCTS = [
 
 HEARTBEAT_INTERVAL = 300  # 5 min
 RESTAGE_INTERVAL = 1800   # 30 min
-POLL_INTERVAL = 2.5       # seconds between stock polls
+POLL_INTERVAL = 5         # seconds between stock polls (safe: 12 req/min)
 
 
 class TorpedoDaemon:
@@ -543,7 +543,9 @@ class TorpedoDaemon:
             # Stock polling (primary trigger — fastest)
             if self.watch_pids and (now - last_poll) >= POLL_INTERVAL:
                 await self._poll_stock()
-                last_poll = time.time()
+                # Add random jitter (3-7s total interval) to avoid bot detection
+                import random
+                last_poll = time.time() + random.uniform(-1, 2)
 
             # Check trigger file (backup trigger from scraper)
             if FIRE_FILE.exists():
