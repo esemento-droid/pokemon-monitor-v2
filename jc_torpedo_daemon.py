@@ -222,7 +222,31 @@ class TorpedoDaemon:
                     const form = document.getElementById('orderForm');
                     if (form) form.submit();
                 }""")
-            log.info(f"[{email}] Checkout click ({time.time()-t0:.1f}s)")
+            
+            # Sky-Shop order() submits form#orderForm (POST /order with cart_id)
+            # If Playwright click didn't navigate, force form submit with cart_id from Angular
+            await page.wait_for_timeout(2000)
+            current_url = page.url
+            if '/order' not in current_url:
+                log.info(f"[{email}] order() click didn't navigate, forcing form submit...")
+                await page.evaluate("""() => {
+                    // Get cart_id from Angular scope
+                    const scope = angular.element(document.querySelector('[data-ng-controller="CartCtrl"]')).scope();
+                    const cartId = scope?.data?.cartSelected?.id || '';
+                    const form = document.getElementById('orderForm');
+                    if (form) {
+                        const input = form.querySelector('input[name="cart_id"]');
+                        if (input) input.value = cartId;
+                        form.submit();
+                    }
+                }""")
+                # Wait for navigation to /order
+                try:
+                    await page.wait_for_url("**/order**", timeout=10000)
+                except:
+                    pass
+
+            log.info(f"[{email}] Checkout click ({time.time()-t0:.1f}s) URL: {page.url}")
 
             # === STEP 3: Wait for checkout render ===
             # After click, Sky-Shop navigates to /order (full page or Angular route)
