@@ -167,76 +167,93 @@ async def torpedo_buy(account, product_id, product_url=""):
                     if (form) form.submit();
                 }""")
 
-            # Wait for checkout to render (Angular SPA — no full page nav, just route change)
-            # Either URL changes to /order OR payment options appear in DOM
-            for _ in range(15):
+            # Wait for checkout to render (Angular SPA route change)
+            for _ in range(20):
                 current_url = page.url
                 has_checkout = await page.evaluate("""() => {
-                    return document.body.innerText.includes('Metod') || 
-                           document.body.innerText.includes('BLIK') ||
-                           document.body.innerText.includes('Przelew') ||
-                           document.body.innerText.includes('płatności') ||
-                           window.location.href.includes('/order');
+                    const text = document.body.innerText;
+                    return text.includes('Metod') || text.includes('BLIK') || 
+                           text.includes('Przelew') || text.includes('płatności') ||
+                           text.includes('Zamawiam') || window.location.href.includes('/order');
                 }""")
                 if has_checkout or '/order' in current_url:
                     break
                 await page.wait_for_timeout(1000)
 
-            await page.wait_for_timeout(2000)
+            await page.wait_for_timeout(3000)
             log.info(f"[{email}] Checkout page ({time.time()-t0:.2f}s)")
 
-            # Remove overlays again
+            # Remove overlays
             await page.evaluate("""() => {
                 document.getElementById('cc--main')?.remove();
+                document.getElementById('cm')?.remove();
                 document.querySelector('.fixed-elements')?.remove();
             }""")
 
-            # Wait for payment options to render
-            for _ in range(8):
-                has_payments = await page.evaluate("() => document.body.innerText.includes('BLIK') || document.body.innerText.includes('Przelew')")
-                if has_payments:
+            # Wait for Angular to fully render (no {{}} templates visible)
+            for _ in range(10):
+                rendered = await page.evaluate("() => !document.querySelector('.order')?.textContent?.includes('{{') && document.querySelectorAll('input[type=\"radio\"]').length > 0")
+                if rendered:
                     break
                 await page.wait_for_timeout(1000)
 
-            # Select BLIK payment
-            try:
-                blik = page.locator("text=BLIK").first
-                await blik.click(force=True, timeout=5000)
-                log.info(f"[{email}] Payment: BLIK selected")
-            except:
-                # Fallback: click first payment option
-                await page.evaluate("""() => {
-                    const radios = document.querySelectorAll('input[name="payment"]');
-                    if (radios.length > 0) radios[0].click();
-                }""")
-                log.info(f"[{email}] Payment: first option (fallback)")
+            # === PAYMENT: click BLIK row ===
+            payment_result = await page.evaluate("""() => {
+                const rows = document.querySelectorAll('tr, div, label, li');
+                for (const r of rows) {
+                    if (r.textContent.includes('BLIK') && r.querySelector('input[type="radio"]')) {
+                        r.querySelector('input[type="radio"]').click();
+                        return 'blik';
+                    }
+                }
+                // Fallback: any payment radio
+                const radios = [...document.querySelectorAll('input[type="radio"]')];
+                for (const r of radios) {
+                    if (r.closest('[class*="payment"]') || r.closest('[data-ng-repeat*="payment"]')) {
+                        r.click(); return 'first_payment';
+                    }
+                }
+                if (radios.length > 0) { radios[0].click(); return 'any_first'; }
+                return 'none';
+            }""")
+            log.info(f"[{email}] Payment: {payment_result}")
+
+            await page.wait_for_timeout(3000)  # Delivery options load after payment selection
+
+            # === DELIVERY: click Kurier Inpost row ===
+            delivery_result = await page.evaluate("""() => {
+                const rows = document.querySelectorAll('tr, div, label, li');
+                for (const r of rows) {
+                    if ((r.textContent.includes('Kurier') || r.textContent.includes('Gabaryt')) && r.querySelector('input[type="radio"]')) {
+                        r.querySelector('input[type="radio"]').click();
+                        return 'kurier: ' + r.textContent.trim().substring(0, 40);
+                    }
+                }
+                // Fallback: any delivery/shipment radio
+                const radios = [...document.querySelectorAll('input[type="radio"]')];
+                for (const r of radios) {
+                    if (r.closest('[class*="shipment"]') || r.closest('[class*="delivery"]') || r.closest('[data-ng-repeat*="shipment"]')) {
+                        r.click(); return 'first_delivery';
+                    }
+                }
+                return 'none';
+            }""")
+            log.info(f"[{email}] Delivery: {delivery_result}")
 
             await page.wait_for_timeout(2000)
 
-            # Select delivery (Kurier Inpost Gabaryt C or first available)
-            try:
-                delivery = page.locator("text=Kurier Inpost").first
-                await delivery.click(force=True, timeout=5000)
-                log.info(f"[{email}] Delivery: Kurier Inpost")
-            except:
-                await page.evaluate("""() => {
-                    const radios = document.querySelectorAll('input[name="delivery"]');
-                    if (radios.length > 0) radios[0].click();
-                }""")
-                log.info(f"[{email}] Delivery: first option (fallback)")
-
-            await page.wait_for_timeout(1000)
-
-            # Check required checkboxes
-            await page.evaluate("""() => {
-                window.scrollTo(0, document.body.scrollHeight);
-                const cbs = document.querySelectorAll('input[type="checkbox"]');
-                for (const cb of cbs) {
-                    const isRequired = cb.getAttribute('data-valid')?.includes('required');
-                    if (isRequired && !cb.checked) cb.click();
-                }
-            }""")
+            # === CHECKBOXES: check ALL unchecked (safer) ===
+            await page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(500)
+            checked = await page.evaluate("""() => {
+                let count = 0;
+                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    if (!cb.checked) { cb.click(); count++; }
+                });
+                return count;
+            }""")
+            log.info(f"[{email}] Checkboxes: {checked} clicked")
+            await page.wait_for_timeout(1000)
 
             # Submit order
             log.info(f"[{email}] Submitting order... ({time.time()-t0:.2f}s)")
