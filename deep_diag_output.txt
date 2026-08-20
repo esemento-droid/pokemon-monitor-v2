@@ -1,0 +1,218 @@
+╔══════════════════════════════════════════════════════════════╗
+║  DEEP DIAGNOSTIC 2026-08-20 07:46 (last 3h)            ║
+╚══════════════════════════════════════════════════════════════╝
+
+=== 1. SYSTEM ===
+  Uptime: up 2 weeks, 2 days, 18 hours, 53 minutes
+  Load: 4.72 5.22 5.33
+  RAM: 6029MB/7763MB used (1041MB free, 1733MB available)
+  Swap: 97MB/2047MB
+  Chrome: 36 processes, 5569MB
+
+=== 2. SERVICE ===
+  PID: 3333591 | Since: Wed 2026-08-19 22:03:13 CEST
+  ROLE       PID      %CPU   %MEM   RSS_MB
+  PID-3333591 3333591  0.0    0.5    45M   
+  PID-3333592 3333592  71.5   3.0    234M  
+  PID-3333593 3333593  68.4   3.2    253M  
+  PID-3333594 3333594  68.4   3.7    287M  
+  PID-3333595 3333595  0.8    4.9    381M  
+  PID-3333596 3333596  0.2    0.6    48M   
+
+=== 3. PROXY ===
+  HTTP(8888): 37.47.130.139200 0.499780s IP=
+  Tailscale:  37.47.130.139200 0.387821s IP=
+  SOCKS5:     37.47.130.139200 0.294290s IP=
+  VPS direct: 146.59.45.228
+
+=== 4. PHONE (Mi 9T) ===
+  Ping: 24.750ms
+  Phone crontab:
+    * * * * * /data/data/com.termux/files/home/bin/watchdog.sh
+    0 */4 * * * /data/data/com.termux/files/home/bin/rotate_ip.sh
+
+=== 5. NODRIVER SHOPS ===
+
+  SHOP             SCANS ZEROS  ERRS HEALS TOUTS  LAST_STATUS
+  empik               35     0     0     2    16  252 produktow w 88.8s
+  mediaexpert         39     0    40     0     0  GraphQL error: 404
+  tantis              96     0     0     0     0  3 produktow w 16.8s
+  libristo           101     0     0     0     0  9 produktow w 14.8s
+  boosterpoint        91     0     0     0     0  314 produktow w 20.3s
+  strefamarzen       106     0     0     0     0  23 produktow w 9.5s
+  bonito               0     0     0     0     0  
+  piwniczaki           0     0     0     0     0  
+  dragonus             0     0     0     0     0  
+  wilczek              0     0     0     0     0  
+  rgfk                 0     0     0     0     0  
+  proshop              0     0     0     0     0  
+
+  Stuck shops (>10 zeros, <3 scans) — last 3 lines each:
+
+=== 6. ENGINE ===
+  Polls: 485 | Scans reported: 292 | Errors: 0
+  Last 5 lines:
+    2026-08-20T07:45:40+0200 vps-733c4be8 python[3333596]: 2026-08-20 07:45:40,430 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T07:46:03+0200 vps-733c4be8 python[3333596]: 2026-08-20 07:46:03,053 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T07:46:25+0200 vps-733c4be8 python[3333596]: 2026-08-20 07:46:25,827 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T07:46:47+0200 vps-733c4be8 python[3333596]: 2026-08-20 07:46:47,387 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T07:46:47+0200 vps-733c4be8 python[3333596]: 2026-08-20 07:46:47,398 [ENGINE] [INFO] [tcgumisia] 70 produktow w 1.4s
+
+=== 7. PROBLEM SHOPS (FAST/SLOW) ===
+
+  planetaprezent          431    497      0  MOSTLY_EMPTY
+  gryujanusza             363    392      0  MOSTLY_EMPTY
+  stapis                  345    378      2  MOSTLY_EMPTY
+  krakenshop              348    370      0  MOSTLY_EMPTY
+  loficards               328    368      0  MOSTLY_EMPTY
+  smakliter               344    363      0  MOSTLY_EMPTY
+  hearts                  330    356      2  MOSTLY_EMPTY
+  lootquest               321    332      0  MOSTLY_EMPTY
+  juniorkurczak           305    329     10  MOSTLY_EMPTY
+  czytam.pl                 0    320      0  ALL_EMPTY
+  rozmaitosci             285    305      0  MOSTLY_EMPTY
+  zaurketto               283    304      0  MOSTLY_EMPTY
+  blindbox                283    304      0  MOSTLY_EMPTY
+  pokespot                234    276      1  MOSTLY_EMPTY
+  czytam                  255    275      0  MOSTLY_EMPTY
+  pegazgry                269    264      0  DEGRADED
+  kimland                 230    244     25  DEGRADED
+  pokemaniak              177    207     37  DEGRADED
+  kartomat                199    202      0  MOSTLY_EMPTY
+  cardfan                 176    173      0  DEGRADED
+
+=== 8. COOLDOWNS + CONSECUTIVE ERRORS ===
+  2026-08-20T07:25:29+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:25:29,203 [SLOW] [WARNING] [dystryktzero] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:31:11+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:31:11,056 [SLOW] [WARNING] [eduksiazka] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:31:18+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:31:18,181 [SLOW] [WARNING] [mepel] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:33:02+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:33:02,407 [SLOW] [WARNING] [am76] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:34:26+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:34:26,746 [SLOW] [WARNING] [battlestash] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:34:26+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:34:26,747 [SLOW] [WARNING] [gralnia] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:34:26+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:34:26,747 [SLOW] [WARNING] [xjoy] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:35:04+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:35:04,165 [SLOW] [WARNING] [monsteriada] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:35:04+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:35:04,166 [SLOW] [WARNING] [maginarium] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:36:15+0200 vps-733c4be8 python[3333593]: 2026-08-20 07:36:15,678 [FAST] [WARNING] [pokebeast] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:36:33+0200 vps-733c4be8 python[3333593]: 2026-08-20 07:36:33,173 [FAST] [WARNING] [tcgzielona] 10 consecutive errors! Cooldown 10min
+  2026-08-20T07:38:29+0200 vps-733c4be8 python[3333592]: 2026-08-20 07:38:29,826 [FAST] [WARNING] [bastacentershop] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:39:13+0200 vps-733c4be8 python[3333592]: 2026-08-20 07:39:13,311 [FAST] [WARNING] [archivebyx] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:45:02+0200 vps-733c4be8 python[3333593]: 2026-08-20 07:45:02,335 [FAST] [WARNING] [strefamtg] 20 consecutive errors! Cooldown 30min
+  2026-08-20T07:45:28+0200 vps-733c4be8 python[3333594]: 2026-08-20 07:45:28,398 [SLOW] [INFO] [dystryktzero] Cooldown: 600s remaining
+
+=== 9. HEALS ===
+    6 x xjoy
+    6 x strefamtg
+    6 x pokebeast
+    6 x monsteriada
+    6 x mepel
+    6 x maginarium
+    6 x gralnia
+    6 x eduksiazka
+    6 x dystryktzero
+    6 x battlestash
+    6 x bastacentershop
+    6 x archivebyx
+    6 x am76
+    2 x empik
+  Total: 80
+
+=== 10. TIMEOUTS ===
+   37 x pokemaniak
+   29 x lukillo
+   25 x kimland
+   25 x carddojo
+   16 x empik
+   12 x limango
+   10 x juniorkurczak
+    9 x CF_SOLVER
+    8 x wargamer
+    8 x mugiwara
+    5 x skladgier
+    4 x thepokemania
+    3 x gameover
+    2 x stapis
+    2 x pikashop
+  Total: 215
+
+=== 11. ERRORS (unique, last 20) ===
+  2026-08-20 07:25:16,928 [FAST] [ERROR] [kantodrop] ERROR: Server disconnected
+  2026-08-20 07:25:16,929 [FAST] [ERROR] [graal] ERROR: Server disconnected
+  2026-08-20 07:25:16,929 [FAST] [ERROR] [kartexpol] ERROR: Server disconnected
+  2026-08-20 07:25:17,080 [FAST] [ERROR] [grybezpradu] ERROR: Server disconnected
+  2026-08-20 07:29:24,347 [FAST] [ERROR] [pikatube] ERROR: Server disconnected
+  2026-08-20 07:30:11,854 [SLOW] [ERROR] [pikashop] ERROR: Cannot connect to host pikashop.pl:443 ssl:default [None]
+  2026-08-20 07:30:39,164 [FAST] [ERROR] [pkmnshop] ERROR: Server disconnected
+  2026-08-20 07:31:43,622 [FAST] [ERROR] [kieszonkowymonster] ERROR: Server disconnected
+  2026-08-20 07:31:44,450 [FAST] [ERROR] [alpakagra] ERROR: Server disconnected
+  2026-08-20 07:31:48,253 [FAST] [ERROR] [carddojo] ERROR: Server disconnected
+  2026-08-20 07:32:02,412 [FAST] [ERROR] [pikatube] ERROR: Cannot connect to host pikatube.pl:443 ssl:default [None]
+  2026-08-20 07:36:14,932 [FAST] [ERROR] [zarc] ERROR: Cannot connect to host zarc.pl:443 ssl:default [None]
+  2026-08-20 07:37:30,321 [FAST] [ERROR] [tcgheaven] ERROR: Server disconnected
+  2026-08-20 07:39:08,023 [FAST] [ERROR] [kantodrop] ERROR: Server disconnected
+  2026-08-20 07:39:08,038 [FAST] [ERROR] [grybezpradu] ERROR: Server disconnected
+  2026-08-20 07:40:13,654 [FAST] [ERROR] [tcgheaven] ERROR: Server disconnected
+  2026-08-20 07:44:59,867 [FAST] [ERROR] [tcgheaven] ERROR: Server disconnected
+  2026-08-20 07:44:59,868 [FAST] [ERROR] [pkmnshop] ERROR: Server disconnected
+  2026-08-20 07:46:04,076 [FAST] [ERROR] [kartexpol] ERROR: Server disconnected
+  2026-08-20 07:46:04,076 [FAST] [ERROR] [lukillo] ERROR: Server disconnected
+
+=== 12. DB ===
+  Products: 12564
+  Events 1h: 4
+  Events 24h: 344
+  Breakdown (24h):
+    RESTOCK              115
+    SOLD_OUT             105
+    PRICE_CHANGE         101
+    NEW_PRODUCT          23
+
+=== 13. CRON ===
+  * * * * * /opt/pokemon-monitor-v2/proxy_watchdog.sh >/dev/null 2>&1
+  */5 * * * * /opt/pokemon-monitor-v2/start_socks5.sh >/dev/null 2>&1
+  */3 * * * * cd /opt/pokemon-monitor-v2 && ./venv/bin/python3 health_alert.py >/dev/null 2>&1
+  0 * * * * cd /opt/pokemon-monitor-v2 && timeout 300 DISPLAY=:99 ./venv/bin/python3 session_warmer.py >> data/warmer.log 2>&1
+  0 22 * * * cd /opt/pokemon-monitor-v2 && venv/bin/python daily_stats.py >> /opt/pokemon-monitor-v2/data/daily_stats.log 2>&1
+  */5 * * * * /opt/pokemon-monitor-v2/infra/memory_guard.sh
+  0 */4 * * * cd /opt/pokemon-monitor-v2 && ./venv/bin/python3 price_cache.py >> data/price_cache.log 2>&1
+
+=== 14. CRASHES/RESTARTS ===
+
+=== 15. PROXY WATCHDOG ===
+  2026-08-18 04:17:07 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-18 08:00:02 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-18 08:00:17 PROXY RESTORED (full repair)
+  2026-08-18 10:19:06 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-18 10:52:03 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-18 10:52:18 PROXY RESTORED (full repair)
+  2026-08-18 10:53:01 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-18 10:53:16 PROXY RESTORED (full repair)
+  2026-08-18 10:54:02 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-18 12:00:02 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-18 12:00:17 PROXY RESTORED (full repair)
+  2026-08-18 14:53:19 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-18 15:36:01 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-18 16:00:01 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-18 16:00:17 PROXY RESTORED (full repair)
+  2026-08-18 16:40:08 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-18 17:06:07 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-18 20:00:02 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-18 20:00:17 PROXY RESTORED (full repair)
+  2026-08-19 00:00:02 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-19 00:00:16 PROXY RESTORED (full repair)
+  2026-08-19 08:00:01 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-19 08:00:17 PROXY RESTORED (full repair)
+  2026-08-19 12:39:07 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-19 16:00:02 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-19 16:00:17 PROXY RESTORED (full repair)
+  2026-08-19 20:00:02 PROXY DEAD (tunnel + tailscale) - full repair via Tailscale SSH
+  2026-08-19 20:00:17 PROXY RESTORED (full repair)
+  2026-08-20 01:30:01 TUNNEL DEAD but Tailscale proxy OK - restarting autossh
+  2026-08-20 01:30:08 TUNNEL RESTORED (autossh restarted)
+
+=== 16. SUMMARY ===
+  Window: last 3h
+  Scans: 37263 | Engine polls: 485 | Errors: 157 | Timeouts: 215
+
+╔══════════════════════════════════════════════════════════════╗
+║                     END DEEP DIAGNOSTIC                     ║
+╚══════════════════════════════════════════════════════════════╝
+Saved to /tmp/deep_diag.txt
