@@ -118,7 +118,7 @@ else
         for (i = 1; i <= n; i++) {
             sub(/\].*/, "", parts[i])
             if (parts[i] ~ /^ENGINE:/) { sub(/^ENGINE:/, "", parts[i]); name = parts[i]; break }
-            if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG|BROWSER_MGR|CF_SOLVER|MAIN)$/ && parts[i] ~ /^[a-zA-Z]/ && parts[i] ~ /[a-z]/) name = parts[i]
+            if (parts[i] !~ /^(FAST|SLOW|NODRIVER|ENGINE|INFO|WARNING|ERROR|DEBUG|BROWSER_MGR|CF_SOLVER|MAIN|None|null|default)$/ && parts[i] ~ /^[a-zA-Z]/ && parts[i] ~ /[a-z]/) name = parts[i]
         }
         return name
     }
