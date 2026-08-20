@@ -1,22 +1,22 @@
 {
   "shop": "tcgumisia",
   "email": "blackmat36@gmail.com",
-  "saved_at": 1786554933.786002,
-  "saved_at_human": "2026-08-12 19:15:33",
+  "saved_at": 1786996849.775236,
+  "saved_at_human": "2026-08-17 22:00:49",
   "cookies": [
     {
       "name": "cookie_alert",
       "value": "20431cce9d588ff963bd232163a63906f2bc669b~1",
       "domain": "tcgumisia.pl",
       "path": "/",
-      "expires": 1821114916.977415,
+      "expires": 1821556809.209516,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
     },
     {
       "name": "session",
-      "value": "65iei92024eef2kh3f65k6k0fn",
+      "value": "gvfh9rbg422lsv0n4nthnlssqt",
       "domain": "tcgumisia.pl",
       "path": "/",
       "expires": -1,

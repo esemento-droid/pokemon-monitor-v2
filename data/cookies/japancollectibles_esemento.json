@@ -1,8 +1,8 @@
 {
   "shop": "japancollectibles",
   "email": "esemento@gmail.com",
-  "saved_at": 1786557693.8228555,
-  "saved_at_human": "2026-08-12 20:01:33",
+  "saved_at": 1786994243.588218,
+  "saved_at_human": "2026-08-17 21:17:23",
   "cookies": [
     {
       "name": "SERVERID",
@@ -16,10 +16,10 @@
     },
     {
       "name": "js_hash",
-      "value": "2eaaf4d8b7",
+      "value": "59bb5ae0e3",
       "domain": "japancollectibles.shop",
       "path": "/",
-      "expires": 1786644083,
+      "expires": 1787080633,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -29,7 +29,7 @@
       "value": "1",
       "domain": "japancollectibles.shop",
       "path": "/",
-      "expires": 1818093687,
+      "expires": 1818530237,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -39,24 +39,24 @@
       "value": "%7B%7D",
       "domain": "japancollectibles.shop",
       "path": "/",
-      "expires": 1791741688,
+      "expires": 1792178238,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "autologin",
-      "value": "eyJ1c2VyX2lkIjoxNjkxLCJ0b2tlbiI6IjIxODhkNGE2NzM4ZDE2NTVmM2ViNTY3MmI2YzFhMTM0NjEzOTM2MzU5YWVjOGE1MDcyNTk1YjUwYmE4NWVmMDYifQ%3D%3D",
+      "value": "eyJ1c2VyX2lkIjoxNjkxLCJ0b2tlbiI6IjkyNWU2N2IwYjAzMjExMTZiODFkN2Q0OWY2Zjg5MTlmYjgxYTNiODk1NDNlNmEyOTRmMzA0NzVjMGI5MTY3ZWQifQ%3D%3D",
       "domain": "japancollectibles.shop",
       "path": "/",
-      "expires": 1789149689.582765,
+      "expires": 1789586239.107088,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
     },
     {
       "name": "PHPSESSID",
-      "value": "ot9g4d3ujq1b4048o4n6c6773v",
+      "value": "t8ba2q32f5jvsi146h7m6fcrr5",
       "domain": "japancollectibles.shop",
       "path": "/",
       "expires": -1,
@@ -69,7 +69,7 @@
       "value": "full",
       "domain": "japancollectibles.shop",
       "path": "/",
-      "expires": 1789236092.053754,
+      "expires": 1789672641.799462,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Lax"

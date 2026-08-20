@@ -1,9 +1,13 @@
 {
-  "monitor": true,
   "proxy_tunnel": true,
   "proxy_tailscale": true,
-  "flaresolverr": true,
-  "phone": true,
+  "all_proxy_fail_count": 0,
   "all_proxy_dead": false,
-  "last_check": "2026-08-12 20:08:03"
+  "monitor": true,
+  "monitor_fail_count": 0,
+  "monitor_last_change": 0,
+  "flaresolverr": false,
+  "flaresolverr_fail_count": 160,
+  "flaresolverr_last_change": 1787049909.7533886,
+  "last_check": "2026-08-18 20:36:03"
 }
