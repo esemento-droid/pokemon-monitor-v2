@@ -1,0 +1,17 @@
+[Unit]
+Description=JC Torpedo Daemon — instant buy on restock (~2s)
+After=network.target
+
+[Service]
+Type=simple
+User=debian
+WorkingDirectory=/opt/pokemon-monitor-v2
+Environment=DISPLAY=:99
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/pokemon-monitor-v2/venv/bin/python3 /opt/pokemon-monitor-v2/jc_torpedo_daemon.py --daemon --watch 9419
+Restart=always
+RestartSec=30
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
