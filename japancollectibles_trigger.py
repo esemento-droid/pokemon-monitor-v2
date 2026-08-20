@@ -117,35 +117,26 @@ def check_japancollectibles_trigger(event_type, product):
     except Exception as e:
         log.warning(f"[JC-TRIGGER] Discord notify failed: {e}")
 
-    # Launch TORPEDO (instant HTTP, <2s) instead of browser bot
-    if not BOT_PATH.exists():
-        log.error(f"[JC-TRIGGER] Torpedo not found: {BOT_PATH}")
-        return
-
-    # Build product URL
-    if not url:
-        url = f"https://japancollectibles.shop/-p{product_id}"
-
-    cmd = [
-        str(BASE_DIR / "venv" / "bin" / "python3"),
-        str(BOT_PATH),
-        "fire",
-        "--product-id", str(product_id),
-        "--url", url,
-        "--accounts", "4",
-    ]
-
-    env = os.environ.copy()
-
-    log.info(f"[JC-TRIGGER] Launching bot for: {name} ({product_id})")
+    # Fire TORPEDO DAEMON via trigger file (instant — daemon already has browser running)
+    FIRE_FILE = Path("/tmp/jc_torpedo_fire.txt")
+    log.info(f"[JC-TRIGGER] Writing trigger: product {product_id}")
     try:
-        subprocess.Popen(
-            cmd,
-            env=env,
-            cwd=str(BASE_DIR),
-            stdout=open(BASE_DIR / "japancollectibles_autobuy_stdout.log", "a"),
-            stderr=open(BASE_DIR / "japancollectibles_autobuy_stderr.log", "a"),
-        )
-        log.info(f"[JC-TRIGGER] Bot launched for product {product_id}")
+        FIRE_FILE.write_text(str(product_id))
+        log.info(f"[JC-TRIGGER] Torpedo daemon triggered for product {product_id}")
     except Exception as e:
-        log.error(f"[JC-TRIGGER] Failed to launch bot: {e}")
+        log.error(f"[JC-TRIGGER] Failed to write trigger file: {e}")
+        # Fallback: launch torpedo as subprocess
+        cmd = [
+            str(BASE_DIR / "venv" / "bin" / "python3"),
+            str(BASE_DIR / "jc_torpedo_daemon.py"),
+            "--fire", str(product_id),
+        ]
+        env = os.environ.copy()
+        env["DISPLAY"] = ":99"
+        try:
+            subprocess.Popen(cmd, env=env, cwd=str(BASE_DIR),
+                stdout=open(BASE_DIR / "jc_torpedo_daemon.log", "a"),
+                stderr=open(BASE_DIR / "jc_torpedo_daemon.log", "a"))
+            log.info(f"[JC-TRIGGER] Fallback: launched daemon --fire {product_id}")
+        except Exception as e2:
+            log.error(f"[JC-TRIGGER] Fallback launch failed: {e2}")
