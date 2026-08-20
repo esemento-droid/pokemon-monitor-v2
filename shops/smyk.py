@@ -2,6 +2,9 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "smyk.com"
+# Smyk hides OOS products from search — when product disappears from results,
+# mark it as unavailable in DB so reappearance triggers RESTOCK
+MARK_MISSING_AS_OOS = True
 URLS = [
     "https://www.smyk.com/pl/pl/search?q=Pokemon%20tcg",
     "https://www.smyk.com/pl/pl/search?q=Pokemon",

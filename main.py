@@ -232,6 +232,19 @@ async def shop_worker(name, module, logger, process_type):
 
             await save_products_batch(products)
 
+            # Mark missing products as OOS (for shops that hide OOS from search)
+            # This enables RESTOCK detection when product reappears
+            if getattr(module, 'MARK_MISSING_AS_OOS', False) and not was_first:
+                new_ids = {str(p.get("id", "")) for p in products}
+                for old_id, old_data in old.items():
+                    if old_id not in new_ids and old_data.get("available", False):
+                        # Product was available but disappeared from results → mark OOS
+                        await save_products_batch([{
+                            **old_data,
+                            "available": False,
+                            "stock": "Niedostepny",
+                        }])
+
             scan_time = (datetime.now() - start).total_seconds()
             stats["ok"] += 1
             stats["err"] = 0
