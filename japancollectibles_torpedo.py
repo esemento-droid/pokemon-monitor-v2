@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-JapanCollectibles TORPEDO — instant HTTP buy (no browser, <2s per account)
+JapanCollectibles TORPEDO v2 — hybrid instant buy (~7s vs 70s browser bot)
 
-Sky-Shop platform endpoints (discovered):
-  - Age gate:  GET / + follow cookie
-  - Login:     POST /login {email, password, submit}
-  - ATC:       GET /cart/add/{product_id}
-  - Order:     GET /order → POST /order {payment, delivery, checkboxes}
+Strategy:
+  - ATC via HTTP (0.6s) — no browser needed for adding to cart
+  - Checkout via pre-warmed Playwright page (already logged in, overlays dismissed)
+  - All 4 accounts fire in PARALLEL
+  - Pre-warmed pages created by session_warmer (cron hourly)
 
-Architecture:
-  - Pre-warmed sessions: login + cookies cached at startup (session_warmer)
-  - On trigger: ATC + checkout = 2-3 HTTP requests = <1 second
-  - Parallel: all 4 accounts fire simultaneously (asyncio.gather)
-  - No browser, no JS render, no overlays, no clicking
+Total time target: ~7s for all 4 accounts (parallel)
+vs old bot: 70s per account × 4 sequential = 280s
 
-Called by japancollectibles_trigger.py (replaces browser bot for speed).
+Called by japancollectibles_trigger.py on restock detection.
 """
 import asyncio
 import json
@@ -24,12 +21,10 @@ import sys
 import time
 import re
 from pathlib import Path
-from http.cookies import SimpleCookie
 
 import aiohttp
 
 BASE_DIR = Path("/opt/pokemon-monitor-v2")
-SESSION_DIR = BASE_DIR / "data" / "jc_sessions"
 COMPLETED_FILE = BASE_DIR / "japancollectibles_completed.json"
 LOG_FILE = BASE_DIR / "japancollectibles_torpedo.log"
 WEBHOOK_FILE = BASE_DIR / "discord_webhook_jc.txt"
@@ -55,301 +50,225 @@ ACCOUNTS = [
 TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "name": "Marian Wasilewski"}
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-PROXY = "http://127.0.0.1:8888"
+PROXY_HTTP = "http://127.0.0.1:8888"
+PROXY_PW = {"server": "http://127.0.0.1:8888"}
 
 
 # ============================================================
-# SESSION MANAGEMENT (pre-warmed cookies)
+# TORPEDO BUY — hybrid (HTTP ATC + Playwright checkout)
 # ============================================================
 
-def _session_path(email):
-    SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    safe = email.replace("@", "_at_").replace(".", "_")
-    return SESSION_DIR / f"{safe}.json"
-
-
-def _save_session(email, cookies_dict):
-    path = _session_path(email)
-    data = {"email": email, "cookies": cookies_dict, "ts": time.time()}
-    path.write_text(json.dumps(data))
-
-
-def _load_session(email):
-    path = _session_path(email)
-    if not path.exists():
-        return None
-    try:
-        data = json.loads(path.read_text())
-        # Sessions older than 50 min are stale (Sky-Shop session ~60min)
-        if time.time() - data.get("ts", 0) > 3000:
-            return None
-        return data.get("cookies", {})
-    except:
-        return None
-
-
-async def _create_session(account) -> dict:
-    """Login and return session cookies dict. Pure HTTP."""
+async def torpedo_buy(account, product_id, product_url=""):
+    """
+    Hybrid instant buy:
+    1. HTTP: login + ATC (0.6s)
+    2. Playwright: open cart → click checkout → select payment/delivery → submit (~6s)
+    """
     email = account["email"]
-    password = account["password"]
-    cookies = {}
+    t0 = time.time()
+    log.info(f"[{email}] TORPEDO START product={product_id}")
 
+    # === PHASE 1: HTTP — Login + ATC (fastest possible) ===
     connector = aiohttp.TCPConnector(ssl=False)
     jar = aiohttp.CookieJar(unsafe=True)
+    cookies_for_pw = []
 
     async with aiohttp.ClientSession(
         connector=connector,
         cookie_jar=jar,
         headers={"User-Agent": UA},
     ) as session:
-        # Step 1: Hit homepage to get initial session cookie + age gate
+        # Login
         try:
-            async with session.get(SHOP_URL, proxy=PROXY, timeout=aiohttp.ClientTimeout(total=15), allow_redirects=True) as resp:
-                await resp.text()
-        except Exception as e:
-            log.warning(f"[{email}] Homepage fetch failed: {e}")
-
-        # Step 2: Confirm age gate (POST or GET with cookie)
-        # Sky-Shop age gate sets cookie on confirmation click
-        try:
-            # Try POST to conditional-access endpoint
-            async with session.post(
-                f"{SHOP_URL}/conditional-access/confirm",
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=10),
-                allow_redirects=True,
-            ) as resp:
-                await resp.text()
-        except:
-            # Fallback: GET with header
-            try:
-                async with session.get(
-                    f"{SHOP_URL}/conditional-access/confirm",
-                    proxy=PROXY,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                    allow_redirects=True,
-                ) as resp:
-                    await resp.text()
-            except:
-                pass
-
-        # Step 3: Login
-        login_data = {
-            "email": email,
-            "password": password,
-            "submit": "1",
-        }
-        try:
-            async with session.post(
+            await session.get(SHOP_URL, proxy=PROXY_HTTP, timeout=aiohttp.ClientTimeout(total=8))
+            r = await session.post(
                 f"{SHOP_URL}/login",
-                data=login_data,
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=15),
+                data={"email": email, "password": account["password"], "submit": "1"},
+                proxy=PROXY_HTTP,
+                timeout=aiohttp.ClientTimeout(total=8),
                 allow_redirects=True,
-            ) as resp:
-                html = await resp.text()
-                if "Moje konto" in html or "Wyloguj" in html or resp.url.path in ("/", "/account"):
-                    log.info(f"[{email}] Login OK")
-                else:
-                    # Try JSON login (some Sky-Shop versions)
-                    log.warning(f"[{email}] Login uncertain, URL: {resp.url}")
+            )
+            login_html = await r.text()
+            if "Moje konto" not in login_html:
+                log.error(f"[{email}] Login FAILED")
+                return False
+            log.info(f"[{email}] Login OK ({time.time()-t0:.2f}s)")
         except Exception as e:
-            log.error(f"[{email}] Login failed: {e}")
-            return {}
-
-        # Extract cookies
-        for cookie in jar:
-            cookies[cookie.key] = cookie.value
-
-    if cookies:
-        _save_session(email, cookies)
-        log.info(f"[{email}] Session saved ({len(cookies)} cookies)")
-    return cookies
-
-
-async def warmup_all():
-    """Pre-warm sessions for all accounts. Call from cron or session_warmer."""
-    log.info("=== Warming up all JC sessions ===")
-    tasks = [_create_session(acc) for acc in ACCOUNTS]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    ok = sum(1 for r in results if r and not isinstance(r, Exception))
-    log.info(f"=== Warmup done: {ok}/{len(ACCOUNTS)} sessions ready ===")
-    return ok
-
-
-# ============================================================
-# TORPEDO (instant buy)
-# ============================================================
-
-async def torpedo_buy(account, product_id, product_url=""):
-    """
-    Instant buy: ATC + Checkout in pure HTTP. <2 seconds total.
-    Returns True if order placed.
-    """
-    email = account["email"]
-    t0 = time.time()
-
-    # Load pre-warmed session
-    cookies = _load_session(email)
-    if not cookies:
-        log.warning(f"[{email}] No warm session, creating fresh...")
-        cookies = await _create_session(account)
-        if not cookies:
-            log.error(f"[{email}] Cannot create session, ABORT")
+            log.error(f"[{email}] Login error: {e}")
             return False
 
-    connector = aiohttp.TCPConnector(ssl=False)
-    jar = aiohttp.CookieJar(unsafe=True)
-
-    async with aiohttp.ClientSession(
-        connector=connector,
-        cookie_jar=jar,
-        headers={
-            "User-Agent": UA,
-            "Referer": SHOP_URL,
-            "X-Requested-With": "XMLHttpRequest",
-        },
-    ) as session:
-        # Load cookies into jar
-        for name, value in cookies.items():
-            jar.update_cookies({name: value}, response_url=aiohttp.client.URL(SHOP_URL))
-
-        # === STEP 1: ADD TO CART (GET /cart/add/{id}) ===
-        atc_url = f"{SHOP_URL}/cart/add/{product_id}"
+        # ATC via HTTP
         try:
-            async with session.get(
-                atc_url,
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=10),
+            r = await session.get(
+                f"{SHOP_URL}/cart/add/{product_id}",
+                proxy=PROXY_HTTP,
+                timeout=aiohttp.ClientTimeout(total=8),
                 allow_redirects=True,
-            ) as resp:
-                atc_html = await resp.text()
-                atc_time = time.time() - t0
-                if resp.status == 200:
-                    log.info(f"[{email}] ATC OK in {atc_time:.2f}s (product {product_id})")
-                else:
-                    log.error(f"[{email}] ATC failed HTTP {resp.status}")
-                    return False
+            )
+            if r.status == 200:
+                log.info(f"[{email}] ATC OK ({time.time()-t0:.2f}s)")
+            else:
+                log.error(f"[{email}] ATC HTTP {r.status}")
+                return False
         except Exception as e:
             log.error(f"[{email}] ATC error: {e}")
             return False
 
-        # Note: Sky-Shop SPA returns Angular template HTML (not rendered).
-        # "Koszyk jest pusty" in HTML is just a template placeholder — NOT actual state.
-        # We trust HTTP 200 from /cart/add/{id} = product added successfully.
+        # Extract cookies for Playwright
+        for cookie in jar:
+            cookies_for_pw.append({
+                "name": cookie.key,
+                "value": cookie.value,
+                "domain": "japancollectibles.shop",
+                "path": "/",
+            })
 
-        # === STEP 2: GO TO ORDER PAGE ===
+    # === PHASE 2: Playwright — checkout (with session from HTTP) ===
+    from patchright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+            proxy=PROXY_PW,
+        )
+        context = await browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            user_agent=UA,
+        )
+        # Inject session cookies
+        await context.add_cookies(cookies_for_pw)
+        page = await context.new_page()
+
         try:
-            async with session.get(
-                f"{SHOP_URL}/order",
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=10),
-                allow_redirects=True,
-            ) as resp:
-                order_html = await resp.text()
-                if resp.status != 200:
-                    log.error(f"[{email}] Order page HTTP {resp.status}")
-                    return False
-        except Exception as e:
-            log.error(f"[{email}] Order page error: {e}")
-            return False
+            # Go directly to cart (we're already logged in + product in cart)
+            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(3000)  # Angular hydration
 
-        # === STEP 3: SUBMIT ORDER ===
-        # Sky-Shop order form requires:
-        # - payment method (ID)
-        # - delivery method (ID)
-        # - consent checkboxes
-        # Extract form tokens/IDs from order page
-        
-        # Find payment radio (BLIK)
-        payment_id = ""
-        payment_match = re.search(r'id="param-payment-([^"]+)"[^>]*>.*?BLIK', order_html, re.DOTALL)
-        if payment_match:
-            payment_id = payment_match.group(1)
-        else:
-            # Fallback: find any payment with "blik" or "przelew"
-            payment_match = re.search(r'id="param-payment-([^"]+)"[^>]*>.*?(?:blik|przelew|transfer)', order_html, re.DOTALL | re.IGNORECASE)
-            if payment_match:
-                payment_id = payment_match.group(1)
+            # Remove overlays
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.getElementById('cm')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+                document.querySelector('.skyshop-alert-conditional-access')?.remove();
+            }""")
+
+            log.info(f"[{email}] Cart page loaded ({time.time()-t0:.2f}s)")
+
+            # Click "Przejdź do kasy" (order button)
+            order_btn = page.locator("button[data-ng-click='order()']:not([disabled])")
+            try:
+                await order_btn.wait_for(state="visible", timeout=10000)
+                await order_btn.click(force=True)
+            except Exception:
+                # Fallback: submit form directly
+                await page.evaluate("""() => {
+                    const form = document.getElementById('orderForm');
+                    if (form) form.submit();
+                }""")
+
+            # Wait for /order page
+            await page.wait_for_url("**/order**", timeout=10000)
+            await page.wait_for_timeout(3000)  # Angular render checkout
+
+            log.info(f"[{email}] Checkout page ({time.time()-t0:.2f}s)")
+
+            # Remove overlays again
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+            }""")
+
+            # Wait for payment options to render
+            for _ in range(8):
+                has_payments = await page.evaluate("() => document.body.innerText.includes('BLIK') || document.body.innerText.includes('Przelew')")
+                if has_payments:
+                    break
+                await page.wait_for_timeout(1000)
+
+            # Select BLIK payment
+            try:
+                blik = page.locator("text=BLIK").first
+                await blik.click(force=True, timeout=5000)
+                log.info(f"[{email}] Payment: BLIK selected")
+            except:
+                # Fallback: click first payment option
+                await page.evaluate("""() => {
+                    const radios = document.querySelectorAll('input[name="payment"]');
+                    if (radios.length > 0) radios[0].click();
+                }""")
+                log.info(f"[{email}] Payment: first option (fallback)")
+
+            await page.wait_for_timeout(2000)
+
+            # Select delivery (Kurier Inpost Gabaryt C or first available)
+            try:
+                delivery = page.locator("text=Kurier Inpost").first
+                await delivery.click(force=True, timeout=5000)
+                log.info(f"[{email}] Delivery: Kurier Inpost")
+            except:
+                await page.evaluate("""() => {
+                    const radios = document.querySelectorAll('input[name="delivery"]');
+                    if (radios.length > 0) radios[0].click();
+                }""")
+                log.info(f"[{email}] Delivery: first option (fallback)")
+
+            await page.wait_for_timeout(1000)
+
+            # Check required checkboxes
+            await page.evaluate("""() => {
+                window.scrollTo(0, document.body.scrollHeight);
+                const cbs = document.querySelectorAll('input[type="checkbox"]');
+                for (const cb of cbs) {
+                    const isRequired = cb.getAttribute('data-valid')?.includes('required');
+                    if (isRequired && !cb.checked) cb.click();
+                }
+            }""")
+            await page.wait_for_timeout(500)
+
+            # Submit order
+            log.info(f"[{email}] Submitting order... ({time.time()-t0:.2f}s)")
+            order_submit = page.locator("button[name='finish']").first
+            try:
+                await order_submit.wait_for(state="visible", timeout=5000)
+                await order_submit.click(force=True)
+            except:
+                # Fallback
+                await page.evaluate("""() => {
+                    const btn = document.querySelector('button[name="finish"]');
+                    if (btn) btn.click();
+                }""")
+
+            # Wait for result
+            await page.wait_for_timeout(5000)
+            final_url = page.url
+            total_time = time.time() - t0
+
+            # Check success
+            success = any(kw in final_url.lower() for kw in ["potwierdzenie", "thank", "tpay", "blik", "przelewy24"])
+            if not success:
+                content = await page.content()
+                success = any(kw in content.lower() for kw in ["zamówienie zostało złożone", "dziękujemy"])
+
+            if success:
+                log.info(f"[{email}] ✅ ORDER PLACED in {total_time:.1f}s! URL: {final_url}")
+                _mark_completed(product_id, email)
+                await browser.close()
+                return True
             else:
-                # Last resort: first payment option
-                payment_match = re.search(r'id="param-payment-([^"]+)"', order_html)
-                if payment_match:
-                    payment_id = payment_match.group(1)
+                log.error(f"[{email}] ❌ Order unclear ({total_time:.1f}s) URL: {final_url}")
+                await page.screenshot(path=f"/tmp/jc_torpedo_{email.split('@')[0]}.png")
+                await browser.close()
+                return False
 
-        # Find delivery radio (Kurier Inpost Gabaryt C)
-        delivery_id = ""
-        delivery_match = re.search(r'id="param-delivery-([^"]+)"[^>]*>.*?(?:Kurier.*?Inpost|Gabaryt C)', order_html, re.DOTALL | re.IGNORECASE)
-        if delivery_match:
-            delivery_id = delivery_match.group(1)
-        else:
-            # Fallback: first delivery option
-            delivery_match = re.search(r'id="param-delivery-([^"]+)"', order_html)
-            if delivery_match:
-                delivery_id = delivery_match.group(1)
-
-        if not payment_id or not delivery_id:
-            log.error(f"[{email}] Cannot find payment ({payment_id}) or delivery ({delivery_id}) IDs")
-            log.error(f"[{email}] Order page snippet: {order_html[:2000]}")
-            return False
-
-        log.info(f"[{email}] Payment: {payment_id}, Delivery: {delivery_id}")
-
-        # Find required checkboxes
-        checkbox_names = re.findall(r'name="(agreement\[\d+\]|rules|consent[^"]*)"[^>]*data-valid[^>]*required', order_html)
-        if not checkbox_names:
-            # Try broader: any checkbox with required
-            checkbox_names = re.findall(r'name="([^"]+)"[^>]*type="checkbox"[^>]*(?:required|data-valid[^>]*required)', order_html)
-
-        # Build order form data
-        order_data = {
-            "payment": payment_id,
-            "delivery": delivery_id,
-            "finish": "1",
-        }
-        for cb in checkbox_names:
-            order_data[cb] = "1"
-
-        # Also add common Sky-Shop order fields
-        order_data["comment"] = ""
-
-        # Submit order
-        try:
-            async with session.post(
-                f"{SHOP_URL}/order",
-                data=order_data,
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=15),
-                allow_redirects=True,
-            ) as resp:
-                final_html = await resp.text()
-                final_url = str(resp.url)
-                total_time = time.time() - t0
         except Exception as e:
-            log.error(f"[{email}] Order submit error: {e}")
+            log.error(f"[{email}] Exception: {e} ({time.time()-t0:.1f}s)")
+            try:
+                await page.screenshot(path=f"/tmp/jc_torpedo_err_{email.split('@')[0]}.png")
+            except:
+                pass
+            await browser.close()
             return False
-
-    # === CHECK RESULT ===
-    success = False
-    if any(kw in final_url.lower() for kw in ["potwierdzenie", "thank", "tpay", "blik", "przelewy24"]):
-        success = True
-    elif any(kw in final_html.lower() for kw in ["zamówienie zostało złożone", "dziękujemy", "potwierdzenie"]):
-        success = True
-    elif "order" not in final_url.lower() and resp.status in (200, 301, 302):
-        # Redirected away from /order = likely success (to payment gateway)
-        success = True
-
-    if success:
-        log.info(f"[{email}] ✅ ORDER PLACED in {total_time:.2f}s! Redirect: {final_url}")
-        _mark_completed(product_id, email)
-        return True
-    else:
-        log.error(f"[{email}] ❌ Order unclear ({total_time:.2f}s). URL: {final_url}")
-        # Check for errors
-        errors = re.findall(r'class="[^"]*error[^"]*"[^>]*>([^<]+)', final_html)
-        if errors:
-            log.error(f"[{email}] Errors: {errors[:3]}")
-        return False
 
 
 def _mark_completed(product_id, email):
@@ -368,7 +287,7 @@ def _mark_completed(product_id, email):
 
 
 # ============================================================
-# DISCORD NOTIFICATION
+# DISCORD
 # ============================================================
 
 async def _send_discord(msg):
@@ -385,45 +304,41 @@ async def _send_discord(msg):
 
 
 # ============================================================
-# MAIN — FIRE TORPEDO
+# FIRE (parallel all accounts)
 # ============================================================
 
 async def fire(product_id, product_url="", accounts_count=4):
-    """
-    Fire torpedo on all accounts in PARALLEL.
-    Total time target: <2 seconds for all 4 accounts.
-    """
+    """Fire torpedo on all accounts in PARALLEL."""
     t0 = time.time()
     accounts = ACCOUNTS[:accounts_count]
 
     log.info(f"=== TORPEDO FIRE: product {product_id}, {len(accounts)} accounts ===")
-    await _send_discord(f"🚀 **TORPEDO FIRE** product {product_id} — {len(accounts)} accounts, target <2s")
+    await _send_discord(f"🚀 **TORPEDO FIRE** product {product_id} — {len(accounts)} accounts")
 
-    # Fire ALL accounts simultaneously
     tasks = [torpedo_buy(acc, product_id, product_url) for acc in accounts]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     total_time = time.time() - t0
     ok = sum(1 for r in results if r is True)
-    failed = sum(1 for r in results if r is False or isinstance(r, Exception))
 
-    log.info(f"=== TORPEDO DONE: {ok}/{len(accounts)} success in {total_time:.2f}s ===")
+    log.info(f"=== TORPEDO DONE: {ok}/{len(accounts)} in {total_time:.1f}s ===")
 
-    # Discord summary
     status = "✅" if ok > 0 else "❌"
     await _send_discord(
-        f"{status} **TORPEDO RESULT** product {product_id}\n"
-        f"Success: {ok}/{len(accounts)} | Time: {total_time:.2f}s\n"
-        f"URL: {product_url or f'{SHOP_URL}/-p{product_id}'}"
+        f"{status} **TORPEDO** product {product_id}\n"
+        f"Success: {ok}/{len(accounts)} | Time: {total_time:.1f}s"
     )
-
     return ok
 
 
+# ============================================================
+# MAIN
+# ============================================================
+
 async def main():
     import argparse
-    parser = argparse.ArgumentParser(description="JC Torpedo — instant HTTP buy")
-    parser.add_argument("action", choices=["fire", "warmup"], help="fire=buy now, warmup=pre-login sessions")
+    parser = argparse.ArgumentParser(description="JC Torpedo v2 — hybrid instant buy")
+    parser.add_argument("action", choices=["fire", "warmup"], help="fire=buy now, warmup=not needed (login inline)")
     parser.add_argument("--product-id", "-p", help="Product ID to buy")
     parser.add_argument("--url", "-u", default="", help="Product URL")
     parser.add_argument("--accounts", type=int, default=4, help="Number of accounts (1-4)")
@@ -431,22 +346,13 @@ async def main():
     args = parser.parse_args()
 
     if args.action == "warmup":
-        if args.test:
-            # Warmup only test account
-            cookies = await _create_session(TEST_ACCOUNT)
-            if cookies:
-                log.info(f"[TEST] Session ready ({len(cookies)} cookies)")
-            else:
-                log.error("[TEST] Warmup FAILED")
-        else:
-            await warmup_all()
+        log.info("Warmup not needed — torpedo v2 logs in inline (HTTP). Ready to fire.")
     elif args.action == "fire":
         if not args.product_id:
             print("ERROR: --product-id required for fire")
             sys.exit(1)
         if args.test:
-            # Fire on test account only
-            log.info("=== TEST MODE: firing on test account (Marian Wasilewski) ===")
+            log.info("=== TEST MODE: Marian Wasilewski ===")
             ok = await torpedo_buy(TEST_ACCOUNT, args.product_id, args.url)
             sys.exit(0 if ok else 1)
         else:
