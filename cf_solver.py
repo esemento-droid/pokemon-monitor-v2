@@ -32,6 +32,9 @@ TURNSTILE_CLICK_AT = [2, 5, 8, 12, 18, 25, 32]  # Seconds at which to attempt cl
 # Shops that consistently fail on mobile proxy → try VPS IP first
 VPS_FIRST_SHOPS = {"gralnia", "xjoy"}
 
+# Shops that need extra time (aggressive Turnstile)
+HARD_SHOPS = {"xjoy", "gralnia", "battlestash"}
+
 _browser_proxy = None     # Browser with mobile proxy
 _browser_direct = None    # Browser without proxy (VPS IP)
 _pw = None
@@ -194,6 +197,10 @@ async def _solve_with_browser(browser, url, timeout, label="proxy"):
     context = None
     page = None
 
+    shop = _get_shop_from_url(url)
+    # Hard shops get extended wait time
+    wait_max = CF_WAIT_MAX + 15 if shop in HARD_SHOPS else CF_WAIT_MAX
+
     try:
         context = await browser.new_context(
             user_agent=UA,
@@ -201,12 +208,17 @@ async def _solve_with_browser(browser, url, timeout, label="proxy"):
         )
         page = await context.new_page()
 
-        # Navigate
-        await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+        # Navigate — use networkidle for hard shops (more content loading time)
+        wait_until = "networkidle" if shop in HARD_SHOPS else "domcontentloaded"
+        try:
+            await page.goto(url, wait_until=wait_until, timeout=timeout * 1000)
+        except Exception:
+            # networkidle can timeout on slow sites — fallback, page is still usable
+            pass
 
         # Wait for CF challenge to resolve
         resolved = False
-        for wait_sec in range(CF_WAIT_MAX):
+        for wait_sec in range(wait_max):
             title = await page.title()
             content_check = await page.evaluate(
                 "() => document.body ? document.body.innerText.substring(0, 200) : ''"
@@ -230,10 +242,29 @@ async def _solve_with_browser(browser, url, timeout, label="proxy"):
             await asyncio.sleep(1)
 
         if not resolved:
-            logger.warning(f"[CF_SOLVER] [{label}] Not resolved: {url[:55]} after {CF_WAIT_MAX}s")
+            logger.warning(f"[CF_SOLVER] [{label}] Not resolved: {url[:55]} after {wait_max}s")
             return None
 
+        # Extra wait for page to fully render after challenge resolves
+        # (some sites redirect after CF clearance, need time to load real content)
+        await asyncio.sleep(2)
+
+        # Wait for network to settle (lazy-loaded content)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:
+            pass  # Timeout is OK, we still got something
+
         html = await page.content()
+
+        # If HTML is suspiciously short, wait more (redirect/lazy load)
+        if html and 500 < len(html) < 10000:
+            await asyncio.sleep(3)
+            html = await page.content()
+            if len(html) < 2000:
+                logger.warning(f"[CF_SOLVER] [{label}] Too short: {url[:55]} ({len(html)} chars)")
+                return None
+
         if not html or len(html) < 500:
             logger.warning(f"[CF_SOLVER] [{label}] Empty: {url[:55]} ({len(html or '')} chars)")
             return None
