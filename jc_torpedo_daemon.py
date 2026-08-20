@@ -124,13 +124,20 @@ async def torpedo_buy(account, product_id):
                 body = await r.text()
                 log.error(f"[{email}] ATC HTTP {r.status}: {body[:200]}")
                 return False
-            atc_data = await r.json()
+            atc_text = await r.text()
+            try:
+                atc_data = json.loads(atc_text)
+            except:
+                log.error(f"[{email}] ATC not JSON: {atc_text[:300]}")
+                return False
             can_buy = atc_data.get("cart", {}).get("canBuy", False)
             items = atc_data.get("cart", {}).get("items", [])
+            log.info(f"[{email}] ATC response: canBuy={can_buy}, items={len(items)}, keys={list(atc_data.get('cart',{}).keys())[:8]}")
             if not items:
-                log.error(f"[{email}] ATC failed - no items in cart")
+                # Maybe response structure is different — log full
+                log.error(f"[{email}] ATC no items. Full response: {atc_text[:500]}")
                 return False
-            log.info(f"[{email}] ATC OK ({len(items)} items, canBuy={can_buy}) ({time.time()-t0:.2f}s)")
+            log.info(f"[{email}] ATC OK ({len(items)} items) ({time.time()-t0:.2f}s)")
         except Exception as e:
             log.error(f"[{email}] ATC error: {e}")
             return False
