@@ -164,6 +164,9 @@ async def torpedo_buy(account, product_id):
 
         # === 4. GO TO ORDER PAGE (POST /order with cart_id) → get csrf + shipment ===
         try:
+            # Set sky2_cart_id cookie (required by Sky-Shop to link session to cart)
+            jar.update_cookies({"sky2_cart_id": cart_id}, response_url=aiohttp.client.URL(SHOP_URL))
+            
             r = await s.post(
                 f"{SHOP_URL}/order",
                 data={"cart_id": cart_id},
@@ -183,6 +186,9 @@ async def torpedo_buy(account, product_id):
 
             # Extract csrf_token for order_finish
             csrf_match = re.search(r'name="csrf_token"\s*value="([^"]+)"', order_html)
+            if not csrf_match:
+                # Try other patterns: meta tag, script var, data attribute
+                csrf_match = re.search(r'csrf_token["\s:=]+([a-f0-9]{40,})', order_html)
             csrf_token = csrf_match.group(1) if csrf_match else ""
 
             # Extract shipment IDs
@@ -190,14 +196,17 @@ async def torpedo_buy(account, product_id):
             if not shipment_ids:
                 shipment_ids = re.findall(r'id="param-delivery-([^"]+)"', order_html)
             if not shipment_ids:
-                # Try broader: any value in shipment section that looks like an ID
+                shipment_ids = re.findall(r'"shipmentId"[:\s]+"([^"]+)"', order_html)
+            if not shipment_ids:
                 shipment_ids = re.findall(r'shipment[^>]*value="(\w{3,})"', order_html)
 
-            log.info(f"[{email}] Order page: csrf={'yes' if csrf_token else 'NO'}, shipments={shipment_ids[:3]} ({time.time()-t0:.2f}s)")
+            log.info(f"[{email}] Order: csrf={'yes' if csrf_token else 'NO'}, shipments={shipment_ids[:3]} ({time.time()-t0:.2f}s)")
 
             if not csrf_token:
-                # Maybe page didn't render properly — dump first 1000 chars for debug
-                log.error(f"[{email}] No csrf! HTML start: {order_html[:500]}")
+                # Dump a section around "csrf" if exists
+                csrf_idx = order_html.find("csrf")
+                snippet = order_html[max(0,csrf_idx-50):csrf_idx+200] if csrf_idx > 0 else "csrf NOT FOUND in HTML"
+                log.error(f"[{email}] No csrf! Near 'csrf': {snippet}")
                 return False
 
             shipment_id = shipment_ids[0] if shipment_ids else ""
