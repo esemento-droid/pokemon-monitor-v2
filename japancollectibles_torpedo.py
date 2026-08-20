@@ -167,10 +167,22 @@ async def torpedo_buy(account, product_id, product_url=""):
                     if (form) form.submit();
                 }""")
 
-            # Wait for /order page
-            await page.wait_for_url("**/order**", timeout=10000)
-            await page.wait_for_timeout(3000)  # Angular render checkout
+            # Wait for checkout to render (Angular SPA — no full page nav, just route change)
+            # Either URL changes to /order OR payment options appear in DOM
+            for _ in range(15):
+                current_url = page.url
+                has_checkout = await page.evaluate("""() => {
+                    return document.body.innerText.includes('Metod') || 
+                           document.body.innerText.includes('BLIK') ||
+                           document.body.innerText.includes('Przelew') ||
+                           document.body.innerText.includes('płatności') ||
+                           window.location.href.includes('/order');
+                }""")
+                if has_checkout or '/order' in current_url:
+                    break
+                await page.wait_for_timeout(1000)
 
+            await page.wait_for_timeout(2000)
             log.info(f"[{email}] Checkout page ({time.time()-t0:.2f}s)")
 
             # Remove overlays again
