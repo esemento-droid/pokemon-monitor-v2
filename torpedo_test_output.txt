@@ -1,15 +1,10 @@
-2026-08-20 11:54:00,071 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
-2026-08-20 11:54:02,349 [JC-TORPEDO] [t11008543@gmail.com] Login OK (2.03s)
-2026-08-20 11:54:03,168 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (2.85s)
-2026-08-20 11:54:03,674 [JC-TORPEDO] [t11008543@gmail.com] Cleared 1 items from cart
-2026-08-20 11:54:04,074 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (product 7437, 70,00 zł) (3.76s)
-2026-08-20 11:54:04,805 [JC-TORPEDO] [t11008543@gmail.com] Order page: 73004 bytes, URL: https://japancollectibles.shop/order
-2026-08-20 11:54:04,807 [JC-TORPEDO] [t11008543@gmail.com] Order: csrf=NO, shipments=['{{:id:}}'] (4.49s)
-2026-08-20 11:54:04,807 [JC-TORPEDO] [t11008543@gmail.com] No csrf! Near 'csrf': _orderFormChange">
-    <input type="hidden" name="csrf_token" value="">
-    <input type="hidden" name="ga_client_id" value="">
-    <input type="hidden" name="ga_session_id" value="">
-    <div class="cart-summary-body">
-        <div class="row">
-     
-2026-08-20 11:54:04,808 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 4.74s ===
+2026-08-20 11:55:14,961 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
+2026-08-20 11:55:17,102 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.84s)
+2026-08-20 11:55:17,455 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (2.19s)
+2026-08-20 11:55:17,944 [JC-TORPEDO] [t11008543@gmail.com] Cleared 1 items from cart
+2026-08-20 11:55:18,278 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (product 7437, 70,00 zł) (3.02s)
+2026-08-20 11:55:18,786 [JC-TORPEDO] [t11008543@gmail.com] Order page: 73004 bytes, URL: https://japancollectibles.shop/order
+2026-08-20 11:55:19,239 [JC-TORPEDO] [t11008543@gmail.com] No csrf found — will try submit without it
+2026-08-20 11:55:19,240 [JC-TORPEDO] [t11008543@gmail.com] Order: csrf=EMPTY, shipments=['{{:id:}}'] (3.98s)
+2026-08-20 11:55:19,379 [JC-TORPEDO] [t11008543@gmail.com] ❌ Order failed (4.12s) URL: https://japancollectibles.shop/order_finish/
+2026-08-20 11:55:19,380 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 4.42s ===
