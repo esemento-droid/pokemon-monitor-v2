@@ -325,7 +325,37 @@ fi
 echo ""
 
 # ============================================================
-echo "=== 16. SUMMARY ==="
+echo "=== 17. AUTOBUY BOTS ==="
+echo ""
+
+# JC Torpedo Daemon
+JC_STATUS=$(systemctl is-active jc-torpedo 2>/dev/null || echo "not-found")
+if [ "$JC_STATUS" = "active" ]; then
+    JC_PID=$(systemctl show jc-torpedo --property=MainPID 2>/dev/null | cut -d= -f2)
+    JC_RAM=$(ps -p "$JC_PID" -o rss= 2>/dev/null | awk '{printf "%.0f", $1/1024}')
+    JC_UPTIME=$(systemctl show jc-torpedo --property=ActiveEnterTimestamp 2>/dev/null | cut -d= -f2)
+    JC_LOG=$(journalctl -u jc-torpedo --since "1 hour ago" --no-pager 2>/dev/null)
+    JC_POLLS=$(echo "$JC_LOG" | grep -c "available\|OOS\|error" 2>/dev/null || echo 0)
+    JC_FIRES=$(echo "$JC_LOG" | grep -c "TORPEDO FIRE" 2>/dev/null || echo 0)
+    JC_ORDERS=$(echo "$JC_LOG" | grep -c "✅ ORDER" 2>/dev/null || echo 0)
+    JC_STAGED=$(echo "$JC_LOG" | grep -c "STAGED" 2>/dev/null || echo 0)
+    JC_ERRORS=$(echo "$JC_LOG" | grep -c "ERROR\|Exception\|failed" 2>/dev/null || echo 0)
+    JC_LAST_POLL=$(echo "$JC_LOG" | grep -oP '\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}' | tail -1)
+    echo "  jc-torpedo:    ✅ ACTIVE (PID $JC_PID, ${JC_RAM}MB RAM)"
+    echo "    Since:       $JC_UPTIME"
+    echo "    Last log:    $JC_LAST_POLL"
+    echo "    Polls/1h:    $JC_POLLS | Fires: $JC_FIRES | Orders: $JC_ORDERS"
+    echo "    Staged:      $JC_STAGED | Errors: $JC_ERRORS"
+    # Last few relevant log lines
+    echo "    Recent:"
+    echo "$JC_LOG" | grep -E "FIRE|ORDER|STAGED|RESTOCK|error|Exception" | tail -5 | sed 's/^/      /'
+else
+    echo "  jc-torpedo:    ❌ $JC_STATUS"
+fi
+echo ""
+
+# ============================================================
+echo "=== 18. SUMMARY ==="
 echo ""
 TOTAL_SCANS=$(cat /tmp/_lr_total_scans 2>/dev/null || echo 0)
 TOTAL_ERRORS=$(cat /tmp/_lr_total_errors 2>/dev/null || echo 0)
