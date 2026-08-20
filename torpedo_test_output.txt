@@ -1,48 +1,10 @@
-2026-08-20 10:38:51,084 [JC-TORPEDO] === TEST MODE: Marian Wasilewski ===
-2026-08-20 10:38:51,084 [JC-TORPEDO] [t11008543@gmail.com] TORPEDO START product=7437
-2026-08-20 10:38:52,532 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.45s)
-2026-08-20 10:38:52,897 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (1.81s)
-2026-08-20 10:38:59,470 [JC-TORPEDO] [t11008543@gmail.com] Cart page loaded (8.39s)
-2026-08-20 10:39:04,681 [JC-TORPEDO] [t11008543@gmail.com] Checkout page (13.60s)
-2026-08-20 10:39:14,768 [JC-TORPEDO] [t11008543@gmail.com] DEBUG state: url=https://japancollectibles.shop/cart/, radios=0, checkboxes=0
-2026-08-20 10:39:14,768 [JC-TORPEDO] [t11008543@gmail.com] DEBUG radioDetails: []
-2026-08-20 10:39:14,769 [JC-TORPEDO] [t11008543@gmail.com] DEBUG text:  
-Przejdź do treści głównej
-Przejdź do wyszukiwarki
-Przejdź do moje konto
-Przejdź do menu głównego
-Przejdź do stopki
-Moje konto
-Ulubione
-Koszyk
-0
-Kategorie
-🕒 Przedsprzedaże
-🆕 Nowości
-🔥 Promocje
-Grejding
-Kalendarz
-Kontakt
-Kontynuuj zakupy
-Koszyk
-Koszyk jest pusty
-Pobierz koszyk do PDF
-Podsumowanie
-Cena produktów:
-0,00 zł
-Podsumowanie zamówienia
-
-Suma:
-0,00 zł
-
-Przejdź do kasy
-Japan Collectibles
-Zacisze 2, 82-300 Elbląg, Polska
-
-19.09.2026 otwarcie sklepu na starówce w Elblągu!
-kontakt@japancollec
-2026-08-20 10:39:14,775 [JC-TORPEDO] [t11008543@gmail.com] Payment: none
-2026-08-20 10:39:17,788 [JC-TORPEDO] [t11008543@gmail.com] Delivery: none
-2026-08-20 10:39:20,302 [JC-TORPEDO] [t11008543@gmail.com] Checkboxes: 0 clicked
-2026-08-20 10:39:21,304 [JC-TORPEDO] [t11008543@gmail.com] Submitting order... (30.22s)
-2026-08-20 10:39:31,363 [JC-TORPEDO] [t11008543@gmail.com] ❌ Order unclear (40.2s) URL: https://japancollectibles.shop/cart/
+2026-08-20 10:44:01,235 [JC-TORPEDO] [DAEMON] Browser started (patchright stealth + proxy)
+2026-08-20 10:44:10,421 [JC-TORPEDO] [DAEMON] [t11008543@gmail.com] Logged in ✓
+2026-08-20 10:44:12,421 [JC-TORPEDO] [DAEMON] All 1 accounts ready. Waiting for trigger...
+2026-08-20 10:44:12,421 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437 ===
+2026-08-20 10:44:15,466 [JC-TORPEDO] [t11008543@gmail.com] ATC done (3.0s)
+2026-08-20 10:44:20,549 [JC-TORPEDO] [t11008543@gmail.com] Checkout click (8.1s)
+2026-08-20 10:44:30,700 [JC-TORPEDO] [t11008543@gmail.com] Checkout rendered (18.3s)
+2026-08-20 10:44:34,233 [JC-TORPEDO] [t11008543@gmail.com] Submitting (21.8s)
+2026-08-20 10:44:39,370 [JC-TORPEDO] [t11008543@gmail.com] ❌ Failed (26.9s) URL: https://japancollectibles.shop/category/?q=#top
+2026-08-20 10:44:39,482 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 27.1s ===
