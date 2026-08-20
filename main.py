@@ -576,7 +576,12 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
         else:
             # Healthy: scan every 60-120s (reduced from 30-60s to lower CPU pressure)
             # Chrome renderers are expensive — give CPU breathing room for FAST shops
-            await asyncio.sleep(random.randint(60, 120))
+            # Module-level SCAN_DELAY override (e.g. mediaexpert needs faster polling)
+            module_delay = getattr(module, 'SCAN_DELAY', None)
+            if module_delay:
+                await asyncio.sleep(random.randint(module_delay, int(module_delay * 1.5)))
+            else:
+                await asyncio.sleep(random.randint(60, 120))
 
 
 # ============================================================

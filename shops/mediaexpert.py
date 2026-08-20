@@ -28,6 +28,7 @@ log = logging.getLogger("monitor")
 
 BROWSER_TYPE = "stealth"
 SCAN_TIMEOUT = 150  # Only used for full refresh (goto-based)
+SCAN_DELAY = 25     # Poll every 25-37s (faster than default 60-120s)
 
 SEARCH_URLS = [
     "https://www.mediaexpert.pl/search?query[menu_item]=&query[querystring]=pokemon+tcg",
