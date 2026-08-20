@@ -1,92 +1,110 @@
 """
-Pokebeast.pl - scraper Pokemon ENG
-Sklep na platformie Shoper - używa <product-tile> web components.
-Obsługuje paginację po linkach rel='next'.
-Gdy strona jest w przebudowie (503) zwraca [] bez crasha.
+Pokebeast.pl - scraper Pokemon ENG sealed
+WooCommerce Store API (v1) — fast, no browser needed.
+Category ID 16 = POKEMON (ENG).
 """
 import aiohttp
-from bs4 import BeautifulSoup
 import logging
 
 log = logging.getLogger("monitor")
 
 BASE = "https://pokebeast.pl"
-CATEGORIES = [
-    "/pl/c/Pokemon-ENG/48",
-    "/pl/c/Pokemon-JPN/49",
+API = f"{BASE}/wp-json/wc/store/v1/products"
+CATEGORY_ID = 16  # POKEMON (ENG)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+}
+
+EXCLUDE = [
+    "japanese", "japoński", "japońsk", "(jp)", "koreański", "korean", "chiński", "chinese",
+    "sleeves", "toploader", "pro-binder", "portfolio", "playmat", "album", "ultra pro", "ultra-pro",
+    "deck box", "segregator",
+    "lorcana", "one piece", "yu-gi-oh", "digimon", "magic the gathering",
+    "battle deck", "league battle", "v battle", "battle academy",
 ]
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
 
 
 async def get_products():
     products = []
-    seen_ids = set()
+    seen = set()
     try:
         async with aiohttp.ClientSession(headers=HEADERS) as session:
-            for cat_path in CATEGORIES:
-                for page in range(1, 15):
-                    url = f"{BASE}{cat_path}" if page == 1 else f"{BASE}{cat_path}/{page}"
+            page = 1
+            while True:
+                url = f"{API}?per_page=100&page={page}&category={CATEGORY_ID}"
+                try:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), ssl=False) as resp:
+                        if resp.status != 200:
+                            break
+                        data = await resp.json()
+                except Exception as e:
+                    log.warning(f"[pokebeast] API error page {page}: {e}")
+                    break
+
+                if not data:
+                    break
+
+                for item in data:
+                    pid = item.get("id")
+                    if not pid or pid in seen:
+                        continue
+                    seen.add(pid)
+
+                    name = item.get("name", "").strip()
+                    if not name:
+                        continue
+
+                    # Exclude filter
+                    name_lower = name.lower()
+                    if any(exc in name_lower for exc in EXCLUDE):
+                        continue
+
+                    # Price
+                    prices = item.get("prices", {})
+                    raw_price = prices.get("price", "0")
+                    minor_unit = prices.get("currency_minor_unit", 2)
                     try:
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), ssl=False) as resp:
-                            if resp.status == 503:
-                                log.info("[pokebeast] Strona w przebudowie (503)")
-                                return []
-                            if resp.status != 200:
-                                break
-                            html = await resp.text()
-                    except Exception as e:
-                        log.warning(f"[pokebeast] Fetch error: {e}")
-                        break
+                        price_val = int(raw_price) / (10 ** minor_unit)
+                        price = f"{price_val:.2f} zl"
+                    except (ValueError, TypeError):
+                        price = "brak"
 
-                    # Check for maintenance message
-                    if "przebudow" in html.lower() or "za kilka dni" in html.lower():
-                        log.info("[pokebeast] Strona w przebudowie")
-                        return []
+                    # Skip singles (<10 PLN)
+                    try:
+                        if price != "brak" and float(price.replace(" zl", "")) < 10:
+                            continue
+                    except ValueError:
+                        pass
 
-                    soup = BeautifulSoup(html, "lxml")
-                    tiles = soup.select("product-tile")
-                    if not tiles:
-                        break
-                    for tile in tiles:
-                        pid = tile.get("product-id")
-                        if not pid or pid in seen_ids:
-                            continue
-                        seen_ids.add(pid)
-                        name = tile.get("name", "")
-                        if not name or len(name) < 5:
-                            continue
-                        price_val = tile.get("price", "0")
-                        try:
-                            price = f"{float(price_val):.2f} zl" if price_val else "brak"
-                        except (ValueError, TypeError):
-                            price = "brak"
-                        href_el = tile.select_one("a[href]")
-                        href = href_el.get("href", "") if href_el else ""
-                        product_url = f"{BASE}{href}" if href.startswith("/") else href
-                        img_el = tile.select_one("img")
-                        image = ""
-                        if img_el:
-                            image = img_el.get("data-src") or img_el.get("src", "")
-                            if image and image.startswith("//"):
-                                image = "https:" + image
-                            elif image and image.startswith("/"):
-                                image = BASE + image
-                        txt = tile.get_text(" ", strip=True).lower()
-                        available = "koszyk" in txt or "dodaj" in txt
-                        products.append({
-                            "id": f"pokebeast_{pid}",
-                            "name": name,
-                            "price": price,
-                            "shop": "pokebeast",
-                            "url": product_url,
-                            "image": image,
-                            "stock": 1 if available else 0,
-                            "available": available,
-                        })
-                    # Check next page
-                    if not soup.select_one("a.pagination_next, link[rel='next']"):
-                        break
+                    # URL
+                    product_url = item.get("permalink", "")
+
+                    # Image
+                    images = item.get("images", [])
+                    image = images[0].get("src", "") if images else ""
+
+                    # Availability
+                    available = item.get("is_in_stock", False)
+
+                    products.append({
+                        "id": f"pokebeast_{pid}",
+                        "name": name,
+                        "price": price,
+                        "shop": "pokebeast",
+                        "url": product_url,
+                        "image": image,
+                        "stock": 1 if available else 0,
+                        "available": available,
+                    })
+
+                page += 1
+                if len(data) < 100:
+                    break
+
     except Exception as e:
         log.error(f"[pokebeast] Error: {e}")
+
+    # First snapshot sort: OOS first, available last
+    products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
     print(f"[pokebeast] {len(products)} produktow")
     return products
