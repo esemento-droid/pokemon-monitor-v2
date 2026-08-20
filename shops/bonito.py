@@ -65,7 +65,6 @@ JSON.stringify((function(){
 """
 
 
-SHOP_GROUP = "SLOW"  # Needs browser, don't put in FAST (blocks event loop)
 
 
 async def _scrape_with_page(page):

@@ -93,14 +93,23 @@ async def get_products():
         urls = [CAT_URL] + [f"{CAT_URL}/name_asc/{p}" for p in range(2, MAX_PAGES + 1)]
         proxy = "http://127.0.0.1:8888"
 
-        # Parallel fetch all pages
+        # Fetch with retry — proxy first, fallback direct
         async def fetch(url):
-            try:
-                async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=20)) as r:
-                    if r.status == 200:
-                        return await r.text()
-            except Exception:
-                pass
+            for attempt, px in enumerate([proxy, proxy, None]):
+                try:
+                    kwargs = {"timeout": aiohttp.ClientTimeout(total=20)}
+                    if px:
+                        kwargs["proxy"] = px
+                    async with session.get(url, **kwargs) as r:
+                        if r.status == 200:
+                            text = await r.text()
+                            if ".c-product-box" in text or len(text) > 5000:
+                                return text
+                        if attempt < 2:
+                            await asyncio.sleep(1)
+                except Exception:
+                    if attempt < 2:
+                        await asyncio.sleep(1)
             return None
 
         results = await asyncio.gather(*[fetch(u) for u in urls])

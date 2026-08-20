@@ -1,18 +1,17 @@
 """
-Scraper: wilczek.poznan.pl — direct aiohttp (no browser needed)
-Moved from NODRIVER to FAST (pure HTTP, no JS required)
+Scraper: wilczek.poznan.pl — uses cf_solver (patchright) for JS rendering
+Site is SPA — products load via JavaScript, plain HTTP returns empty page.
+Uses existing cf_solver browser (shared context pool) = no extra Chrome.
 """
 import re
-import asyncio
 import logging
-import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 SHOP = "wilczek"
 URL = "https://wilczek.poznan.pl/product/search?query=Pokemon+tcg+&filter=1"
 BASE = "https://wilczek.poznan.pl"
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 EXCLUDE = [
     "japonsk", "japanese", "korean", "chinsk", "chinese", "sleeves", "koszulk", "toploader",
@@ -28,7 +27,7 @@ EXCLUDE = [
 
 
 def _parse_html(html):
-    """Parse products from HTML."""
+    """Parse products from rendered HTML."""
     products = []
     soup = BeautifulSoup(html, "lxml")
     for item in soup.select(".product"):
@@ -74,19 +73,13 @@ def _parse_html(html):
 
 
 async def get_products():
-    """Main interface — pure aiohttp, no browser."""
-    headers = {"User-Agent": USER_AGENT}
-    proxy = "http://127.0.0.1:8888"
-    async with aiohttp.ClientSession(headers=headers) as session:
-        try:
-            async with session.get(URL, proxy=proxy, timeout=aiohttp.ClientTimeout(total=20)) as r:
-                if r.status != 200:
-                    logger.error(f"[wilczek] HTTP {r.status}")
-                    return []
-                html = await r.text()
-        except Exception as e:
-            logger.error(f"[wilczek] {e}")
-            return []
+    """Uses cf_solver to render JS page — no extra Chrome process."""
+    from cf_solver import solve
+
+    html = await solve(URL, timeout=30)
+    if not html:
+        logger.error("[wilczek] cf_solver returned None")
+        return []
 
     products = _parse_html(html)
     products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))

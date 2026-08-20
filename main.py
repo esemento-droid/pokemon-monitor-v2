@@ -50,12 +50,13 @@ SLOW_SHOPS = {
     "paladynat", "czytam", "kuzniakart", "sklepkleks",
     "battlestash", "tcg-zielona", "morigal",
     "eduksiazka", "dystryktzero", "gralnia", "xjoy", "mepel",
-    "maginarium", "monsteriada",
+    "maginarium", "monsteriada", "wilczek",
 }
 
 VERY_SLOW_SHOPS = {
     "efantasy", "twojekarty", "canislupus", "tcgtrener",
     "mangiusmoczejciotki", "vanaheim", "kartomaniak", "limango",
+    "bonito",
 }
 
 # All non-fast shops (go to SLOW process)
