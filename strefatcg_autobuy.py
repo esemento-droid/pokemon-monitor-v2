@@ -443,10 +443,8 @@ async def main():
     
     results = []
     
-    for i, account in enumerate(accounts_to_use):
-        if i < args.start - 1:
-            continue
-
+    async def _run_account(i, account):
+        """Run one account in parallel with its own browser."""
         email = account["email"]
         fp = _engine.get_fingerprint(i)
         proxy = _engine.get_proxy(email)
@@ -471,11 +469,9 @@ async def main():
                     try:
                         browser = await p.chromium.launch(**launch_args)
                     except Exception:
-                        results.append((account["name"], f"error: browser failed"))
-                        continue
+                        return (account["name"], f"error: browser failed")
                 else:
-                    results.append((account["name"], f"error: {e}"))
-                    continue
+                    return (account["name"], f"error: {e}")
 
             ctx = await browser.new_context(
                 user_agent=fp["user_agent"],
@@ -498,18 +494,17 @@ async def main():
                         all_urls.append(url)
                 
                 result = await run_for_account_batch(page, account, all_urls, test_mode=args.test)
-                results.append((account["name"], result))
+                return (account["name"], result)
             except Exception as e:
                 log.error(f"[{account['name']}] Exception: {e}")
-                results.append((account["name"], f"error: {e}"))
+                return (account["name"], f"error: {e}")
             finally:
                 await ctx.close()
                 await browser.close()
-            
-            if i < len(accounts_to_use) - 1:
-                delay = random.randint(12, 25)
-                log.info(f"Waiting {delay}s before next account (humanizer)...")
-                await asyncio.sleep(delay)
+
+    # PARALLEL: launch all accounts simultaneously (each has own browser + proxy)
+    tasks = [_run_account(i, acc) for i, acc in enumerate(accounts_to_use) if i >= args.start - 1]
+    results = list(await asyncio.gather(*tasks))
     
     # Summary
     log.info("\n=== SUMMARY ===")

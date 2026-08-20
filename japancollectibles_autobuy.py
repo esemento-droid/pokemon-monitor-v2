@@ -511,21 +511,22 @@ async def main():
             product_id = product_input
             product_url = f"{SHOP_URL}/-p{product_id}"  # Will redirect
 
-        for account in accounts_to_use:
+        # PARALLEL: all accounts buy simultaneously
+        async def _buy_for_account(account):
             if is_completed(product_id, account["email"]):
                 log.info(f"[{account['email']}] Product {product_id} already completed, skip")
-                continue
-
+                return (account["email"], product_id, None)
             success = await buy_product(account, product_url, product_id, qty=args.qty, dry_run=args.test)
-            results.append((account["email"], product_id, success))
-
             if success:
                 log.info(f"[{account['email']}] Product {product_id}: SUCCESS")
             else:
                 log.warning(f"[{account['email']}] Product {product_id}: FAILED")
+            return (account["email"], product_id, success)
 
-            # Small delay between accounts
-            await asyncio.sleep(2)
+        parallel_results = await asyncio.gather(*[_buy_for_account(acc) for acc in accounts_to_use])
+        for r in parallel_results:
+            if r[2] is not None:  # Skip already-completed (None)
+                results.append(r)
 
     # Summary
     ok = sum(1 for _, _, s in results if s)

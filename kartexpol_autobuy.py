@@ -650,31 +650,37 @@ async def main():
     results = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=False,
-            args=['--disable-blink-features=AutomationControlled', '--no-sandbox', f'--proxy-server={PROXY}']
-        )
+        # PARALLEL EXECUTION: each account gets its own browser context + proxy
+        # This runs all accounts simultaneously instead of sequentially
+        from proxy_router import get_playwright_proxy
 
-        for i, account in enumerate(accounts_to_use):
+        async def _run_account(account, idx):
+            """Run one account in its own context with dedicated proxy."""
+            proxy = get_playwright_proxy(SHOP_NAME, account["email"])
+            browser_args = ['--disable-blink-features=AutomationControlled', '--no-sandbox']
+            if proxy:
+                browser_args.append(f'--proxy-server={proxy["server"]}')
+            else:
+                browser_args.append(f'--proxy-server={PROXY}')
+
+            browser = await p.chromium.launch(headless=False, args=browser_args)
             ctx = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
             )
             page = await ctx.new_page()
-
             try:
                 result = await run_for_account_batch(page, account, product_urls, test_mode=args.test)
-                results.append((account["name"], result))
+                return (account["name"], result)
             except Exception as e:
                 log.error(f"[{account['name']}] Exception: {e}")
-                results.append((account["name"], f"error: {e}"))
+                return (account["name"], f"error: {e}")
             finally:
                 await ctx.close()
+                await browser.close()
 
-            # Small delay between accounts
-            if i < len(accounts_to_use) - 1:
-                await asyncio.sleep(2)
-
-        await browser.close()
+        # Launch all accounts in parallel
+        tasks = [_run_account(acc, i) for i, acc in enumerate(accounts_to_use)]
+        results = await asyncio.gather(*tasks)
 
     # Summary
     log.info("\n=== SUMMARY ===")
