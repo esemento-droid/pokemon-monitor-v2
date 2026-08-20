@@ -32,13 +32,21 @@ EXCLUDE = [
 ]
 
 
+PROXY = "http://127.0.0.1:8888"
+
+
 async def _fetch_page(session: aiohttp.ClientSession, url: str) -> str:
-    """Fetch page via direct aiohttp (no CF on this site)."""
+    """Fetch via mobile proxy (VPS IP is CF-banned on this site since ~2026-08-20)."""
     for attempt in range(2):
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+            async with session.get(url, proxy=PROXY, timeout=aiohttp.ClientTimeout(total=25)) as resp:
                 if resp.status == 200:
                     return await resp.text()
+                if resp.status == 403 and attempt == 0:
+                    # Fallback: try direct
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp2:
+                        if resp2.status == 200:
+                            return await resp2.text()
         except Exception:
             if attempt == 0:
                 await asyncio.sleep(2)

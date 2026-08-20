@@ -49,8 +49,9 @@ logger = logging.getLogger("monitor")
 
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
 MAX_CONCURRENT = 4  # Max simultaneous CF solves (1 tab each, all closed after)
-SOLVE_TIMEOUT = 45  # Max seconds to solve a challenge
-CF_WAIT_MAX = 20    # Max seconds to wait for CF challenge resolution
+SOLVE_TIMEOUT = 50  # Max seconds to solve a challenge
+CF_WAIT_MAX = 30    # Max seconds to wait for CF challenge resolution (was 20 — too short for Turnstile)
+CONTEXT_MAX_AGE = 600  # Recycle contexts every 10 min (fresh cookies/fingerprint)
 
 _browser = None
 _pw = None
@@ -59,6 +60,8 @@ _lock = asyncio.Lock()
 _started = False
 _contexts = []
 _context_idx = 0
+_context_created_at = []  # Timestamps for context recycling
+_consecutive_fails = 0    # Track global failures for auto-restart
 
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -66,7 +69,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 
 async def _ensure_browser():
     """Start patchright browser if not running, create context pool."""
-    global _browser, _pw, _semaphore, _started, _contexts
+    global _browser, _pw, _semaphore, _started, _contexts, _context_created_at
 
     if _started and _browser and _browser.is_connected():
         return
@@ -94,42 +97,72 @@ async def _ensure_browser():
 
         # Create persistent context pool (no per-request context churn)
         _contexts = []
+        _context_created_at = []
         for i in range(MAX_CONCURRENT):
             ctx = await _browser.new_context(user_agent=UA)
             _contexts.append(ctx)
+            _context_created_at.append(time.time())
             logger.info(f"[CF_SOLVER] Context pool[{i}] created")
 
         _started = True
         logger.info("[CF_SOLVER] Browser ready (patchright headless + proxy, pool=%d)", MAX_CONCURRENT)
 
 
+async def _maybe_recycle_context(idx):
+    """Recycle context if too old (stale cookies = CF remembers failed attempts)."""
+    global _contexts, _context_created_at
+    age = time.time() - _context_created_at[idx]
+    if age > CONTEXT_MAX_AGE:
+        try:
+            await _contexts[idx].close()
+        except Exception:
+            pass
+        _contexts[idx] = await _browser.new_context(user_agent=UA)
+        _context_created_at[idx] = time.time()
+        logger.info(f"[CF_SOLVER] Context[{idx}] recycled (age={int(age)}s)")
+
+
+async def _restart_browser():
+    """Full browser restart — nuclear option when all contexts are failing."""
+    global _browser, _pw, _started, _contexts, _context_created_at, _consecutive_fails
+    logger.warning("[CF_SOLVER] FULL RESTART — too many consecutive failures")
+    # Close everything
+    for ctx in _contexts:
+        try:
+            await ctx.close()
+        except Exception:
+            pass
+    _contexts = []
+    _context_created_at = []
+    if _browser:
+        try:
+            await _browser.close()
+        except Exception:
+            pass
+    if _pw:
+        try:
+            await _pw.stop()
+        except Exception:
+            pass
+    _started = False
+    _consecutive_fails = 0
+    # Re-create
+    await _ensure_browser()
+
+
 async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
     """
     Solve Cloudflare challenge and return page HTML.
     
-    Args:
-        url: URL to fetch (CF-protected)
-        timeout: Max seconds for entire solve
-        session_name: Optional (ignored, kept for FS API compat)
-    
-    Returns:
-        HTML string on success, None on failure.
-    
-    Behavior:
-        1. Acquire semaphore (max 2 concurrent)
-        2. Pick context from pool (round-robin)
-        3. Create fresh page in that context
-        4. Navigate to URL
-        5. Wait for CF challenge to resolve (max 20s)
-        6. Get page HTML
-        7. Close page (context stays alive!)
-        8. Release semaphore
-        
-    Context lives forever (no renderer churn). Page is lightweight.
+    Enhanced with:
+    - Turnstile iframe detection and waiting
+    - Context recycling (stale cookies → CF refuses)
+    - Auto browser restart after 20 consecutive failures
+    - Extended wait time (30s vs old 20s)
     """
     await _ensure_browser()
 
-    global _context_idx, _contexts
+    global _context_idx, _contexts, _consecutive_fails
 
     async with _semaphore:
         # Retry once on proxy failure (tunnel can have brief hiccups)
@@ -137,6 +170,9 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             page = None
             idx = _context_idx
             _context_idx = (_context_idx + 1) % len(_contexts)
+
+            # Recycle stale context (prevents cookie-based blocking)
+            await _maybe_recycle_context(idx)
             context = _contexts[idx]
 
             try:
@@ -146,22 +182,49 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
                 await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
 
                 # Wait for CF challenge to resolve
-                for _ in range(CF_WAIT_MAX):
+                resolved = False
+                for wait_sec in range(CF_WAIT_MAX):
                     title = await page.title()
-                    content_check = await page.evaluate("() => document.body ? document.body.innerText.substring(0, 100) : ''")
+                    content_check = await page.evaluate("() => document.body ? document.body.innerText.substring(0, 200) : ''")
 
                     # CF challenge indicators
-                    if any(x in (title or "").lower() for x in ["moment", "checking", "attention", "just a moment"]):
-                        await asyncio.sleep(1)
-                        continue
-                    if any(x in (content_check or "").lower() for x in ["verif", "checking", "please wait"]):
-                        await asyncio.sleep(1)
-                        continue
+                    title_lower = (title or "").lower()
+                    content_lower = (content_check or "").lower()
 
-                    # Challenge resolved!
-                    break
-                else:
+                    is_challenge = (
+                        any(x in title_lower for x in ["moment", "checking", "attention", "just a moment"]) or
+                        any(x in content_lower for x in ["verif", "checking your browser", "please wait", "enable javascript"])
+                    )
+
+                    if not is_challenge:
+                        resolved = True
+                        break
+
+                    # Try to find and click Turnstile checkbox (CF interactive challenge)
+                    if wait_sec == 3 or wait_sec == 8 or wait_sec == 15:
+                        try:
+                            # Turnstile lives in an iframe
+                            frames = page.frames
+                            for frame in frames:
+                                if "challenges.cloudflare.com" in (frame.url or ""):
+                                    # Try clicking the checkbox
+                                    checkbox = await frame.query_selector("input[type='checkbox'], .cb-i, #challenge-stage")
+                                    if checkbox:
+                                        await checkbox.click()
+                                        logger.info(f"[CF_SOLVER] Clicked Turnstile checkbox for {url[:40]}")
+                                        await asyncio.sleep(2)
+                                        break
+                        except Exception:
+                            pass  # Not all challenges have clickable element
+
+                    await asyncio.sleep(1)
+
+                if not resolved:
                     logger.warning(f"[CF_SOLVER] Challenge not resolved for {url[:60]} after {CF_WAIT_MAX}s")
+                    _consecutive_fails += 1
+                    # Auto-restart after 20 consecutive failures (all contexts are poisoned)
+                    if _consecutive_fails >= 20:
+                        asyncio.ensure_future(_restart_browser())
                     return None
 
                 # Get full HTML
@@ -169,12 +232,16 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
 
                 if not html or len(html) < 500:
                     logger.warning(f"[CF_SOLVER] Empty response for {url[:60]}")
+                    _consecutive_fails += 1
                     return None
 
+                # Success! Reset failure counter
+                _consecutive_fails = 0
                 return html
 
             except asyncio.TimeoutError:
                 logger.warning(f"[CF_SOLVER] Timeout {timeout}s for {url[:60]}")
+                _consecutive_fails += 1
                 return None
             except Exception as e:
                 err_str = str(e)
@@ -191,6 +258,7 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
                         continue
                     else:
                         logger.error(f"[CF_SOLVER] Proxy fail AGAIN for {url[:60]}")
+                        _consecutive_fails += 1
                         return None
 
                 logger.error(f"[CF_SOLVER] Error for {url[:60]}: {err_str[:80]}")
@@ -199,11 +267,13 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
                     logger.warning(f"[CF_SOLVER] Context[{idx}] crashed, recreating...")
                     try:
                         _contexts[idx] = await _browser.new_context(user_agent=UA)
+                        _context_created_at[idx] = time.time()
                         logger.info(f"[CF_SOLVER] Context[{idx}] recreated OK")
                     except Exception:
                         # Browser itself is dead, mark for full restart
                         global _started
                         _started = False
+                _consecutive_fails += 1
                 return None
             finally:
                 # Close PAGE only — context stays alive (no renderer churn)
@@ -244,7 +314,7 @@ async def solve_fs_compat(url, max_timeout=30000, session=None):
 
 async def close():
     """Shutdown browser and context pool."""
-    global _browser, _pw, _started, _contexts
+    global _browser, _pw, _started, _contexts, _context_created_at, _consecutive_fails
     # Close all pooled contexts
     for ctx in _contexts:
         try:
@@ -252,6 +322,8 @@ async def close():
         except Exception:
             pass
     _contexts = []
+    _context_created_at = []
+    _consecutive_fails = 0
     if _browser:
         try:
             await _browser.close()
