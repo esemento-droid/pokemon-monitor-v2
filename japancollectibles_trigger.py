@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 BASE_DIR = Path("/opt/pokemon-monitor-v2")
 COMPLETED_FILE = BASE_DIR / "japancollectibles_completed.json"
-BOT_PATH = BASE_DIR / "japancollectibles_autobuy.py"
+BOT_PATH = BASE_DIR / "japancollectibles_torpedo.py"
 
 # Keywords for 30th anniversary products
 # Specific product IDs to watch
@@ -117,9 +117,9 @@ def check_japancollectibles_trigger(event_type, product):
     except Exception as e:
         log.warning(f"[JC-TRIGGER] Discord notify failed: {e}")
 
-    # Launch bot as subprocess
+    # Launch TORPEDO (instant HTTP, <2s) instead of browser bot
     if not BOT_PATH.exists():
-        log.error(f"[JC-TRIGGER] Bot not found: {BOT_PATH}")
+        log.error(f"[JC-TRIGGER] Torpedo not found: {BOT_PATH}")
         return
 
     # Build product URL
@@ -129,13 +129,13 @@ def check_japancollectibles_trigger(event_type, product):
     cmd = [
         str(BASE_DIR / "venv" / "bin" / "python3"),
         str(BOT_PATH),
+        "fire",
+        "--product-id", str(product_id),
+        "--url", url,
         "--accounts", "4",
-        "--qty", "1",
-        url,
     ]
 
     env = os.environ.copy()
-    env["DISPLAY"] = ":99"
 
     log.info(f"[JC-TRIGGER] Launching bot for: {name} ({product_id})")
     try:
