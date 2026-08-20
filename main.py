@@ -122,6 +122,10 @@ async def shop_worker(name, module, logger, process_type):
     else:
         await asyncio.sleep(random.uniform(0, 30))
 
+    import time as _time
+    _worker_start = _time.time()
+    GRACE_PERIOD = 180  # 3 min grace: don't count errors toward cooldown
+
     stats = {"ok": 0, "err": 0, "consecutive_err": 0, "turbo": False, "cooldown_until": 0}
     _shutdown = False
 
@@ -129,7 +133,6 @@ async def shop_worker(name, module, logger, process_type):
         scan_time = 0.0
 
         # === ERROR RECOVERY: Cooldown check ===
-        import time as _time
         if stats.get("cooldown_until", 0) > _time.time():
             remaining = int(stats["cooldown_until"] - _time.time())
             if remaining % 300 == 0:  # Log every 5 min during cooldown
@@ -187,15 +190,19 @@ async def shop_worker(name, module, logger, process_type):
                 stats["consecutive_err"] = stats.get("consecutive_err", 0) + 1
 
                 # === ERROR RECOVERY: Progressive cooldown ===
+                # Grace period: first 3 min after start, don't trigger cooldown
+                # (allows CF Bridge warmup and network stabilization after restart)
+                in_grace = (_time.time() - _worker_start) < GRACE_PERIOD
                 consec = stats["consecutive_err"]
-                if consec >= 20:
-                    # 20+ errors: cooldown 30 min
-                    stats["cooldown_until"] = _time.time() + 1800
-                    logger.warning(f"[{name}] 20 consecutive errors! Cooldown 30min")
-                elif consec >= 10:
-                    # 10+ errors: cooldown 10 min
-                    stats["cooldown_until"] = _time.time() + 600
-                    logger.warning(f"[{name}] 10 consecutive errors! Cooldown 10min")
+                if not in_grace:
+                    if consec >= 20:
+                        # 20+ errors: cooldown 30 min
+                        stats["cooldown_until"] = _time.time() + 1800
+                        logger.warning(f"[{name}] 20 consecutive errors! Cooldown 30min")
+                    elif consec >= 10:
+                        # 10+ errors: cooldown 10 min
+                        stats["cooldown_until"] = _time.time() + 600
+                        logger.warning(f"[{name}] 10 consecutive errors! Cooldown 10min")
 
                 await asyncio.sleep(_get_delay(name, stats, error=True))
                 continue
@@ -351,6 +358,14 @@ async def _async_process(process_name, shop_names_modules):
             from cf_bridge import start_bridge
             await start_bridge()
             logger.info(f"[{process_name}] CF Bridge started on :8191 (FlareSolverr replacement)")
+            # Warmup: trigger cf_solver browser pool initialization BEFORE shops start
+            try:
+                from cf_solver import _ensure_browser
+                logger.info(f"[{process_name}] Warming up CF solver browser pool...")
+                await asyncio.wait_for(_ensure_browser(), timeout=60)
+                logger.info(f"[{process_name}] CF solver browser pool READY")
+            except Exception as we:
+                logger.warning(f"[{process_name}] CF solver warmup failed: {we} — shops will trigger on first use")
         except Exception as e:
             logger.warning(f"[{process_name}] CF Bridge failed to start: {e} — shops will use Docker FS as fallback")
 

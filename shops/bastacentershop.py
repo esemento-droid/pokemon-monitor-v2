@@ -1,3 +1,5 @@
+SHOP_DISABLED = True  # 2026-08-20: category empty ("nie ma produktów"). Re-enable when shop restocks.
+
 import aiohttp
 from bs4 import BeautifulSoup
 import asyncio
