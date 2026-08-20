@@ -1,14 +1,8 @@
-1. Login: 11.3s
-2. ATC stage product 7437: 16.6s
-3. Checkout STAGED on /order: 31.0s
-   State before swap: {"csrf": "ad3504d4dd11c71...", "btn_disabled": false, "radios": ["payment=21", "shipment=6512b"], "price": "95,00 zł"}
-4. API cart swap: {"cleared": 1, "atc_status": 200, "added": true, "price": "80,00 zł", "swap_time_ms": 1787221050616} (0.97s)
-5. Button after swap: {"exists": true, "disabled": false, "text": "Zamawiam i p\u0142ac\u0119"}
-6. SUBMIT: URL=https://pay.autopay.eu/web/sky_shop/start/232d9a5c77e64f4dba7aa53a8f48 | fire_time=5.91s | success=True
-
-=== BONUS: Stock poll speed (product 9419) ===
-   5 polls: ['0.418s', '0.193s', '0.033s', '0.037s', '0.024s']
-   Average: 0.141s per poll
-   Product 9419 availability: {"hasCart": false, "hasOOS": false, "status": 403}
-
-TOTAL: 38.7s
+2026-08-20 12:21:57,862 [JC-TORPEDO] [DAEMON] Browser started (patchright stealth + proxy)
+2026-08-20 12:22:06,996 [JC-TORPEDO] [t11008543@gmail.com] Logged in ✓
+2026-08-20 12:22:32,226 [JC-TORPEDO] [t11008543@gmail.com] ✅ STAGED (radios=['payment=21', 'shipment=6512b'])
+2026-08-20 12:22:35,229 [JC-TORPEDO] [DAEMON] 1/1 accounts staged and ready 🚀
+2026-08-20 12:22:35,229 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7589 (1 accounts) ===
+2026-08-20 12:22:37,099 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (80,00 zł) (1.87s)
+2026-08-20 12:22:43,695 [JC-TORPEDO] [t11008543@gmail.com] ✅ ORDER in 8.47s! → https://e.blik.com/blik_web/index.html
+2026-08-20 12:22:43,696 [JC-TORPEDO] === TORPEDO DONE: 1/1 in 8.47s ===
