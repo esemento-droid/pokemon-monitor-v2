@@ -76,9 +76,10 @@ def _parse_html(html):
 async def get_products():
     """Main interface — pure aiohttp, no browser."""
     headers = {"User-Agent": USER_AGENT}
+    proxy = "http://127.0.0.1:8888"
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            async with session.get(URL, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            async with session.get(URL, proxy=proxy, timeout=aiohttp.ClientTimeout(total=20)) as r:
                 if r.status != 200:
                     logger.error(f"[wilczek] HTTP {r.status}")
                     return []

@@ -91,11 +91,12 @@ async def get_products():
     async with aiohttp.ClientSession(headers=headers) as session:
         pages_html = []
         urls = [CAT_URL] + [f"{CAT_URL}/name_asc/{p}" for p in range(2, MAX_PAGES + 1)]
+        proxy = "http://127.0.0.1:8888"
 
         # Parallel fetch all pages
         async def fetch(url):
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as r:
+                async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=20)) as r:
                     if r.status == 200:
                         return await r.text()
             except Exception:

@@ -73,12 +73,13 @@ def _parse_html(pages_html):
 
 
 async def get_products():
-    """Main interface — pure aiohttp, parallel page fetch."""
+    """Main interface — pure aiohttp, parallel page fetch, via mobile proxy."""
     headers = {"User-Agent": USER_AGENT}
+    proxy = "http://127.0.0.1:8888"
 
     async with aiohttp.ClientSession(headers=headers) as session:
         # Fetch first page to detect pagination
-        async with session.get(CAT_URL, timeout=aiohttp.ClientTimeout(total=20)) as r:
+        async with session.get(CAT_URL, proxy=proxy, timeout=aiohttp.ClientTimeout(total=20)) as r:
             if r.status != 200:
                 logger.error(f"[dragonus] HTTP {r.status}")
                 return []
@@ -94,7 +95,7 @@ async def get_products():
         # Parallel fetch remaining pages
         async def fetch(url):
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                     if resp.status == 200:
                         return await resp.text()
             except Exception:
