@@ -5,6 +5,8 @@ SHOP = "smyk.com"
 URLS = [
     "https://www.smyk.com/pl/pl/search?q=Pokemon%20tcg",
     "https://www.smyk.com/pl/pl/search?q=Pokemon",
+    "https://www.smyk.com/pl/pl/search?q=Pokemon+Scarlet+Violet",
+    "https://www.smyk.com/pl/pl/search?q=Pokemon+booster",
 ]
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36",

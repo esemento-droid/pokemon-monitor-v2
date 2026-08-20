@@ -39,7 +39,7 @@ EXCLUDE_KW = [
     "terastal gathering", "battle partners",
     "paradigm trigger", "talia",
 ]
-MAX_PAGES = 5
+MAX_PAGES = 3
 
 EXTRACT_JS = """
 JSON.stringify((function(){
@@ -78,7 +78,7 @@ async def scan_with_page(page):
 
     # First URL — navigate + wait for CF to resolve
     await page.goto(SEARCH_URLS[0], wait_until="domcontentloaded", timeout=45000)
-    await asyncio.sleep(12)
+    await asyncio.sleep(8)
 
     # Check CF resolution
     title = await page.title()
@@ -100,7 +100,7 @@ async def scan_with_page(page):
 
             if search_url != SEARCH_URLS[0] or pg > 1:
                 await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(6)
+                await asyncio.sleep(3)
 
             raw = await page.evaluate(EXTRACT_JS)
             if not raw:
