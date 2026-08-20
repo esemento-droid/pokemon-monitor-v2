@@ -203,6 +203,21 @@ class TorpedoDaemon:
 
             log.info(f"[{email}] Cart hydrated ({time.time()-t0:.1f}s)")
 
+            # === DEBUG: save full page HTML for analysis ===
+            html_content = await page.content()
+            debug_path = Path(f"/tmp/jc_torpedo_cart_dump.html")
+            debug_path.write_text(html_content)
+            log.info(f"[{email}] Cart HTML dumped to {debug_path} ({len(html_content)} bytes)")
+            
+            # Also dump what Angular state looks like
+            ang_state = await page.evaluate("""() => {
+                const btn = document.querySelector('button[data-ng-click="order()"]');
+                const btnInfo = btn ? {text: btn.textContent.trim(), disabled: btn.disabled, visible: btn.offsetParent !== null, ngDisabled: btn.getAttribute('data-ng-disabled')} : 'NOT_FOUND';
+                const cartText = document.querySelector('.cart')?.innerText?.substring(0, 500) || 'no .cart';
+                return {orderBtn: btnInfo, cartSnippet: cartText};
+            }""")
+            log.info(f"[{email}] Angular state: {json.dumps(ang_state, ensure_ascii=False, default=str)}")
+
             # === STEP 2: Navigate to /order directly (POST via goto, Angular handles it) ===
             # Sky-Shop: /order page renders checkout IF cart has items
             # Bypass "Przejdź do kasy" button — go directly
