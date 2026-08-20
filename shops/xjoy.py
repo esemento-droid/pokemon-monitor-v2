@@ -12,6 +12,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "xjoy"
+SCAN_TIMEOUT = 180  # Extended: CF solver needs 55s+ for Turnstile on this site
 BASE = "https://www.xjoy.pl"
 CATEGORY_URL = f"{BASE}/278-pokemon-tcg"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
@@ -91,7 +92,7 @@ async def get_products() -> list[dict]:
     payload = {
         "cmd": "request.get",
         "url": CATEGORY_URL,
-        "maxTimeout": 30000,
+        "maxTimeout": 60000,
     }
 
     try:
@@ -99,7 +100,7 @@ async def get_products() -> list[dict]:
             async with session.post(
                 f"{FLARESOLVERR_URL}",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=45),
+                timeout=aiohttp.ClientTimeout(total=70),
             ) as resp:
                 data = await resp.json()
 
@@ -139,14 +140,14 @@ async def get_products() -> list[dict]:
         page_payload = {
             "cmd": "request.get",
             "url": f"{CATEGORY_URL}?page={page}",
-            "maxTimeout": 30000,
+            "maxTimeout": 60000,
         }
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{FLARESOLVERR_URL}",
                     json=page_payload,
-                    timeout=aiohttp.ClientTimeout(total=45),
+                    timeout=aiohttp.ClientTimeout(total=70),
                 ) as resp:
                     page_data = await resp.json()
             if page_data.get("status") == "ok":

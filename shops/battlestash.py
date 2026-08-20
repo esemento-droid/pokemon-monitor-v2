@@ -10,6 +10,7 @@ import json
 import html as html_lib
 
 SHOP = "battlestash.pl"
+SCAN_TIMEOUT = 180  # Extended: CF solver needs 55s+ for Turnstile
 API_URL = "https://battlestash.pl/wp-json/wc/store/v1/products"
 CATEGORY_ID = 712
 PER_PAGE = 100
@@ -34,10 +35,10 @@ async def fetch_flaresolverr(url):
     """Fetch URL via FlareSolverr to bypass Cloudflare."""
     try:
         async with aiohttp.ClientSession() as session:
-            payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
+            payload = {"cmd": "request.get", "url": url, "maxTimeout": 60000}
             async with session.post(
                 FLARESOLVERR_URL, json=payload,
-                timeout=aiohttp.ClientTimeout(total=45),
+                timeout=aiohttp.ClientTimeout(total=70),
             ) as resp:
                 if resp.status != 200:
                     return ""
