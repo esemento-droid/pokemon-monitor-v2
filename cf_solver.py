@@ -24,7 +24,7 @@ import time
 logger = logging.getLogger("monitor")
 
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
-MAX_CONCURRENT = 4   # Max simultaneous CF solves (shared across both browsers)
+MAX_CONCURRENT = 6   # Max simultaneous CF solves (shared across both browsers)
 SOLVE_TIMEOUT = 55   # Max seconds for entire solve
 CF_WAIT_MAX = 40     # Max seconds to wait for CF challenge (was 30, CF docs say 60s)
 TURNSTILE_CLICK_AT = [2, 5, 8, 12, 18, 25, 32]  # Seconds at which to attempt click
@@ -348,6 +348,11 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             if html:
                 _consecutive_fails = 0
                 return html
+
+            # Don't try fallback for HARD_SHOPS — they block semaphore too long
+            # and consistently fail on both paths. Let them retry next cycle.
+            if shop in HARD_SHOPS:
+                break
 
         # Both paths failed
         _consecutive_fails += 1
