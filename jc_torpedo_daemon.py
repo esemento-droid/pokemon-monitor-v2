@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """
-JC Torpedo Daemon — FINAL VERSION
+JC Torpedo Daemon — FINAL VERSION with SELF-POLLING
 
-Architecture (proven in tests):
+Architecture:
   - 1 patchright browser, 4 contexts (separate sessions per account)
   - Each account pre-staged on /order (BLIK + Kurier Inpost + checkboxes)
+  - SELF-POLLS target products every 2-3s (faster than scraper!)
+  - On restock detected: API cart swap + click submit = ~2s
   - Heartbeat every 5 min (keep session alive)
-  - Full re-stage every 30 min (fresh csrf, fresh state)
-  - On trigger: API cart swap + click submit = ~2s
+  - Full re-stage every 30 min (fresh csrf)
+
+Self-polling:
+  - Tries ATC on target product every 2-3s (from account #1 page)
+  - If ATC returns 200 → product available → FIRE ALL ACCOUNTS
+  - If ATC returns 400 (OOS) → continue polling
+  - No separate API endpoint needed — ATC itself is the stock check
+
+Total time from restock to order: ~1.5s (ATC already done in poll + submit)
 
 Trigger:
-  - File: echo "PRODUCT_ID PRODUCT_URL" > /tmp/jc_torpedo_fire.txt
-  - Or: --fire PID --url URL (one-shot mode)
+  - Self-poll (primary — fastest)
+  - File: echo "PRODUCT_ID" > /tmp/jc_torpedo_fire.txt (backup from scraper)
+  - CLI: --fire PID (manual)
 
 Usage:
-  DISPLAY=:99 ./venv/bin/python3 jc_torpedo_daemon.py --daemon
-  DISPLAY=:99 ./venv/bin/python3 jc_torpedo_daemon.py --fire 9419 --url "https://japancollectibles.shop/Pokemon-TCG-Pakiet-Celebracyjny-na-30-lecie-p9419"
+  DISPLAY=:99 ./venv/bin/python3 jc_torpedo_daemon.py --daemon --watch 9419
   DISPLAY=:99 ./venv/bin/python3 jc_torpedo_daemon.py --test --fire 7437
 """
 import asyncio
@@ -62,11 +71,13 @@ STAGE_URL = f"{SHOP_URL}/Pokemon-TCG-Angielski-Mega-Heroes-Mini-Tin-p{STAGE_PID}
 
 HEARTBEAT_INTERVAL = 300  # 5 min
 RESTAGE_INTERVAL = 1800   # 30 min
+POLL_INTERVAL = 2.5       # seconds between stock polls
 
 
 class TorpedoDaemon:
-    def __init__(self, accounts):
+    def __init__(self, accounts, watch_pids=None):
         self.accounts = accounts
+        self.watch_pids = watch_pids or []  # Product IDs to poll for restocks
         self.browser = None
         self._pw = None
         # Per-account state
@@ -75,6 +86,7 @@ class TorpedoDaemon:
         self.staged = {}     # email -> True if checkout is staged
         self.last_heartbeat = {}
         self.last_stage = {}
+        self._fired_pids = set()  # Already fired (don't double-fire)
 
     # ==============================================================
     # STARTUP
@@ -295,6 +307,7 @@ class TorpedoDaemon:
         """
         HOT PATH — target <2s:
         1. API: clear cart + ATC target product (0.5-1s)
+           (skip if product already in cart from poll)
         2. Click "Zamawiam i płacę" (1s)
         """
         page = self.pages.get(email)
@@ -307,13 +320,20 @@ class TorpedoDaemon:
                 const cartId = document.cookie.match(/sky2_cart_id=([^;]+)/)?.[1];
                 if (!cartId) return {{error: 'no_cart_id'}};
 
-                // Clear cart
+                // Check if target product already in cart (from poll ATC)
                 const cartResp = await fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/' + cartId, {{
                     headers: {{'Accept':'application/json','currency':'PLN','lang':'pl'}}
                 }});
                 const cartData = await cartResp.json();
                 const items = cartData.cart?.items || [];
+                const hasTarget = items.some(i => i.product?.id === {product_id});
                 
+                if (hasTarget && items.length === 1) {{
+                    // Already have ONLY target product (from poll) — skip swap
+                    return {{ok: true, skipped: true, price: items[0].priceSummary?.final?.grossDisplay}};
+                }}
+
+                // Clear all items
                 await Promise.all(items.map(item =>
                     fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/' + cartId + '/items/' + item.id, {{
                         method: 'DELETE',
@@ -330,7 +350,7 @@ class TorpedoDaemon:
                 const atcData = await atcResp.json();
                 
                 if (atcData.addedCartItem) {{
-                    return {{ok: true, price: atcData.addedCartItem.priceSummary?.final?.grossDisplay}};
+                    return {{ok: true, skipped: false, price: atcData.addedCartItem.priceSummary?.final?.grossDisplay}};
                 }} else {{
                     return {{ok: false, error: atcData.message || atcData.errorCode || 'unknown'}};
                 }}
@@ -340,7 +360,8 @@ class TorpedoDaemon:
                 log.error(f"[{email}] ATC failed: {swap_result.get('error')}")
                 return False
 
-            log.info(f"[{email}] ATC OK ({swap_result.get('price')}) ({time.time()-t0:.2f}s)")
+            skipped = swap_result.get("skipped", False)
+            log.info(f"[{email}] ATC {'(from poll)' if skipped else 'OK'} ({swap_result.get('price')}) ({time.time()-t0:.2f}s)")
 
             # === CLICK SUBMIT ===
             await page.click("button[name='finish']", force=True)
@@ -399,30 +420,120 @@ class TorpedoDaemon:
                 await asyncio.sleep(3)
 
     # ==============================================================
+    # STOCK POLLING (self-monitoring, faster than scraper)
+    # ==============================================================
+
+    async def _poll_stock(self):
+        """
+        Poll target products via ATC attempt.
+        If ATC returns 200 → product available → FIRE!
+        If ATC returns 400 (ERROR_PRODUCT_OUT_OF_STOCK) → still OOS, continue.
+        Uses first staged account's page for fetch().
+        """
+        if not self.watch_pids:
+            return
+
+        # Use first staged account for polling
+        poll_email = next((e for e, ok in self.staged.items() if ok), None)
+        if not poll_email:
+            return
+
+        page = self.pages.get(poll_email)
+        if not page:
+            return
+
+        for pid in self.watch_pids:
+            if pid in self._fired_pids:
+                continue
+
+            try:
+                result = await page.evaluate(f"""async () => {{
+                    const cartId = document.cookie.match(/sky2_cart_id=([^;]+)/)?.[1];
+                    if (!cartId) return {{error: 'no_cart_id'}};
+                    
+                    // Clear cart first (remove stage product)
+                    const cartResp = await fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/' + cartId, {{
+                        headers: {{'Accept':'application/json','currency':'PLN','lang':'pl'}}
+                    }});
+                    const cartData = await cartResp.json();
+                    const items = cartData.cart?.items || [];
+                    await Promise.all(items.map(item =>
+                        fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/' + cartId + '/items/' + item.id, {{
+                            method: 'DELETE', headers: {{'Accept':'application/json','currency':'PLN','lang':'pl'}}
+                        }})
+                    ));
+                    
+                    // Try ATC target product
+                    const resp = await fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/' + cartId + '/items', {{
+                        method: 'POST',
+                        headers: {{'Content-Type':'application/json','Accept':'application/json','currency':'PLN','lang':'pl'}},
+                        body: JSON.stringify({{productId: {pid}, quantity: 1, parameters: []}})
+                    }});
+                    const data = await resp.json();
+                    
+                    if (data.addedCartItem) {{
+                        return {{available: true, price: data.addedCartItem.priceSummary?.final?.grossDisplay}};
+                    }} else {{
+                        // OOS — re-add stage product to keep checkout valid
+                        await fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/' + cartId + '/items', {{
+                            method: 'POST',
+                            headers: {{'Content-Type':'application/json','Accept':'application/json','currency':'PLN','lang':'pl'}},
+                            body: JSON.stringify({{productId: {STAGE_PID}, quantity: 1, parameters: []}})
+                        }});
+                        return {{available: false, error: data.errorCode || data.message || 'unknown'}};
+                    }}
+                }}""")
+
+                if result.get("available"):
+                    # RESTOCK DETECTED! Product is available!
+                    log.info(f"[POLL] 🔥 RESTOCK DETECTED: product {pid} ({result.get('price')})!")
+                    self._fired_pids.add(pid)
+
+                    # Product is ALREADY in poll account's cart from the ATC check.
+                    # For this account: just click submit (0s ATC — already done!)
+                    # For other accounts: need cart swap (1s)
+
+                    # Fire all accounts
+                    await self.fire(str(pid))
+                    return  # Don't poll other products, focus on fire
+
+            except Exception as e:
+                log.warning(f"[POLL] Error polling {pid}: {e}")
+
+    # ==============================================================
     # DAEMON LOOP
     # ==============================================================
 
     async def run(self):
-        """Main daemon loop: watch trigger + maintenance."""
-        log.info("[DAEMON] Running. Watching /tmp/jc_torpedo_fire.txt")
+        """Main daemon loop: self-poll + watch trigger file + maintenance."""
+        log.info(f"[DAEMON] Running. Watching products: {self.watch_pids}")
+        log.info(f"[DAEMON] Poll interval: {POLL_INTERVAL}s | Also watching /tmp/jc_torpedo_fire.txt")
         last_maintenance = 0
+        last_poll = 0
 
         while True:
-            # Check trigger
+            now = time.time()
+
+            # Stock polling (primary trigger — fastest)
+            if self.watch_pids and (now - last_poll) >= POLL_INTERVAL:
+                await self._poll_stock()
+                last_poll = time.time()
+
+            # Check trigger file (backup trigger from scraper)
             if FIRE_FILE.exists():
                 try:
                     content = FIRE_FILE.read_text().strip()
                     FIRE_FILE.unlink()
                     parts = content.split(" ", 1)
                     product_id = parts[0]
-                    product_url = parts[1] if len(parts) > 1 else ""
-                    if product_id:
-                        await self.fire(product_id, product_url)
+                    if product_id and product_id not in self._fired_pids:
+                        log.info(f"[DAEMON] Trigger file: product {product_id}")
+                        await self.fire(product_id)
+                        self._fired_pids.add(product_id)
                 except Exception as e:
                     log.error(f"[DAEMON] Fire error: {e}")
 
             # Maintenance every 60s
-            now = time.time()
             if now - last_maintenance > 60:
                 await self.maintenance()
                 last_maintenance = now
@@ -472,16 +583,18 @@ async def main():
     parser.add_argument("--fire", "-f", help="Product ID to buy NOW")
     parser.add_argument("--url", "-u", default="", help="Product URL")
     parser.add_argument("--test", action="store_true", help="Use test account (Marian)")
-    parser.add_argument("--daemon", action="store_true", help="Run as daemon (watch trigger file)")
+    parser.add_argument("--daemon", action="store_true", help="Run as daemon (poll + watch trigger)")
+    parser.add_argument("--watch", "-w", nargs="+", help="Product IDs to poll for restocks (daemon mode)")
     args = parser.parse_args()
 
     accounts = [TEST_ACCOUNT] if args.test else ACCOUNTS
-    daemon = TorpedoDaemon(accounts)
+    watch_pids = [int(p) for p in args.watch] if args.watch else []
+    daemon = TorpedoDaemon(accounts, watch_pids=watch_pids)
 
     await daemon.start()
 
     if args.fire:
-        await daemon.fire(args.fire, args.url)
+        await daemon.fire(args.fire)
         await daemon.browser.close()
     elif args.daemon:
         try:
@@ -492,12 +605,12 @@ async def main():
             await daemon.browser.close()
     else:
         print("Usage:")
-        print("  --daemon              Run forever, watch /tmp/jc_torpedo_fire.txt")
-        print("  --fire PID            Buy product NOW (one-shot)")
-        print("  --fire PID --test     Buy on test account")
+        print("  --daemon --watch 9419          Poll product 9419, fire on restock")
+        print("  --daemon --watch 9419 9420     Poll multiple products")
+        print("  --fire 9419                    Buy product NOW (one-shot)")
+        print("  --fire 7437 --test             Buy on test account")
         print("")
-        print("Trigger (from japancollectibles_trigger.py):")
-        print("  echo '9419 https://japancollectibles.shop/...' > /tmp/jc_torpedo_fire.txt")
+        print("Daemon self-polls every 2.5s. Also watches /tmp/jc_torpedo_fire.txt")
         await daemon.browser.close()
 
 
