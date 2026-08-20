@@ -1,19 +1,21 @@
 """
-Scraper: monsteriada.pl (PrestaShop + Cloudflare)
+Scraper: monsteriada.pl (PrestaShop — NO Cloudflare, direct aiohttp)
 Kategoria: /93-pokemon-tcg-karty-kolekjonerskie
-Pagination: ?page=N (4 pages). FlareSolverr.
-Category: SLOW (FlareSolverr)
+Pagination: ?page=N (up to 8 pages, parallel fetch)
+Category: SLOW (many pages, sequential for politeness)
 """
 
 import asyncio
+import re
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "monsteriada"
+MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
 BASE = "https://monsteriada.pl"
 CATEGORY_URL = f"{BASE}/93-pokemon-tcg-karty-kolekjonerskie"
-FLARESOLVERR_URL = "http://localhost:8191/v1"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
 MAX_PAGES = 8
 
 EXCLUDE = [
@@ -30,15 +32,16 @@ EXCLUDE = [
 ]
 
 
-async def _fetch_flare(session: aiohttp.ClientSession, url: str) -> str:
-    payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
-    try:
-        async with session.post(FLARESOLVERR_URL, json=payload, timeout=aiohttp.ClientTimeout(total=45)) as resp:
-            data = await resp.json()
-        if data.get("status") == "ok":
-            return data.get("solution", {}).get("response", "")
-    except Exception:
-        pass
+async def _fetch_page(session: aiohttp.ClientSession, url: str) -> str:
+    """Fetch page via direct aiohttp (no CF on this site)."""
+    for attempt in range(2):
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                if resp.status == 200:
+                    return await resp.text()
+        except Exception:
+            if attempt == 0:
+                await asyncio.sleep(2)
     return ""
 
 
@@ -101,9 +104,9 @@ async def get_products() -> list[dict]:
     products = []
     seen: set = set()
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
         # Page 1
-        html1 = await _fetch_flare(session, CATEGORY_URL)
+        html1 = await _fetch_page(session, CATEGORY_URL)
         if not html1:
             print(f"[MONSTERIADA] blad pobierania")
             return []
@@ -126,13 +129,13 @@ async def get_products() -> list[dict]:
         max_page = max(page_nums) if page_nums else 1
         max_page = min(max_page, MAX_PAGES)
 
-        # Fetch remaining pages sequentially (FlareSolverr = 1 req at a time)
-        for page in range(2, max_page + 1):
-            html = await _fetch_flare(session, f"{CATEGORY_URL}?page={page}")
-            if html:
-                new = _parse_page(html, seen)
-                if new:
-                    products.extend(new)
+        # Fetch remaining pages in parallel (no CF = safe to parallel)
+        if max_page > 1:
+            tasks = [_fetch_page(session, f"{CATEGORY_URL}?page={p}") for p in range(2, max_page + 1)]
+            pages = await asyncio.gather(*tasks)
+            for html in pages:
+                if html:
+                    products.extend(_parse_page(html, seen))
 
     print(f"[MONSTERIADA] {len(products)} produktow")
     return products
