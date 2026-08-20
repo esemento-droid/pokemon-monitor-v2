@@ -68,7 +68,7 @@ async def torpedo_buy(account, product_id, product_url=""):
     t0 = time.time()
     log.info(f"[{email}] TORPEDO START product={product_id}")
 
-    # === PHASE 1: HTTP — Login + ATC (fastest possible) ===
+    # === PHASE 1: HTTP — Login only (get session cookie) ===
     connector = aiohttp.TCPConnector(ssl=False)
     jar = aiohttp.CookieJar(unsafe=True)
     cookies_for_pw = []
@@ -97,23 +97,6 @@ async def torpedo_buy(account, product_id, product_url=""):
             log.error(f"[{email}] Login error: {e}")
             return False
 
-        # ATC via HTTP
-        try:
-            r = await session.get(
-                f"{SHOP_URL}/cart/add/{product_id}",
-                proxy=PROXY_HTTP,
-                timeout=aiohttp.ClientTimeout(total=8),
-                allow_redirects=True,
-            )
-            if r.status == 200:
-                log.info(f"[{email}] ATC OK ({time.time()-t0:.2f}s)")
-            else:
-                log.error(f"[{email}] ATC HTTP {r.status}")
-                return False
-        except Exception as e:
-            log.error(f"[{email}] ATC error: {e}")
-            return False
-
         # Extract cookies for Playwright
         for cookie in jar:
             cookies_for_pw.append({
@@ -123,7 +106,7 @@ async def torpedo_buy(account, product_id, product_url=""):
                 "path": "/",
             })
 
-    # === PHASE 2: Playwright — checkout (with session from HTTP) ===
+    # === PHASE 2: Playwright — ATC + checkout (with login session) ===
     from patchright.async_api import async_playwright
 
     async with async_playwright() as p:
@@ -136,14 +119,15 @@ async def torpedo_buy(account, product_id, product_url=""):
             viewport={"width": 1280, "height": 900},
             user_agent=UA,
         )
-        # Inject session cookies
+        # Inject login session cookies
         await context.add_cookies(cookies_for_pw)
         page = await context.new_page()
 
         try:
-            # Go directly to cart (we're already logged in + product in cart)
-            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
-            await page.wait_for_timeout(3000)  # Angular hydration
+            # ATC via browser navigation (same session = cart persists)
+            await page.goto(f"{SHOP_URL}/cart/add/{product_id}", wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(2000)
+            log.info(f"[{email}] ATC via browser ({time.time()-t0:.2f}s)")
 
             # Remove overlays
             await page.evaluate("""() => {
@@ -153,6 +137,8 @@ async def torpedo_buy(account, product_id, product_url=""):
                 document.querySelector('.skyshop-alert-conditional-access')?.remove();
             }""")
 
+            # We're now on /cart/ with product added. Wait for Angular to render cart.
+            await page.wait_for_timeout(3000)
             log.info(f"[{email}] Cart page loaded ({time.time()-t0:.2f}s)")
 
             # Click "Przejdź do kasy" (order button)
