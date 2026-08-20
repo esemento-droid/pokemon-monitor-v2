@@ -176,10 +176,9 @@ class TorpedoDaemon:
             # === STEP 1: ATC (goto /cart/add/{id}) ===
             await page.goto(f"{SHOP_URL}/cart/add/{product_id}", wait_until="domcontentloaded", timeout=10000)
             await page.wait_for_timeout(1000)
-            # Navigate to /cart/ (ATC stays on /cart/add/ URL — Angular router needs /cart/)
+            # Navigate to /cart/ (Angular router needs /cart/ for checkout flow)
             await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=10000)
-            await page.wait_for_timeout(2000)
-            log.info(f"[{email}] ATC done ({time.time()-t0:.1f}s)")
+            log.info(f"[{email}] ATC + cart nav ({time.time()-t0:.1f}s)")
 
             # Remove overlays
             await page.evaluate("""() => {
@@ -189,8 +188,22 @@ class TorpedoDaemon:
                 document.querySelector('.skyshop-alert-conditional-access')?.remove();
             }""")
 
+            # Wait for Angular to hydrate cart (product appears, not "Koszyk jest pusty")
+            for _ in range(20):
+                cart_ready = await page.evaluate("""() => {
+                    const text = document.body.innerText;
+                    const hasProduct = !text.includes('Koszyk jest pusty') && 
+                                       (text.includes('Suma') && !text.includes('0,00 zł'));
+                    const btn = document.querySelector('button[data-ng-click="order()"]');
+                    return hasProduct || (btn && !btn.disabled);
+                }""")
+                if cart_ready:
+                    break
+                await page.wait_for_timeout(500)
+
+            log.info(f"[{email}] Cart hydrated ({time.time()-t0:.1f}s)")
+
             # === STEP 2: Click "Przejdź do kasy" ===
-            # Wait for Angular to hydrate cart
             for _ in range(10):
                 can_order = await page.evaluate("""() => {
                     const btn = document.querySelector('button[data-ng-click="order()"]');
@@ -200,21 +213,28 @@ class TorpedoDaemon:
                     break
                 await page.wait_for_timeout(500)
 
-            await page.evaluate("""() => {
-                const btn = document.querySelector('button[data-ng-click="order()"]');
-                if (btn) btn.click();
-            }""")
+            # Use Playwright click (triggers Angular properly, not just JS click)
+            try:
+                order_btn = page.locator('button[data-ng-click="order()"]').first
+                await order_btn.click(timeout=5000)
+            except:
+                await page.evaluate("""() => {
+                    const form = document.getElementById('orderForm');
+                    if (form) form.submit();
+                }""")
             log.info(f"[{email}] Checkout click ({time.time()-t0:.1f}s)")
 
             # === STEP 3: Wait for checkout render ===
-            for _ in range(20):
-                has_checkout = await page.evaluate("""() => {
-                    const text = document.body.innerText;
-                    return (text.includes('BLIK') || text.includes('Przelew') || 
-                            text.includes('płatności') || text.includes('Zamawiam')) &&
-                           document.querySelectorAll('input[type="radio"]').length > 0;
+            # After click, Sky-Shop navigates to /order (full page or Angular route)
+            # Wait for URL to change to /order OR for payment radios to appear
+            for _ in range(30):
+                state = await page.evaluate("""() => {
+                    const url = window.location.href;
+                    const radios = document.querySelectorAll('input[type="radio"]');
+                    const hasPayment = document.body.innerText.includes('BLIK') && radios.length > 0;
+                    return {url, radios: radios.length, hasPayment};
                 }""")
-                if has_checkout:
+                if state.get('hasPayment') or '/order' in state.get('url', ''):
                     break
                 await page.wait_for_timeout(500)
 
