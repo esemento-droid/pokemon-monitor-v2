@@ -141,7 +141,11 @@ async def shop_worker(name, module, logger, process_type):
             start = datetime.now()
 
             # Timeout based on category (adaptive: increase after timeouts)
-            if name in VERY_SLOW_SHOPS:
+            # Module-level SCAN_TIMEOUT override (same as _persistent_shop_worker)
+            module_timeout = getattr(module, 'SCAN_TIMEOUT', None)
+            if module_timeout:
+                timeout = module_timeout
+            elif name in VERY_SLOW_SHOPS:
                 timeout = TIMEOUT_NODRIVER
             elif name in SLOW_SHOPS:
                 timeout = TIMEOUT_SLOW
