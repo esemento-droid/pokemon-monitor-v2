@@ -234,14 +234,9 @@ async def torpedo_buy(account, product_id, product_url=""):
             log.error(f"[{email}] ATC error: {e}")
             return False
 
-        # Check if product was actually added (not sold out / requires login)
-        if "pusty" in atc_html.lower() and "koszyk jest pusty" in atc_html.lower():
-            log.error(f"[{email}] Cart empty after ATC — product sold out or session expired")
-            # Invalidate session
-            path = _session_path(email)
-            if path.exists():
-                path.unlink()
-            return False
+        # Note: Sky-Shop SPA returns Angular template HTML (not rendered).
+        # "Koszyk jest pusty" in HTML is just a template placeholder — NOT actual state.
+        # We trust HTTP 200 from /cart/add/{id} = product added successfully.
 
         # === STEP 2: GO TO ORDER PAGE ===
         try:
