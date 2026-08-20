@@ -1,11 +1,17 @@
-1. Login: 10.0s
-2. ATC: 15.5s
-3. On /order page: 23.8s
-4. Checkout STAGED (BLIK+delivery+checkboxes): 30.6s
-5. Pre-submit state: {"csrf": "577471a2539cf87196cb", "btn": {"disabled": false}, "radios": ["payment=21", "shipment=6512b"], "url": "https://japancollectibles.shop/order"}
-6. Cart cleared on page: 32.6s
-7. API ATC from browser JS: {"status": 200, "added": true} (33.0s)
-8. Submit button after API ATC: {"exists": true, "disabled": false, "text": "Zamawiam i p\u0142ac\u0119"}
-9. SUBMIT RESULT: URL=https://pay.autopay.eu/web/sky_shop/start/464d9cb0a002487d86 | fire_time=6.01s
-10. SUCCESS: False
-TOTAL: 39.0s
+Login OK (1.7s)
+Cart: d9257376-dd6...
+
+=== ATC test: product 9419 ===
+  HTTP 400
+  ❌ NOT ADDED
+  Response keys: ['details', 'errorCode', 'message']
+  Errors: Wybrana ilość przekracza nasz stan magazynowy.
+  Violations: []
+  Full: {"details":[],"errorCode":"ERROR_PRODUCT_OUT_OF_STOCK","message":"Wybrana ilo\u015b\u0107 przekracza nasz stan magazynowy."}
+
+=== ATC test: product 7437 ===
+  HTTP 200
+  ✅ ADDED! price=70,00 zł
+  Cart: 1 items, canBuy=True
+
+Done (3.5s)
