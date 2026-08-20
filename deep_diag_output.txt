@@ -1,32 +1,32 @@
 ╔══════════════════════════════════════════════════════════════╗
-║  DEEP DIAGNOSTIC 2026-08-20 09:05 (last 0.05h)            ║
+║  DEEP DIAGNOSTIC 2026-08-20 09:15 (last 0.05h)            ║
 ╚══════════════════════════════════════════════════════════════╝
 
 === 1. SYSTEM ===
-  Uptime: up 2 weeks, 2 days, 20 hours, 13 minutes
-  Load: 4.12 4.14 4.66
-  RAM: 3811MB/7763MB used (2983MB free, 3951MB available)
+  Uptime: up 2 weeks, 2 days, 20 hours, 22 minutes
+  Load: 4.37 4.81 4.78
+  RAM: 3345MB/7763MB used (3439MB free, 4417MB available)
   Swap: 68MB/2047MB
-  Chrome: 33 processes, 4749MB
+  Chrome: 32 processes, 4135MB
 
 === 2. SERVICE ===
-  PID: 3461632 | Since: Thu 2026-08-20 08:59:21 CEST
+  PID: 3465267 | Since: Thu 2026-08-20 09:10:23 CEST
   ROLE       PID      %CPU   %MEM   RSS_MB
-  PID-3461632 3461632  0.1    0.6    51M   
-  PID-3461633 3461633  77.2   2.7    212M  
-  PID-3461634 3461634  74.5   2.9    225M  
-  PID-3461635 3461635  72.7   3.8    301M  
-  PID-3461636 3461636  0.8    1.0    85M   
-  PID-3461639 3461639  0.2    0.6    50M   
+  PID-3465267 3465267  0.1    0.6    51M   
+  PID-3465268 3465268  77.4   2.6    204M  
+  PID-3465269 3465269  71.9   2.8    224M  
+  PID-3465270 3465270  66.1   3.1    243M  
+  PID-3465271 3465271  0.8    1.0    84M   
+  PID-3465272 3465272  0.2    0.6    49M   
 
 === 3. PROXY ===
-  HTTP(8888): 37.47.130.139200 0.480076s IP=
-  Tailscale:  37.47.130.139200 0.410149s IP=
-  SOCKS5:     37.47.130.139200 0.344183s IP=
+  HTTP(8888): 37.47.130.139200 0.584312s IP=
+  Tailscale:  37.47.130.139200 0.437252s IP=
+  SOCKS5:     37.47.130.139200 0.425360s IP=
   VPS direct: 146.59.45.228
 
 === 4. PHONE (Mi 9T) ===
-  Ping: 29.413ms
+  Ping: 47.204ms
   Phone crontab:
     * * * * * /data/data/com.termux/files/home/bin/watchdog.sh
     0 */4 * * * /data/data/com.termux/files/home/bin/rotate_ip.sh
@@ -34,52 +34,52 @@
 === 5. NODRIVER SHOPS ===
 
   SHOP             SCANS ZEROS  ERRS HEALS TOUTS  LAST_STATUS
-  empik                1     0     0     0     0  252 produktow w 82.8s
-  mediaexpert          0     0     1     0     0  GraphQL error: 404
-  tantis               1     0     0     0     0  3 produktow w 10.0s
-  libristo             1     0     0     0     0  9 produktow w 15.5s
-  boosterpoint         2     0     0     0     0  314 produktow w 20.9s
-  strefamarzen         2     0     0     0     0  23 produktow w 9.1s
-  bonito               0     0     0     0     1  Timeout 90s
-  piwniczaki           5     5     0     0     0  40 produktow w 19.7s
-  dragonus             7     0     0     0     0  21 produktow w 20.2s
-  wilczek              0     0     0     0     0  HTTP 403
+  empik                1     0     0     0     0  252 produktow w 83.7s
+  mediaexpert          1     0     1     0     0  GraphQL error: 404
+  tantis               2     0     0     0     0  3 produktow w 9.2s
+  libristo             2     0     0     0     0  9 produktow w 15.4s
+  boosterpoint         2     0     0     0     0  314 produktow w 15.9s
+  strefamarzen         2     0     0     0     0  23 produktow w 9.4s
+  bonito               0     0     0     0     1  Timeout 120s
+  piwniczaki           5     5     0     0     0  40 produktow w 24.0s
+  dragonus             5     0     0     0     0  21 produktow w 18.9s
+  wilczek              1     0     0     0     1  Timeout 120s
   rgfk                 0     0     0     0     0  
   proshop              0     0     0     0     0  
 
   Stuck shops (>10 zeros, <3 scans) — last 3 lines each:
 
 === 6. ENGINE ===
-  Polls: 8 | Scans reported: 8 | Errors: 0
+  Polls: 6 | Scans reported: 4 | Errors: 0
   Last 5 lines:
-    2026-08-20T09:04:16+0200 vps-733c4be8 python[3461639]: 2026-08-20 09:04:16,183 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T09:04:38+0200 vps-733c4be8 python[3461639]: 2026-08-20 09:04:38,335 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T09:05:00+0200 vps-733c4be8 python[3461639]: 2026-08-20 09:05:00,216 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T09:05:22+0200 vps-733c4be8 python[3461639]: 2026-08-20 09:05:22,747 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T09:05:44+0200 vps-733c4be8 python[3461639]: 2026-08-20 09:05:44,675 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T09:12:59+0200 vps-733c4be8 python[3465272]: 2026-08-20 09:12:59,529 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T09:13:21+0200 vps-733c4be8 python[3465272]: 2026-08-20 09:13:21,974 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T09:13:44+0200 vps-733c4be8 python[3465272]: 2026-08-20 09:13:44,240 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T09:14:05+0200 vps-733c4be8 python[3465272]: 2026-08-20 09:14:05,778 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T09:14:27+0200 vps-733c4be8 python[3465272]: 2026-08-20 09:14:27,823 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
 
 === 7. PROBLEM SHOPS (FAST/SLOW) ===
 
-  smakliter                 8     10      0  MOSTLY_EMPTY
-  planetaprezent            9     10      0  MOSTLY_EMPTY
-  lootquest                 7      9      0  MOSTLY_EMPTY
-  stapis                    8      8      0  DEGRADED
-  gryujanusza               8      8      0  DEGRADED
-  czytam.pl                 0      8      0  ALL_EMPTY
-  loficards                 7      7      0  DEGRADED
-  juniorkurczak             6      7      0  MOSTLY_EMPTY
-  hearts                    7      7      0  DEGRADED
-  blindbox                  6      7      0  MOSTLY_EMPTY
-  zaurketto                 6      6      0  DEGRADED
-  rozmaitosci               5      6      0  MOSTLY_EMPTY
-  pokemaniak                6      6      0  DEGRADED
-  pegazgry                  6      6      0  DEGRADED
-  krakenshop                6      6      0  DEGRADED
+  planetaprezent            7      9      0  MOSTLY_EMPTY
+  loficards                 8      9      0  MOSTLY_EMPTY
+  krakenshop                8      9      0  MOSTLY_EMPTY
+  smakliter                 7      8      0  MOSTLY_EMPTY
+  stapis                    6      7      0  MOSTLY_EMPTY
+  rozmaitosci               6      6      0  DEGRADED
+  pokespot                  5      6      0  MOSTLY_EMPTY
+  kimland                   6      6      0  DEGRADED
+  juniorkurczak             6      6      0  DEGRADED
+  zaurketto                 4      5      0  MOSTLY_EMPTY
+  pokemaniak                5      5      0  DEGRADED
   piwniczaki                5      5      0  DEGRADED
-  kartomat                  4      5      0  MOSTLY_EMPTY
-  czytam                    5      5      0  DEGRADED
-  kantodrop                 8      4      0  DEGRADED
-  cardfan                   4      4      0  DEGRADED
+  pegazgry                  5      5      0  DEGRADED
+  lootquest                 5      5      0  DEGRADED
+  hearts                    4      5      0  MOSTLY_EMPTY
+  gryujanusza               5      5      0  DEGRADED
+  swiatkart                 6      4      0  DEGRADED
+  kartomat                  5      4      0  DEGRADED
+  kantodrop                 7      4      0  DEGRADED
+  mediaexpert               1      3      0  MOSTLY_EMPTY
 
 === 8. COOLDOWNS + CONSECUTIVE ERRORS ===
 
@@ -87,24 +87,22 @@
   (none)
 
 === 10. TIMEOUTS ===
-    1 x kimland
+    1 x wilczek
+    1 x lukillo
     1 x bonito
-  Total: 2
+  Total: 3
 
 === 11. ERRORS (unique, last 20) ===
-  2026-08-20 09:03:48,561 [FAST] [ERROR] [pkmnshop] ERROR: Server disconnected
-  2026-08-20 09:04:00,718 [FAST] [ERROR] [kartexpol] ERROR: Server disconnected
-  2026-08-20 09:04:28,833 [FAST] [ERROR] [tcgheaven] ERROR: Cannot connect to host tcgheaven.eu:443 ssl:default [None]
-  2026-08-20 09:05:01,640 [FAST] [ERROR] [pokespot] ERROR: Server disconnected
+  2026-08-20 09:14:18,870 [FAST] [ERROR] [alpakagra] ERROR: Cannot connect to host alpakagra.pl:443 ssl:default [None]
 
 === 12. DB ===
   Products: 12564
-  Events 1h: 19
-  Events 24h: 343
+  Events 1h: 20
+  Events 24h: 347
   Breakdown (24h):
     RESTOCK              115
-    SOLD_OUT             107
-    PRICE_CHANGE         101
+    SOLD_OUT             106
+    PRICE_CHANGE         106
     NEW_PRODUCT          20
 
 === 13. CRON ===
@@ -152,7 +150,7 @@
 
 === 16. SUMMARY ===
   Window: last 0.05h
-  Scans: 796 | Engine polls: 8 | Errors: 4 | Timeouts: 2
+  Scans: 698 | Engine polls: 6 | Errors: 1 | Timeouts: 3
 
 ╔══════════════════════════════════════════════════════════════╗
 ║                     END DEEP DIAGNOSTIC                     ║
