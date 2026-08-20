@@ -197,18 +197,32 @@ else
         }
     }
 
+    # ENGINE poller: count "[tcgumisia-proxy] NN products" as scans for the proxy shop
+    /\[ENGINE\].*\[.*-proxy\].*products/ {
+        shop = get_shop($0)
+        if (shop == "" || shop in engine_counted) next
+        shop_group[shop] = "ENGINE"
+        if (match($0, /[0-9]+ products/)) {
+            pstr = substr($0, RSTART, RLENGTH)
+            split(pstr, pp, " ")
+            last_products[shop] = pp[1] + 0
+        }
+        # Count polls as scans (they ARE the detection mechanism)
+        scan_count[shop]++
+    }
+
     /[Tt]imeout/ {
         shop = get_shop($0)
-        if (shop != "") timeout_count[shop]++
+        if (shop != "" && shop !~ /[^a-zA-Z0-9_-]/) timeout_count[shop]++
         grp = get_group($0)
-        if (shop != "" && grp != "?") shop_group[shop] = grp
+        if (shop != "" && shop !~ /[^a-zA-Z0-9_-]/ && grp != "?") shop_group[shop] = grp
     }
 
     /\[ERROR\]/ {
         shop = get_shop($0)
-        if (shop != "") error_count[shop]++
+        if (shop != "" && shop !~ /[^a-zA-Z0-9_-]/) error_count[shop]++
         grp = get_group($0)
-        if (shop != "" && grp != "?") shop_group[shop] = grp
+        if (shop != "" && shop !~ /[^a-zA-Z0-9_-]/ && grp != "?") shop_group[shop] = grp
     }
 
     END {
