@@ -1,18 +1,347 @@
-2026-08-20 11:37:29,895 [JC-TORPEDO] [DAEMON] Browser started (patchright stealth + proxy)
-2026-08-20 11:37:38,970 [JC-TORPEDO] [DAEMON] [t11008543@gmail.com] Logged in ✓
-2026-08-20 11:37:40,971 [JC-TORPEDO] [DAEMON] All 1 accounts ready. Waiting for trigger...
-2026-08-20 11:37:40,971 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437 ===
-2026-08-20 11:37:43,563 [JC-TORPEDO] [t11008543@gmail.com] ATC + cart nav (2.6s)
-2026-08-20 11:37:53,875 [JC-TORPEDO] [t11008543@gmail.com] Cart hydrated (12.9s)
-2026-08-20 11:37:53,908 [JC-TORPEDO] [t11008543@gmail.com] Cart HTML dumped to /tmp/jc_torpedo_cart_dump.html (154786 bytes)
-2026-08-20 11:37:53,913 [JC-TORPEDO] [t11008543@gmail.com] Angular state: {"orderBtn": {"text": "Przejdź do kasy", "disabled": true, "visible": true, "ngDisabled": "isApiPending || !canOrder()"}, "cartSnippet": "Kontynuuj zakupy\nKoszyk\nKoszyk jest pusty\nPobierz koszyk do PDF\nPodsumowanie\nCena produktów:\n0,00 zł\nPodsumowanie zamówienia\n\nSuma:\n0,00 zł\n\nPrzejdź do kasy\nProgram lojalnościowy\nPo opłaceniu zamówienia otrzymasz 0 pkt. do wykorzystania.\n(nie dotyczy B2B)"}
-2026-08-20 11:37:57,833 [JC-TORPEDO] [t11008543@gmail.com] Order page navigated (16.9s) URL: https://japancollectibles.shop/cart/
-2026-08-20 11:38:13,068 [JC-TORPEDO] [t11008543@gmail.com] Checkout rendered (32.1s)
-2026-08-20 11:38:13,082 [JC-TORPEDO] [t11008543@gmail.com] DOM ANALYSIS: {"blikInfo": "not_found", "orderInfo": {"tag": "BUTTON", "class": "close-searchbar ms-2 bg-transparent border-0 element-black", "childCount": 1}, "mdRadios": 0, "mdDetails": [], "inputs": [{"type": "search", "name": "q", "id": "header_panel_searchbar-input"}, {"type": "search", "name": "q", "id": "header_main_searchbar-input"}, {"type": "hidden", "name": "cart_id", "id": ""}, {"type": "checkbox", "name": "", "id": ""}, {"type": "checkbox", "name": "", "id": ""}, {"type": "checkbox", "name": "", "id": ""}], "url": "https://japancollectibles.shop/cart/", "hasOrder": false}
-2026-08-20 11:38:13,089 [JC-TORPEDO] [t11008543@gmail.com] Payment: none
-2026-08-20 11:38:15,102 [JC-TORPEDO] [t11008543@gmail.com] Delivery: none
-2026-08-20 11:38:16,130 [JC-TORPEDO] [t11008543@gmail.com] Checkboxes: 2 clicked
-2026-08-20 11:38:16,639 [JC-TORPEDO] [t11008543@gmail.com] PRE-SUBMIT state: {'checked_radios': [], 'checked_checkboxes': 3, 'submit_btn': 'NOT FOUND', 'url': 'https://japancollectibles.shop/cart/'}
-2026-08-20 11:38:16,639 [JC-TORPEDO] [t11008543@gmail.com] Submitting (35.7s)
-2026-08-20 11:38:21,760 [JC-TORPEDO] [t11008543@gmail.com] ❌ Failed (40.7s) URL: https://japancollectibles.shop/category/?q=#top
-2026-08-20 11:38:21,894 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 40.9s ===
+=== STEP 1: Login ===
+Login done. URL: https://japancollectibles.shop/index/login/done/back_url/Lw==
+=== STEP 2: ATC ===
+ATC clicked
+=== STEP 3: Go to cart ===
+=== STEP 4: Click checkout ===
+After checkout click, URL: https://japancollectibles.shop/order
+=== STEP 5: Select payment (BLIK) ===
+BLIK clicked
+=== STEP 6: Select delivery ===
+Kurier click failed: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("text=Kurier Inpost").first
+, trying Gabaryt
+=== STEP 7: Checkboxes ===
+Checked 9 checkboxes
+=== STEP 8: Submit (NOT clicking - just capturing state) ===
+Final state: {
+  "url": "https://japancollectibles.shop/order",
+  "radios": [],
+  "checkboxes": [
+    {
+      "name": "invoice",
+      "id": "param-vat",
+      "value": "1"
+    },
+    {
+      "name": "bill_vat_exists",
+      "id": "bill-vat-exists",
+      "value": "1"
+    },
+    {
+      "name": "register_link_to_rules",
+      "id": "param-rules-1",
+      "value": "1"
+    },
+    {
+      "name": "register_must_accept",
+      "id": "param-rules-2",
+      "value": "1"
+    },
+    {
+      "name": "dotpay_rules_agreed",
+      "id": "param-rules-3",
+      "value": "1"
+    },
+    {
+      "name": "register_newsletter",
+      "id": "param-rules-newsletter",
+      "value": "1"
+    },
+    {
+      "name": "ord_f1",
+      "id": "param-additional-rules-1",
+      "value": "1"
+    },
+    {
+      "name": "",
+      "id": "",
+      "value": "required"
+    },
+    {
+      "name": "",
+      "id": "",
+      "value": "analytics"
+    },
+    {
+      "name": "",
+      "id": "",
+      "value": "marketing"
+    }
+  ],
+  "submitBtn": {
+    "text": "Zamawiam i płacę",
+    "disabled": false
+  },
+  "forms": [
+    {
+      "action": "https://japancollectibles.shop/order_finish/",
+      "method": "post",
+      "id": "",
+      "inputs": [
+        {
+          "name": "csrf_token",
+          "type": "hidden",
+          "value": "502bb82ac73c41e574a0c9b98208316828b994b3b42f092b9896a388bccb87801787219029",
+          "checked": false
+        },
+        {
+          "name": "ga_client_id",
+          "type": "hidden",
+          "value": "1592876981.1787219030",
+          "checked": false
+        },
+        {
+          "name": "ga_session_id",
+          "type": "hidden",
+          "value": "1787219030",
+          "checked": false
+        },
+        {
+          "name": "user_country",
+          "type": "select-one",
+          "value": "PL",
+          "checked": null
+        },
+        {
+          "name": "",
+          "type": "hidden",
+          "value": "0.00",
+          "checked": false
+        },
+        {
+          "name": "show_banks",
+          "type": "radio",
+          "value": "15",
+          "checked": false
+        },
+        {
+          "name": "payment",
+          "type": "radio",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "",
+          "type": "hidden",
+          "value": "0.00",
+          "checked": false
+        },
+        {
+          "name": "payment",
+          "type": "radio",
+          "value": "22",
+          "checked": false
+        },
+        {
+          "name": "",
+          "type": "hidden",
+          "value": "0.00",
+          "checked": false
+        },
+        {
+          "name": "payment",
+          "type": "radio",
+          "value": "21",
+          "checked": false
+        },
+        {
+          "name": "",
+          "type": "hidden",
+          "value": "0.00",
+          "checked": false
+        },
+        {
+          "name": "payment",
+          "type": "radio",
+          "value": "19",
+          "checked": false
+        },
+        {
+          "name": "",
+          "type": "hidden",
+          "value": "0.00",
+          "checked": false
+        },
+        {
+          "name": "payment",
+          "type": "radio",
+          "value": "24",
+          "checked": false
+        },
+        {
+          "name": "",
+          "type": "hidden",
+          "value": "0.00",
+          "checked": false
+        },
+        {
+          "name": "payment",
+          "type": "radio",
+          "value": "5",
+          "checked": false
+        },
+        {
+          "name": "shipment",
+          "type": "radio",
+          "value": "{{:id:}}",
+          "checked": false
+        },
+        {
+          "name": "user_company",
+          "type": "text",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "user_firstname",
+          "type": "text",
+          "value": "Marian",
+          "checked": false
+        },
+        {
+          "name": "user_lastname",
+          "type": "text",
+          "value": "Kasprzak",
+          "checked": false
+        },
+        {
+          "name": "user_city",
+          "type": "text",
+          "value": "Wieckowice",
+          "checked": false
+        },
+        {
+          "name": "user_code",
+          "type": "text",
+          "value": "62-874",
+          "checked": false
+        },
+        {
+          "name": "user_street",
+          "type": "text",
+          "value": "Wieckowicka 16",
+          "checked": false
+        },
+        {
+          "name": "user_phone",
+          "type": "tel",
+          "value": "543265543",
+          "checked": false
+        },
+        {
+          "name": "invoice",
+          "type": "checkbox",
+          "value": "1",
+          "checked": true
+        },
+        {
+          "name": "user_bill_country",
+          "type": "select-one",
+          "value": "PL",
+          "checked": null
+        },
+        {
+          "name": "user_bill_company",
+          "type": "text",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "user_bill_city",
+          "type": "text",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "user_bill_code",
+          "type": "text",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "user_bill_street",
+          "type": "text",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "user_bill_iso",
+          "type": "text",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "user_bill_vat",
+          "type": "text",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "bill_vat_exists",
+          "type": "checkbox",
+          "value": "1",
+          "checked": true
+        },
+        {
+          "name": "user_note",
+          "type": "textarea",
+          "value": "",
+          "checked": null
+        },
+        {
+          "name": "code_discount",
+          "type": "hidden",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "gratis",
+          "type": "hidden",
+          "value": "",
+          "checked": false
+        },
+        {
+          "name": "register_link_to_rules",
+          "type": "checkbox",
+          "value": "1",
+          "checked": true
+        },
+        {
+          "name": "register_must_accept",
+          "type": "checkbox",
+          "value": "1",
+          "checked": true
+        },
+        {
+          "name": "dotpay_rules_agreed",
+          "type": "checkbox",
+          "value": "1",
+          "checked": true
+        },
+        {
+          "name": "register_newsletter",
+          "type": "checkbox",
+          "value": "1",
+          "checked": true
+        },
+        {
+          "name": "ord_f1",
+          "type": "checkbox",
+          "value": "1",
+          "checked": true
+        },
+        {
+          "name": "is_js",
+          "type": "hidden",
+          "value": "1",
+          "checked": false
+        }
+      ]
+    }
+  ]
+}
+
+=== DONE: 24 relevant requests captured ===
+Output: /tmp/jc_sniff_result.json
