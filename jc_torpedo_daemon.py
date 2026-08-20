@@ -218,30 +218,32 @@ class TorpedoDaemon:
             log.info(f"[{email}] Checkout rendered ({time.time()-t0:.1f}s)")
 
             # === STEP 4: Select payment (BLIK) ===
-            await page.evaluate("""() => {
+            pay_result = await page.evaluate("""() => {
                 const rows = document.querySelectorAll('tr, div, label, li, span');
                 for (const r of rows) {
                     if (r.textContent.includes('BLIK')) {
                         const radio = r.querySelector('input[type="radio"]') || r.closest('label')?.querySelector('input[type="radio"]');
-                        if (radio) { radio.click(); return; }
-                        r.click(); return;
+                        if (radio) { radio.click(); return 'blik_radio'; }
+                        r.click(); return 'blik_click';
                     }
                 }
                 // Fallback: first radio
                 const radio = document.querySelector('input[type="radio"]');
-                if (radio) radio.click();
+                if (radio) { radio.click(); return 'first_radio: ' + radio.name + '=' + radio.value; }
+                return 'none';
             }""")
+            log.info(f"[{email}] Payment: {pay_result}")
 
             await page.wait_for_timeout(2000)  # Delivery loads after payment
 
             # === STEP 5: Select delivery (Kurier Inpost) ===
-            await page.evaluate("""() => {
+            del_result = await page.evaluate("""() => {
                 const rows = document.querySelectorAll('tr, div, label, li, span');
                 for (const r of rows) {
                     if ((r.textContent.includes('Kurier') && r.textContent.includes('Inpost')) || r.textContent.includes('Gabaryt')) {
                         const radio = r.querySelector('input[type="radio"]') || r.closest('label')?.querySelector('input[type="radio"]');
-                        if (radio) { radio.click(); return; }
-                        r.click(); return;
+                        if (radio) { radio.click(); return 'kurier_radio'; }
+                        r.click(); return 'kurier_click';
                     }
                 }
                 // Fallback: find delivery radio (skip payment ones)
@@ -250,20 +252,39 @@ class TorpedoDaemon:
                     const section = r.closest('[class*="shipment"], [class*="delivery"], [data-ng-repeat*="shipment"]');
                     return section !== null;
                 });
-                if (deliveryRadio) deliveryRadio.click();
+                if (deliveryRadio) { deliveryRadio.click(); return 'fallback_delivery'; }
+                return 'none';
             }""")
+            log.info(f"[{email}] Delivery: {del_result}")
 
             await page.wait_for_timeout(1000)
 
             # === STEP 6: Check ALL checkboxes ===
-            await page.evaluate("""() => {
+            cb_result = await page.evaluate("""() => {
                 window.scrollTo(0, document.body.scrollHeight);
+                let count = 0;
                 document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                    if (!cb.checked) cb.click();
+                    if (!cb.checked) { cb.click(); count++; }
                 });
+                return count;
             }""")
+            log.info(f"[{email}] Checkboxes: {cb_result} clicked")
 
             await page.wait_for_timeout(500)
+
+            # === DEBUG: dump state before submit ===
+            debug = await page.evaluate("""() => {
+                const radios = [...document.querySelectorAll('input[type="radio"]:checked')];
+                const cbs = [...document.querySelectorAll('input[type="checkbox"]:checked')];
+                const btn = document.querySelector('button[name="finish"]');
+                return {
+                    checked_radios: radios.map(r => r.name + '=' + r.value + ' id=' + r.id),
+                    checked_checkboxes: cbs.length,
+                    submit_btn: btn ? {disabled: btn.disabled, text: btn.textContent.trim().substring(0,30)} : 'NOT FOUND',
+                    url: window.location.href
+                };
+            }""")
+            log.info(f"[{email}] PRE-SUBMIT state: {debug}")
 
             # === STEP 7: Submit order ===
             log.info(f"[{email}] Submitting ({time.time()-t0:.1f}s)")
