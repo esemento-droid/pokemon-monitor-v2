@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-JC Torpedo — Pure HTTP instant buy (<2s for all 4 accounts)
+JC Torpedo Daemon — persistent browser, same checkout flow as working bot.
 
-Sky-Shop internal API discovered via network sniff:
-  1. POST /login → session cookie
-  2. GET /proxy_public_api?endpoint=/sky2/api-public/carts/bulk/latest → cart_id
-  3. POST /proxy_public_api?endpoint=/sky2/api-public/carts/{cart_id} → ATC
-  4. POST /order {cart_id} → HTML with csrf_token + shipment IDs
-  5. POST /order_finish/ {csrf, payment=21(BLIK), shipment, checkboxes} → payment redirect
+Copied EXACTLY from japancollectibles_autobuy.py (which works) but:
+- Browser always running (no cold start)
+- Accounts pre-logged (no login time)
+- Reduced waits (minimum needed)
+- 4 accounts fire in PARALLEL (not sequential)
+- Trigger via file: echo "PRODUCT_ID URL" > /tmp/jc_torpedo_fire.txt
 
-All HTTP. Zero browser. <2s total for 4 accounts parallel.
+Target: ~10s total (vs 70s per account old bot)
 """
 import asyncio
 import json
@@ -20,14 +20,12 @@ import time
 import re
 from pathlib import Path
 
-import aiohttp
-
 BASE_DIR = Path("/opt/pokemon-monitor-v2")
+FIRE_FILE = Path("/tmp/jc_torpedo_fire.txt")
 COMPLETED_FILE = BASE_DIR / "japancollectibles_completed.json"
 LOG_FILE = BASE_DIR / "jc_torpedo_daemon.log"
 WEBHOOK_FILE = BASE_DIR / "discord_webhook_jc.txt"
 SHOP_URL = "https://japancollectibles.shop"
-FIRE_FILE = Path("/tmp/jc_torpedo_fire.txt")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,236 +47,306 @@ ACCOUNTS = [
 TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "name": "Marian Wasilewski"}
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-PROXY = "http://127.0.0.1:8888"
-
-# Payment IDs (from sniff): 21=BLIK, 15=online, 22=card, 5=przelew
-PAYMENT_BLIK = "21"
+PROXY = {"server": "http://127.0.0.1:8888"}
+SESSION_REFRESH = 2700  # 45 min
 
 
-async def torpedo_buy(account, product_id):
-    """Pure HTTP buy. Target: <2s."""
-    email = account["email"]
-    password = account["password"]
-    t0 = time.time()
+class TorpedoDaemon:
+    def __init__(self, accounts):
+        self.accounts = accounts
+        self.browser = None
+        self.contexts = {}  # email -> context (separate sessions!)
+        self.pages = {}  # email -> page
+        self.last_login = {}
+        self._pw = None
 
-    connector = aiohttp.TCPConnector(ssl=False)
-    jar = aiohttp.CookieJar(unsafe=True)
+    async def start(self):
+        from patchright.async_api import async_playwright
+        self._pw = await async_playwright().start()
+        self.browser = await self._pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+            proxy=PROXY,
+        )
+        log.info("[DAEMON] Browser started")
 
-    async with aiohttp.ClientSession(
-        connector=connector,
-        cookie_jar=jar,
-        headers={"User-Agent": UA},
-    ) as s:
-        # === 1. LOGIN ===
+        for acc in self.accounts:
+            await self._login(acc)
+            await asyncio.sleep(2)
+
+        log.info(f"[DAEMON] {len(self.pages)} accounts ready")
+
+    async def _login(self, account):
+        """Login account — SAME flow as working japancollectibles_autobuy.py"""
+        email = account["email"]
+        # Each account gets own context (separate cookies/session)
+        ctx = await self.browser.new_context(viewport={"width": 1280, "height": 900}, user_agent=UA)
+        page = await ctx.new_page()
+
         try:
-            # Get login page first (for csrf + session cookie)
-            r = await s.get(f"{SHOP_URL}/login", proxy=PROXY, timeout=aiohttp.ClientTimeout(total=8))
-            login_html = await r.text()
-            # Extract csrf_token from login page
-            csrf_match = re.search(r'name="csrf_token"\s*value="([^"]+)"', login_html)
-            csrf_login = csrf_match.group(1) if csrf_match else ""
+            # Dismiss age gate + go to login
+            await page.goto(SHOP_URL, wait_until="domcontentloaded", timeout=20000)
+            await page.wait_for_timeout(2000)
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                const btn = document.querySelector('.skyshop-alert-conditional-access button');
+                if (btn) btn.click();
+            }""")
+            await page.wait_for_timeout(1000)
 
-            r = await s.post(
-                f"{SHOP_URL}/login",
-                data={"email": email, "password": password, "autologin": "1", "csrf_token": csrf_login, "redirect": "", "submit": "1"},
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=8),
-                allow_redirects=True,
-            )
-            resp_text = await r.text()
-            if "Moje konto" not in resp_text and "Wyloguj" not in resp_text:
-                log.error(f"[{email}] Login FAILED ({time.time()-t0:.2f}s)")
-                return False
-            log.info(f"[{email}] Login OK ({time.time()-t0:.2f}s)")
+            await page.goto(f"{SHOP_URL}/login", wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(2000)
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+            }""")
+
+            await page.wait_for_selector("input#email", timeout=10000)
+            await page.fill("input#email", email)
+            await page.fill("input[name='password']", account["password"])
+            await page.click("button[name='submit']", force=True)
+            await page.wait_for_timeout(3000)
+
+            content = await page.content()
+            if "Moje konto" in content or "Wyloguj" in content:
+                self.contexts[email] = ctx
+                self.pages[email] = page
+                self.last_login[email] = time.time()
+                log.info(f"[DAEMON] [{email}] Logged in ✓")
+            else:
+                log.error(f"[DAEMON] [{email}] Login FAILED")
+                await ctx.close()
         except Exception as e:
-            log.error(f"[{email}] Login error: {e}")
-            return False
-
-        # === 2. GET CART ID ===
-        try:
-            r = await s.get(
-                f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/latest",
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=5),
-            )
-            cart_data = await r.json()
-            cart_id = cart_data.get("cart", {}).get("id", "")
-            if not cart_id:
-                log.error(f"[{email}] No cart_id")
-                return False
-            log.info(f"[{email}] Cart: {cart_id[:8]}... ({time.time()-t0:.2f}s)")
-        except Exception as e:
-            log.error(f"[{email}] Cart error: {e}")
-            return False
-
-        # === 3. CLEAR CART + ADD TO CART ===
-        try:
-            # Clear cart first (delete all existing items)
-            r = await s.get(
-                f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/{cart_id}",
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=5),
-            )
-            cart_check = await r.json()
-            existing_items = cart_check.get("cart", {}).get("items", [])
-            for item in existing_items:
-                item_id = item.get("id", "")
-                if item_id:
-                    await s.delete(
-                        f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/{cart_id}/items/{item_id}",
-                        headers={"Accept": "application/json", "currency": "PLN", "lang": "pl"},
-                        proxy=PROXY,
-                        timeout=aiohttp.ClientTimeout(total=3),
-                    )
-            if existing_items:
-                log.info(f"[{email}] Cleared {len(existing_items)} items from cart")
-
-            # Add product
-            r = await s.post(
-                f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/{cart_id}/items",
-                json={"productId": int(product_id), "quantity": 1, "parameters": []},
-                headers={"Content-Type": "application/json;charset=UTF-8", "Accept": "application/json, text/plain, */*", "currency": "PLN", "lang": "pl", "Origin": SHOP_URL, "Referer": f"{SHOP_URL}/-p{product_id}"},
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=5),
-            )
-            if r.status != 200:
-                body = await r.text()
-                log.error(f"[{email}] ATC HTTP {r.status}: {body[:200]}")
-                return False
-            atc_text = await r.text()
+            log.error(f"[DAEMON] [{email}] Login error: {e}")
             try:
-                atc_data = json.loads(atc_text)
+                await ctx.close()
             except:
-                log.error(f"[{email}] ATC not JSON: {atc_text[:300]}")
-                return False
+                pass
 
-            # ATC response has "addedCartItem" (not "cart.items")
-            added = atc_data.get("addedCartItem", {})
-            if not added:
-                log.error(f"[{email}] ATC no addedCartItem: {atc_text[:300]}")
-                return False
-            log.info(f"[{email}] ATC OK (product {product_id}, {added.get('priceSummary',{}).get('final',{}).get('grossDisplay','?')}) ({time.time()-t0:.2f}s)")
-        except Exception as e:
-            log.error(f"[{email}] ATC error: {e}")
+    async def fire(self, product_id, product_url=""):
+        """Fire on all accounts in PARALLEL — same checkout flow as working bot."""
+        t0 = time.time()
+        if not product_url:
+            product_url = f"{SHOP_URL}/-p{product_id}"
+
+        log.info(f"=== 🚀 TORPEDO FIRE product={product_id} ({len(self.pages)} accounts) ===")
+        await self._discord(f"🚀 **TORPEDO** product {product_id} — {len(self.pages)} accounts")
+
+        tasks = [self._buy(email, product_id, product_url, t0) for email in self.pages]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        total = time.time() - t0
+        ok = sum(1 for r in results if r is True)
+        log.info(f"=== TORPEDO DONE: {ok}/{len(tasks)} in {total:.1f}s ===")
+        await self._discord(f"{'✅' if ok else '❌'} **TORPEDO** {product_id} | {ok}/{len(tasks)} | {total:.1f}s")
+        return ok
+
+    async def _buy(self, email, product_id, product_url, t0):
+        """
+        Buy flow — COPIED from japancollectibles_autobuy.py (which works).
+        Only difference: no login (already logged in), reduced waits.
+        """
+        page = self.pages.get(email)
+        if not page:
             return False
 
-        # === 4. GO TO ORDER PAGE → get csrf + shipment ===
         try:
-            # Set sky2_cart_id cookie (required by Sky-Shop to link session to cart)
-            jar.update_cookies({"sky2_cart_id": cart_id}, response_url=aiohttp.client.URL(SHOP_URL))
-            
-            # First try POST /order (normal flow)
-            r = await s.post(
-                f"{SHOP_URL}/order",
-                data={"cart_id": cart_id},
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Origin": SHOP_URL,
-                    "Referer": f"{SHOP_URL}/cart/",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Upgrade-Insecure-Requests": "1",
-                },
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=8),
-                allow_redirects=True,
-            )
-            order_html = await r.text()
-            log.info(f"[{email}] Order page: {len(order_html)} bytes, URL: {r.url}")
+            # === 1. CLEAR CART ===
+            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(2000)
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+            }""")
+            await page.evaluate("""() => {
+                const delBtns = document.querySelectorAll('[data-click="deleteCartItem"], button[aria-label*="Usuń"], .icon-close_24, [data-ng-click*="delete"]');
+                delBtns.forEach(btn => btn.click());
+            }""")
+            await page.wait_for_timeout(1500)
 
-            # csrf_token is empty in HTML (Angular fills it client-side)
-            # Sky-Shop pattern: csrf = hash + timestamp. We can try:
-            # 1. Extract from login page (we already have it from step 1)
-            # 2. Use the login csrf (may work if session-bound)
-            # 3. Try submitting WITHOUT csrf (some shops don't validate on logged-in sessions)
-            
-            # Extract whatever csrf we can find
-            csrf_match = re.search(r'name="csrf_token"\s*value="([a-f0-9]+)"', order_html)
-            if not csrf_match:
-                csrf_match = re.search(r'csrf_token["\s:=]+([a-f0-9]{40,})', order_html)
-            csrf_token = csrf_match.group(1) if csrf_match else ""
-            
-            # If no csrf from order page, try getting from a GET to /order or /cart
-            if not csrf_token:
-                # Try GET /order (different render path)
-                r2 = await s.get(
-                    f"{SHOP_URL}/order",
-                    headers={"Referer": f"{SHOP_URL}/cart/"},
-                    proxy=PROXY,
-                    timeout=aiohttp.ClientTimeout(total=5),
-                )
-                order_html2 = await r2.text()
-                csrf_match2 = re.search(r'name="csrf_token"\s*value="([a-f0-9]+)"', order_html2)
-                if csrf_match2:
-                    csrf_token = csrf_match2.group(1)
-                    log.info(f"[{email}] Got csrf from GET /order")
-            
-            # If still no csrf — use empty (try submitting without it)
-            if not csrf_token:
-                log.warning(f"[{email}] No csrf found — will try submit without it")
+            # === 2. ADD TO CART (go to product page, click "Do koszyka") ===
+            await page.goto(product_url, wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(2000)
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+            }""")
 
-            # Extract shipment IDs
-            combined_html = order_html
-            shipment_ids = re.findall(r'name="shipment"[^>]*value="([^"{\[]+)"', combined_html)
-            if not shipment_ids:
-                shipment_ids = re.findall(r'id="param-delivery-([^"]+)"', combined_html)
+            atc_btn = page.locator("button:has-text('Do koszyka'), button[aria-label*='Dodaj do koszyka']").first
+            await atc_btn.wait_for(state="visible", timeout=8000)
+            await atc_btn.click(force=True)
+            log.info(f"[{email}] ATC click ({time.time()-t0:.1f}s)")
+            await page.wait_for_timeout(2000)
 
-            log.info(f"[{email}] Order: csrf={'yes' if csrf_token else 'EMPTY'}, shipments={shipment_ids[:3]} ({time.time()-t0:.2f}s)")
-            shipment_id = shipment_ids[0] if shipment_ids else ""
+            # Dismiss popup
+            try:
+                realize = page.locator("text=Realizuj zamówienie")
+                if await realize.is_visible(timeout=3000):
+                    await realize.click()
+                    await page.wait_for_timeout(1000)
+            except:
+                pass
 
-        except Exception as e:
-            log.error(f"[{email}] Order page error: {e}")
-            return False
+            # === 3. CART → CHECKOUT ===
+            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(3000)
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+            }""")
 
-        # === 5. SUBMIT ORDER (POST /order_finish/) ===
-        order_data = {
-            "csrf_token": csrf_token,
-            "payment": PAYMENT_BLIK,
-            "shipment": shipment_id,
-            "user_country": "PL",
-            "register_link_to_rules": "1",
-            "register_must_accept": "1",
-            "dotpay_rules_agreed": "1",
-            "is_js": "1",
-            "code_discount": "",
-            "gratis": "",
-            "user_note": "",
-        }
+            # Wait for checkout button enabled
+            checkout_btn = page.locator("button[data-ng-click='order()']:not([disabled])")
+            await checkout_btn.wait_for(state="visible", timeout=15000)
+            await checkout_btn.click(force=True)
 
-        try:
-            r = await s.post(
-                f"{SHOP_URL}/order_finish/",
-                data=order_data,
-                proxy=PROXY,
-                timeout=aiohttp.ClientTimeout(total=10),
-                allow_redirects=True,
-            )
-            final_url = str(r.url)
-            final_text = await r.text()
+            # Wait for /order page
+            await page.wait_for_url("**/order**", timeout=15000)
+            await page.wait_for_timeout(3000)
+            log.info(f"[{email}] Checkout page ({time.time()-t0:.1f}s)")
+
+            # === 4. PAYMENT: BLIK ===
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+            }""")
+
+            for _ in range(10):
+                has = await page.evaluate("() => document.body.innerText.includes('BLIK')")
+                if has:
+                    break
+                await page.wait_for_timeout(1500)
+
+            payment_el = page.locator("text=BLIK").first
+            await payment_el.wait_for(state="visible", timeout=10000)
+            await payment_el.click(force=True)
+            log.info(f"[{email}] Payment: BLIK ({time.time()-t0:.1f}s)")
+            await page.wait_for_timeout(3000)
+
+            # === 5. DELIVERY: Kurier Inpost ===
+            for _ in range(10):
+                has = await page.evaluate("() => document.body.innerText.includes('Kurier Inpost')")
+                if has:
+                    break
+                await page.wait_for_timeout(1500)
+
+            delivery_clicked = False
+            try:
+                del_el = page.locator("text=Kurier Inpost - Gabaryt C >> visible=true")
+                if await del_el.count() > 0:
+                    await del_el.first.click(force=True)
+                    delivery_clicked = True
+                else:
+                    del_el = page.locator("input#param-delivery-6512b")
+                    if await del_el.count() > 0:
+                        await del_el.evaluate("el => el.closest('tr, div')?.click() || el.click()")
+                        delivery_clicked = True
+                    else:
+                        del_el = page.locator("td:has-text('Kurier Inpost'), div:has-text('Kurier Inpost')").first
+                        await del_el.click(force=True, timeout=5000)
+                        delivery_clicked = True
+            except:
+                pass
+
+            if not delivery_clicked:
+                await page.evaluate("""() => {
+                    const rows = document.querySelectorAll('tr, div, label');
+                    for (const r of rows) {
+                        if (r.textContent.includes('Kurier') && r.textContent.includes('Inpost')) {
+                            const radio = r.querySelector('input[type="radio"]');
+                            if (radio) { radio.click(); return; }
+                            r.click(); return;
+                        }
+                    }
+                }""")
+
+            log.info(f"[{email}] Delivery selected ({time.time()-t0:.1f}s)")
+            await page.wait_for_timeout(1500)
+
+            # === 6. CHECKBOXES ===
+            await page.evaluate("""() => {
+                window.scrollTo(0, document.body.scrollHeight);
+            }""")
+            await page.wait_for_timeout(500)
+            await page.evaluate("""() => {
+                document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    const req = cb.getAttribute('data-valid')?.includes('required');
+                    if (req && !cb.checked) cb.click();
+                });
+            }""")
+            await page.wait_for_timeout(500)
+
+            # === 7. SUBMIT ===
+            log.info(f"[{email}] Submitting ({time.time()-t0:.1f}s)")
+            order_btn = page.locator("button[name='finish']").first
+            await order_btn.wait_for(state="visible", timeout=5000)
+            await order_btn.click(force=True)
+
+            await page.wait_for_timeout(5000)
+            final_url = page.url
             total = time.time() - t0
 
-            # Check success
-            success = any(kw in final_url.lower() for kw in ["potwierdzenie", "thank", "tpay", "blik", "przelewy24", "dotpay"])
+            success = any(kw in final_url.lower() for kw in ["potwierdzenie", "thank", "tpay", "blik", "przelewy24"])
             if not success:
-                success = any(kw in final_text.lower() for kw in ["zamówienie zostało złożone", "dziękujemy", "potwierdzenie"])
-            # Also: redirect away from /order = likely success
-            if not success and "/order" not in final_url and "/cart" not in final_url:
-                success = True
+                content = await page.content()
+                success = any(kw in content.lower() for kw in ["zamówienie zostało złożone", "dziękujemy"])
 
             if success:
-                log.info(f"[{email}] ✅ ORDER PLACED in {total:.2f}s! → {final_url[:80]}")
+                log.info(f"[{email}] ✅ ORDER in {total:.1f}s! → {final_url[:60]}")
                 _mark_completed(product_id, email)
                 return True
             else:
-                log.error(f"[{email}] ❌ Order failed ({total:.2f}s) URL: {final_url[:80]}")
-                # Check for error messages
-                errors = re.findall(r'class="[^"]*error[^"]*"[^>]*>([^<]+)', final_text)
-                if errors:
-                    log.error(f"[{email}] Errors: {errors[:3]}")
+                log.error(f"[{email}] ❌ Failed ({total:.1f}s) URL: {final_url[:60]}")
+                await page.screenshot(path=f"/tmp/jc_torpedo_{email.split('@')[0]}.png")
                 return False
 
         except Exception as e:
-            log.error(f"[{email}] Submit error: {e}")
+            log.error(f"[{email}] Exception: {e}")
             return False
+
+    async def daemon_loop(self):
+        """Watch trigger file + refresh sessions."""
+        while True:
+            if FIRE_FILE.exists():
+                try:
+                    content = FIRE_FILE.read_text().strip()
+                    FIRE_FILE.unlink()
+                    parts = content.split(" ", 1)
+                    product_id = parts[0]
+                    product_url = parts[1] if len(parts) > 1 else ""
+                    if product_id:
+                        await self.fire(product_id, product_url)
+                except Exception as e:
+                    log.error(f"[DAEMON] Fire error: {e}")
+
+            # Session refresh
+            now = time.time()
+            for acc in self.accounts:
+                email = acc["email"]
+                if email in self.pages and (now - self.last_login.get(email, 0)) > SESSION_REFRESH:
+                    log.info(f"[DAEMON] Refreshing {email}")
+                    try:
+                        await self.contexts[email].close()
+                    except:
+                        pass
+                    del self.pages[email]
+                    del self.contexts[email]
+                    await self._login(acc)
+
+            await asyncio.sleep(0.5)
+
+    async def _discord(self, msg):
+        try:
+            if not WEBHOOK_FILE.exists():
+                return
+            wh = WEBHOOK_FILE.read_text().strip()
+            if not wh:
+                return
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                await s.post(wh, json={"content": msg})
+        except:
+            pass
 
 
 def _mark_completed(product_id, email):
@@ -296,72 +364,32 @@ def _mark_completed(product_id, email):
     COMPLETED_FILE.write_text(json.dumps(data, indent=2))
 
 
-async def _send_discord(msg):
-    try:
-        if not WEBHOOK_FILE.exists():
-            return
-        wh = WEBHOOK_FILE.read_text().strip()
-        if not wh:
-            return
-        async with aiohttp.ClientSession() as s:
-            await s.post(wh, json={"content": msg})
-    except:
-        pass
-
-
-async def fire(product_id, accounts):
-    """Fire torpedo on all accounts in PARALLEL."""
-    t0 = time.time()
-    log.info(f"=== 🚀 TORPEDO FIRE product={product_id}, {len(accounts)} accounts ===")
-    await _send_discord(f"🚀 **TORPEDO FIRE** product {product_id} — {len(accounts)} accounts")
-
-    tasks = [torpedo_buy(acc, product_id) for acc in accounts]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    total = time.time() - t0
-    ok = sum(1 for r in results if r is True)
-    log.info(f"=== TORPEDO DONE: {ok}/{len(accounts)} in {total:.2f}s ===")
-
-    status = "✅" if ok > 0 else "❌"
-    await _send_discord(f"{status} **TORPEDO** product {product_id} | {ok}/{len(accounts)} | {total:.1f}s")
-    return ok
-
-
-async def daemon_loop(accounts):
-    """Watch trigger file and fire when triggered."""
-    log.info(f"[DAEMON] Watching {FIRE_FILE} for triggers ({len(accounts)} accounts ready)")
-    while True:
-        if FIRE_FILE.exists():
-            try:
-                product_id = FIRE_FILE.read_text().strip()
-                FIRE_FILE.unlink()
-                if product_id:
-                    await fire(product_id, accounts)
-            except Exception as e:
-                log.error(f"[DAEMON] Error: {e}")
-        await asyncio.sleep(0.5)
-
-
 async def main():
     import argparse
-    parser = argparse.ArgumentParser(description="JC Torpedo — pure HTTP instant buy")
-    parser.add_argument("--fire", "-f", help="Product ID to buy NOW (one-shot)")
-    parser.add_argument("--test", action="store_true", help="Use test account (Marian)")
-    parser.add_argument("--daemon", action="store_true", help="Run as daemon (watch trigger file)")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fire", "-f", help="Product ID (one-shot)")
+    parser.add_argument("--url", "-u", default="", help="Product URL")
+    parser.add_argument("--test", action="store_true", help="Test account only")
+    parser.add_argument("--daemon", action="store_true", help="Run as daemon")
     args = parser.parse_args()
 
     accounts = [TEST_ACCOUNT] if args.test else ACCOUNTS
+    daemon = TorpedoDaemon(accounts)
+    await daemon.start()
 
     if args.fire:
-        ok = await fire(args.fire, accounts)
-        sys.exit(0 if ok > 0 else 1)
+        await daemon.fire(args.fire, args.url)
+        await daemon.browser.close()
     elif args.daemon:
-        await daemon_loop(accounts)
+        log.info("[DAEMON] Running (watch /tmp/jc_torpedo_fire.txt)")
+        try:
+            await daemon.daemon_loop()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            await daemon.browser.close()
     else:
-        print("Usage: --fire PRODUCT_ID | --daemon")
-        print("  --fire 7437         Buy product 7437 now")
-        print("  --fire 7437 --test  Buy on test account only")
-        print("  --daemon            Run forever, watch /tmp/jc_torpedo_fire.txt")
+        print("--fire PID or --daemon")
 
 
 if __name__ == "__main__":
