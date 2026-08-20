@@ -111,8 +111,29 @@ async def torpedo_buy(account, product_id):
             log.error(f"[{email}] Cart error: {e}")
             return False
 
-        # === 3. ADD TO CART (Sky-Shop internal API) ===
+        # === 3. CLEAR CART + ADD TO CART ===
         try:
+            # Clear cart first (delete all existing items)
+            r = await s.get(
+                f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/{cart_id}",
+                proxy=PROXY,
+                timeout=aiohttp.ClientTimeout(total=5),
+            )
+            cart_check = await r.json()
+            existing_items = cart_check.get("cart", {}).get("items", [])
+            for item in existing_items:
+                item_id = item.get("id", "")
+                if item_id:
+                    await s.delete(
+                        f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/{cart_id}/items/{item_id}",
+                        headers={"Accept": "application/json", "currency": "PLN", "lang": "pl"},
+                        proxy=PROXY,
+                        timeout=aiohttp.ClientTimeout(total=3),
+                    )
+            if existing_items:
+                log.info(f"[{email}] Cleared {len(existing_items)} items from cart")
+
+            # Add product
             r = await s.post(
                 f"{SHOP_URL}/proxy_public_api?endpoint=/sky2/api-public/carts/{cart_id}/items",
                 json={"productId": int(product_id), "quantity": 1, "parameters": []},
@@ -130,14 +151,13 @@ async def torpedo_buy(account, product_id):
             except:
                 log.error(f"[{email}] ATC not JSON: {atc_text[:300]}")
                 return False
-            can_buy = atc_data.get("cart", {}).get("canBuy", False)
-            items = atc_data.get("cart", {}).get("items", [])
-            log.info(f"[{email}] ATC response: canBuy={can_buy}, items={len(items)}, keys={list(atc_data.get('cart',{}).keys())[:8]}")
-            if not items:
-                # Maybe response structure is different — log full
-                log.error(f"[{email}] ATC no items. Full response: {atc_text[:500]}")
+
+            # ATC response has "addedCartItem" (not "cart.items")
+            added = atc_data.get("addedCartItem", {})
+            if not added:
+                log.error(f"[{email}] ATC no addedCartItem: {atc_text[:300]}")
                 return False
-            log.info(f"[{email}] ATC OK ({len(items)} items) ({time.time()-t0:.2f}s)")
+            log.info(f"[{email}] ATC OK (product {product_id}, {added.get('priceSummary',{}).get('final',{}).get('grossDisplay','?')}) ({time.time()-t0:.2f}s)")
         except Exception as e:
             log.error(f"[{email}] ATC error: {e}")
             return False
