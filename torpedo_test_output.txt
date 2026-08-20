@@ -1,10 +1,19 @@
-2026-08-20 11:55:14,961 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
-2026-08-20 11:55:17,102 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.84s)
-2026-08-20 11:55:17,455 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (2.19s)
-2026-08-20 11:55:17,944 [JC-TORPEDO] [t11008543@gmail.com] Cleared 1 items from cart
-2026-08-20 11:55:18,278 [JC-TORPEDO] [t11008543@gmail.com] ATC OK (product 7437, 70,00 zł) (3.02s)
-2026-08-20 11:55:18,786 [JC-TORPEDO] [t11008543@gmail.com] Order page: 73004 bytes, URL: https://japancollectibles.shop/order
-2026-08-20 11:55:19,239 [JC-TORPEDO] [t11008543@gmail.com] No csrf found — will try submit without it
-2026-08-20 11:55:19,240 [JC-TORPEDO] [t11008543@gmail.com] Order: csrf=EMPTY, shipments=['{{:id:}}'] (3.98s)
-2026-08-20 11:55:19,379 [JC-TORPEDO] [t11008543@gmail.com] ❌ Order failed (4.12s) URL: https://japancollectibles.shop/order_finish/
-2026-08-20 11:55:19,380 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 4.42s ===
+1. Login page csrf: aac33157fc0b3ff178f6... (0.77s)
+2. Login: OK (1.84s)
+   Cookies: ['PHPSESSID', 'SERVERID', 'autologin', 'loggedInNow']
+3. Cart: efe9ca11-079... items=1 (2.29s)
+4. Cleared 1 items
+5. ATC: OK price=70,00 zł (2.97s)
+6. Order page: 73004b csrf="" ships=['{{:id:}}'] (3.47s)
+   ship_data: []
+   Cookies now: ['PHPSESSID=1nd0rib022susih', 'SERVERID=apache-web', 'autologin=eyJ1c2VyX2lkIjo', 'loggedInNow=true', 'device_view=full', 'sky2_cart_id=efe9ca11-079a-4']
+   form section: div class="container container-wrapper ">
+                            
+<form method="POST" action="/order_finish/" class="core_parseForm core_orderFormChange">
+    <input type="hidden" name="csrf_token" value="">
+    <input type="hidden" name="ga_client_id" value="">
+    <input type="hidden" name="g
+7. Submitting: {"csrf_token": "", "payment": "21", "shipment": "{{:id:}}", "user_country": "PL", "register_link_to_rules": "1", "register_must_accept": "1", "dotpay_rules_agreed": "1", "is_js": "1", "code_discount":
+   Result: HTTP 403 URL=https://japancollectibles.shop/order_finish/
+   Body start: <style> @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;600&display=swap'); body { width: 100%; height: 100%; margin: 0px; overflow: hidden; font-family: 'Rubik', sans-serif; display: block; background-position: center center; background-size: cover; background-repeat: repeat-y;
+   TOTAL TIME: 3.59s
