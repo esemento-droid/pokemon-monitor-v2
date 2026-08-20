@@ -1,12 +1,18 @@
-2026-08-20 10:58:01,885 [JC-TORPEDO] [DAEMON] Browser started (patchright stealth + proxy)
-2026-08-20 10:58:10,633 [JC-TORPEDO] [DAEMON] [t11008543@gmail.com] Logged in ✓
-2026-08-20 10:58:12,635 [JC-TORPEDO] [DAEMON] All 1 accounts ready. Waiting for trigger...
-2026-08-20 10:58:12,635 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437 ===
-2026-08-20 10:58:15,845 [JC-TORPEDO] [t11008543@gmail.com] ATC + cart nav (3.2s)
-2026-08-20 10:58:26,135 [JC-TORPEDO] [t11008543@gmail.com] Cart hydrated (13.5s)
-2026-08-20 10:58:38,229 [JC-TORPEDO] [t11008543@gmail.com] order() click didn't navigate, forcing form submit...
-2026-08-20 10:58:38,238 [JC-TORPEDO] [t11008543@gmail.com] Exception: Page.evaluate: ReferenceError: angular is not defined
-    at eval (eval at evaluate (:303:30), <anonymous>:3:35)
-    at UtilityScript.evaluate (<anonymous>:310:18)
-    at UtilityScript.<anonymous> (<anonymous>:1:44)
-2026-08-20 10:58:38,238 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 25.6s ===
+2026-08-20 11:24:31,910 [JC-TORPEDO] [DAEMON] Browser started (patchright stealth + proxy)
+2026-08-20 11:24:40,498 [JC-TORPEDO] [DAEMON] [t11008543@gmail.com] Logged in ✓
+2026-08-20 11:24:42,501 [JC-TORPEDO] [DAEMON] All 1 accounts ready. Waiting for trigger...
+2026-08-20 11:24:42,501 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437 ===
+2026-08-20 11:24:45,308 [JC-TORPEDO] [t11008543@gmail.com] ATC + cart nav (2.8s)
+2026-08-20 11:24:55,638 [JC-TORPEDO] [t11008543@gmail.com] Cart hydrated (13.1s)
+2026-08-20 11:25:07,727 [JC-TORPEDO] [t11008543@gmail.com] order() click didn't navigate, forcing form submit...
+2026-08-20 11:25:07,734 [JC-TORPEDO] [t11008543@gmail.com] cart_id from DOM: 'efe9ca11-079a-444f-b66e-426087cfce71'
+2026-08-20 11:25:17,751 [JC-TORPEDO] [t11008543@gmail.com] Checkout click (35.3s) URL: https://japancollectibles.shop/cart/
+2026-08-20 11:25:32,987 [JC-TORPEDO] [t11008543@gmail.com] Checkout rendered (50.5s)
+2026-08-20 11:25:32,998 [JC-TORPEDO] [t11008543@gmail.com] DOM ANALYSIS: {"blikInfo": "not_found", "orderInfo": {"tag": "BUTTON", "class": "close-searchbar ms-2 bg-transparent border-0 element-black", "childCount": 1}, "mdRadios": 0, "mdDetails": [], "inputs": [{"type": "search", "name": "q", "id": "header_panel_searchbar-input"}, {"type": "search", "name": "q", "id": "header_main_searchbar-input"}, {"type": "hidden", "name": "cart_id", "id": ""}, {"type": "checkbox", "name": "", "id": ""}, {"type": "checkbox", "name": "", "id": ""}, {"type": "checkbox", "name": "", "id": ""}], "url": "https://japancollectibles.shop/cart/", "hasOrder": false}
+2026-08-20 11:25:33,003 [JC-TORPEDO] [t11008543@gmail.com] Payment: none
+2026-08-20 11:25:35,013 [JC-TORPEDO] [t11008543@gmail.com] Delivery: none
+2026-08-20 11:25:36,035 [JC-TORPEDO] [t11008543@gmail.com] Checkboxes: 2 clicked
+2026-08-20 11:25:36,545 [JC-TORPEDO] [t11008543@gmail.com] PRE-SUBMIT state: {'checked_radios': [], 'checked_checkboxes': 3, 'submit_btn': 'NOT FOUND', 'url': 'https://japancollectibles.shop/cart/'}
+2026-08-20 11:25:36,545 [JC-TORPEDO] [t11008543@gmail.com] Submitting (54.0s)
+2026-08-20 11:25:41,658 [JC-TORPEDO] [t11008543@gmail.com] ❌ Failed (59.1s) URL: https://japancollectibles.shop/category/?q=#top
+2026-08-20 11:25:41,781 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 59.3s ===
