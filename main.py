@@ -139,6 +139,12 @@ async def shop_worker(name, module, logger, process_type):
                 logger.info(f"[{name}] Cooldown: {remaining}s remaining")
             await asyncio.sleep(30)
             continue
+        elif stats.get("cooldown_until", 0) > 0 and stats.get("cooldown_until", 0) <= _time.time():
+            # Cooldown just expired — reset error counter to give shop a fresh chance
+            # Without this, consecutive_err stays at 20+ and one more failure = instant re-cooldown
+            logger.info(f"[{name}] Cooldown expired — resetting error counter (was {stats['consecutive_err']})")
+            stats["consecutive_err"] = 0
+            stats["cooldown_until"] = 0
 
         try:
             start = datetime.now()

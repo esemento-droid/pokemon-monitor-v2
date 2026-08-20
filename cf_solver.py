@@ -48,7 +48,7 @@ import time
 logger = logging.getLogger("monitor")
 
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
-MAX_CONCURRENT = 2  # Max simultaneous CF solves (1 tab each, all closed after)
+MAX_CONCURRENT = 4  # Max simultaneous CF solves (1 tab each, all closed after)
 SOLVE_TIMEOUT = 45  # Max seconds to solve a challenge
 CF_WAIT_MAX = 20    # Max seconds to wait for CF challenge resolution
 
