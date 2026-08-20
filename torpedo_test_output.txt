@@ -1,5 +1,6 @@
-2026-08-20 11:49:33,175 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
-2026-08-20 11:49:35,081 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.60s)
-2026-08-20 11:49:35,445 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (1.97s)
-2026-08-20 11:49:35,711 [JC-TORPEDO] [t11008543@gmail.com] ATC failed - no items in cart
-2026-08-20 11:49:35,712 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 2.54s ===
+2026-08-20 11:50:20,891 [JC-TORPEDO] === 🚀 TORPEDO FIRE product=7437, 1 accounts ===
+2026-08-20 11:50:22,684 [JC-TORPEDO] [t11008543@gmail.com] Login OK (1.50s)
+2026-08-20 11:50:22,989 [JC-TORPEDO] [t11008543@gmail.com] Cart: efe9ca11... (1.80s)
+2026-08-20 11:50:23,254 [JC-TORPEDO] [t11008543@gmail.com] ATC response: canBuy=False, items=0, keys=[]
+2026-08-20 11:50:23,255 [JC-TORPEDO] [t11008543@gmail.com] ATC no items. Full response: {"id":"efe9ca11-079a-444f-b66e-426087cfce71","addedCartItem":{"id":"d692b40d-d5d7-42bc-9557-ea9c944062eb","type":"ORDINARY_PRODUCT","priceSummary":{"base":{"net":56.91,"netDisplay":"56,91 z\u0142","gross":70,"grossDisplay":"70,00 z\u0142","currency":"PLN","tax":{"amount":13.09,"percent":23,"displayName":"23%"}},"final":{"net":56.91,"netDisplay":"56,91 z\u0142","gross":70,"grossDisplay":"70,00 z\u0142","currency":"PLN","tax":{"amount":13.09,"percent":23,"displayName":"23%"}},"discounts":[]},"unit
+2026-08-20 11:50:23,256 [JC-TORPEDO] === TORPEDO DONE: 0/1 in 2.37s ===
