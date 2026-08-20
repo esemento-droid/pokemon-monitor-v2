@@ -65,9 +65,13 @@ TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 PROXY = {"server": "http://127.0.0.1:8888"}
 
-# A cheap available product to stage checkout with (Mini Tin 70 PLN, qty=17)
-STAGE_PID = 7437
-STAGE_URL = f"{SHOP_URL}/Pokemon-TCG-Angielski-Mega-Heroes-Mini-Tin-p{STAGE_PID}"
+# Stage products (fallback list — use first available, cheap, high stock)
+STAGE_PRODUCTS = [
+    {"pid": 7437, "url": f"{SHOP_URL}/Pokemon-TCG-Angielski-Mega-Heroes-Mini-Tin-p7437"},      # Mini Tin 70 PLN, qty=17
+    {"pid": 7589, "url": f"{SHOP_URL}/Pokemon-TCG-Angielski-Kanto-Friends-Mini-Tin-p7589"},    # Kanto Tin 80 PLN, qty=11
+    {"pid": 9332, "url": f"{SHOP_URL}/PokeRadioStation-Angielski-Mystery-Pack-S4-p9332"},      # Mystery Pack 120 PLN, qty=20
+    {"pid": 9334, "url": f"{SHOP_URL}/PokeRadioStation-Zestaw-Mystery-Packow-p9334"},          # Mystery Zestaw 228 PLN, qty=20
+]
 
 HEARTBEAT_INTERVAL = 300  # 5 min
 RESTAGE_INTERVAL = 1800   # 30 min
@@ -168,23 +172,36 @@ class TorpedoDaemon:
         }""")
         await page.wait_for_timeout(2000)
 
-        # --- ATC STAGE PRODUCT ---
-        await page.goto(STAGE_URL, wait_until="domcontentloaded", timeout=15000)
-        await page.wait_for_timeout(2000)
-        await page.evaluate("""() => {
-            document.getElementById('cc--main')?.remove();
-            document.querySelector('.fixed-elements')?.remove();
-        }""")
-        atc_btn = page.locator("button:has-text('Do koszyka'), button[aria-label*='Dodaj do koszyka']").first
-        await atc_btn.wait_for(state="visible", timeout=8000)
-        await atc_btn.click(force=True)
-        await page.wait_for_timeout(2000)
-        try:
-            r = page.locator("text=Realizuj zamówienie")
-            if await r.is_visible(timeout=2000):
-                await r.click()
-        except:
-            pass
+        # --- ATC STAGE PRODUCT (try from fallback list) ---
+        atc_ok = False
+        for stage in STAGE_PRODUCTS:
+            await page.goto(stage["url"], wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(2000)
+            await page.evaluate("""() => {
+                document.getElementById('cc--main')?.remove();
+                document.querySelector('.fixed-elements')?.remove();
+            }""")
+            try:
+                atc_btn = page.locator("button:has-text('Do koszyka'), button[aria-label*='Dodaj do koszyka']").first
+                await atc_btn.wait_for(state="visible", timeout=5000)
+                await atc_btn.click(force=True)
+                await page.wait_for_timeout(2000)
+                try:
+                    r = page.locator("text=Realizuj zamówienie")
+                    if await r.is_visible(timeout=2000):
+                        await r.click()
+                except:
+                    pass
+                atc_ok = True
+                log.info(f"[{email}] Stage product: {stage['pid']} ✓")
+                break
+            except:
+                log.warning(f"[{email}] Stage product {stage['pid']} unavailable, trying next...")
+                continue
+
+        if not atc_ok:
+            log.error(f"[{email}] ALL stage products unavailable!")
+            return
 
         # --- GO TO CART → CHECKOUT ---
         await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=15000)
@@ -478,7 +495,7 @@ class TorpedoDaemon:
                         await fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/' + cartId + '/items', {{
                             method: 'POST',
                             headers: {{'Content-Type':'application/json','Accept':'application/json','currency':'PLN','lang':'pl'}},
-                            body: JSON.stringify({{productId: {STAGE_PID}, quantity: 1, parameters: []}})
+                            body: JSON.stringify({{productId: {STAGE_PRODUCTS[0]['pid']}, quantity: 1, parameters: []}})
                         }});
                         return {{available: false, error: data.errorCode || data.message || 'unknown'}};
                     }}
