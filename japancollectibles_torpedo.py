@@ -52,6 +52,8 @@ ACCOUNTS = [
     {"email": "y24015411@gmail.com", "password": "huw!e.twdCmv9@B", "name": "Mirosława Szczepaniak"},
 ]
 
+TEST_ACCOUNT = {"email": "t11008543@gmail.com", "password": "mt!cSsphud4Zhnz", "name": "Marian Wasilewski"}
+
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 PROXY = "http://127.0.0.1:8888"
 
@@ -430,16 +432,31 @@ async def main():
     parser.add_argument("--product-id", "-p", help="Product ID to buy")
     parser.add_argument("--url", "-u", default="", help="Product URL")
     parser.add_argument("--accounts", type=int, default=4, help="Number of accounts (1-4)")
+    parser.add_argument("--test", action="store_true", help="Use test account (Marian Wasilewski)")
     args = parser.parse_args()
 
     if args.action == "warmup":
-        await warmup_all()
+        if args.test:
+            # Warmup only test account
+            cookies = await _create_session(TEST_ACCOUNT)
+            if cookies:
+                log.info(f"[TEST] Session ready ({len(cookies)} cookies)")
+            else:
+                log.error("[TEST] Warmup FAILED")
+        else:
+            await warmup_all()
     elif args.action == "fire":
         if not args.product_id:
             print("ERROR: --product-id required for fire")
             sys.exit(1)
-        ok = await fire(args.product_id, args.url, args.accounts)
-        sys.exit(0 if ok > 0 else 1)
+        if args.test:
+            # Fire on test account only
+            log.info("=== TEST MODE: firing on test account (Marian Wasilewski) ===")
+            ok = await torpedo_buy(TEST_ACCOUNT, args.product_id, args.url)
+            sys.exit(0 if ok else 1)
+        else:
+            ok = await fire(args.product_id, args.url, args.accounts)
+            sys.exit(0 if ok > 0 else 1)
 
 
 if __name__ == "__main__":
