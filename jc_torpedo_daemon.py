@@ -175,6 +175,9 @@ class TorpedoDaemon:
         try:
             # === STEP 1: ATC (goto /cart/add/{id}) ===
             await page.goto(f"{SHOP_URL}/cart/add/{product_id}", wait_until="domcontentloaded", timeout=10000)
+            await page.wait_for_timeout(1000)
+            # Navigate to /cart/ (ATC stays on /cart/add/ URL — Angular router needs /cart/)
+            await page.goto(f"{SHOP_URL}/cart/", wait_until="domcontentloaded", timeout=10000)
             await page.wait_for_timeout(2000)
             log.info(f"[{email}] ATC done ({time.time()-t0:.1f}s)")
 
