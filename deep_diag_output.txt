@@ -1,32 +1,32 @@
 ╔══════════════════════════════════════════════════════════════╗
-║  DEEP DIAGNOSTIC 2026-08-20 08:51 (last 0.05h)            ║
+║  DEEP DIAGNOSTIC 2026-08-20 08:58 (last 0.05h)            ║
 ╚══════════════════════════════════════════════════════════════╝
 
 === 1. SYSTEM ===
-  Uptime: up 2 weeks, 2 days, 19 hours, 58 minutes
-  Load: 4.06 4.80 5.41
-  RAM: 3300MB/7763MB used (3517MB free, 4462MB available)
-  Swap: 69MB/2047MB
-  Chrome: 33 processes, 4062MB
+  Uptime: up 2 weeks, 2 days, 20 hours, 5 minutes
+  Load: 4.15 4.32 4.96
+  RAM: 3039MB/7763MB used (3773MB free, 4723MB available)
+  Swap: 68MB/2047MB
+  Chrome: 31 processes, 3666MB
 
 === 2. SERVICE ===
-  PID: 3457184 | Since: Thu 2026-08-20 08:45:38 CEST
+  PID: 3459609 | Since: Thu 2026-08-20 08:53:42 CEST
   ROLE       PID      %CPU   %MEM   RSS_MB
-  PID-3457184 3457184  0.1    0.6    51M   
-  PID-3457185 3457185  79.5   2.7    209M  
-  PID-3457186 3457186  78.6   3.1    247M  
-  PID-3457187 3457187  73.5   3.3    263M  
-  PID-3457188 3457188  0.8    1.0    84M   
-  PID-3457191 3457191  0.2    0.6    49M   
+  PID-3459609 3459609  0.2    0.6    51M   
+  PID-3459610 3459610  80.5   2.3    180M  
+  PID-3459611 3459611  78.2   2.5    201M  
+  PID-3459612 3459612  72.7   3.1    245M  
+  PID-3459613 3459613  0.8    1.0    84M   
+  PID-3459616 3459616  0.2    0.6    49M   
 
 === 3. PROXY ===
-  HTTP(8888): 37.47.130.139200 0.461795s IP=
-  Tailscale:  37.47.130.139200 0.358559s IP=
-  SOCKS5:     37.47.130.139200 0.328205s IP=
+  HTTP(8888): 37.47.130.139200 0.541795s IP=
+  Tailscale:  37.47.130.139200 0.424317s IP=
+  SOCKS5:     37.47.130.139200 0.321119s IP=
   VPS direct: 146.59.45.228
 
 === 4. PHONE (Mi 9T) ===
-  Ping: 24.737ms
+  Ping: 24.123ms
   Phone crontab:
     * * * * * /data/data/com.termux/files/home/bin/watchdog.sh
     0 */4 * * * /data/data/com.termux/files/home/bin/rotate_ip.sh
@@ -34,52 +34,56 @@
 === 5. NODRIVER SHOPS ===
 
   SHOP             SCANS ZEROS  ERRS HEALS TOUTS  LAST_STATUS
-  empik                1     0     0     0     0  252 produktow w 85.7s
-  mediaexpert          1     0     1     0     0  GraphQL error: 404
-  tantis               2     0     0     0     0  3 produktow w 9.2s
-  libristo             2     0     0     0     0  9 produktow w 13.8s
-  boosterpoint         1     0     0     0     0  314 produktow w 17.1s
-  strefamarzen         3     0     0     0     0  23 produktow w 10.0s
+  empik                2     0     0     0     0  252 produktow w 81.9s
+  mediaexpert          1     0     0     0     0  4 produktow w 9.5s
+  tantis               2     0     0     0     0  3 produktow w 8.9s
+  libristo             2     0     0     0     0  9 produktow w 15.4s
+  boosterpoint         1     0     0     0     0  314 produktow w 43.9s
+  strefamarzen         2     0     0     0     0  23 produktow w 9.4s
   bonito               0     0     0     0     0  
-  piwniczaki           0     0     0     0     0  
-  dragonus             0     0     0     0     0  HTTP 403
+  piwniczaki           6     6     0     0     0  40 produktow w 21.0s
+  dragonus             7     0     0     0     0  21 produktow w 12.4s
   wilczek              0     0     0     0     0  HTTP 403
   rgfk                 0     0     0     0     0  
   proshop              0     0     0     0     0  
 
   Stuck shops (>10 zeros, <3 scans) — last 3 lines each:
+  --- piwniczaki (6 zeros) ---
+    2026-08-20T08:56:57+0200 vps-733c4be8 python[3459611]: 2026-08-20 08:56:57,212 [FAST] [INFO] [piwniczaki] 40 produktow w 5.2s
+    2026-08-20T08:57:33+0200 vps-733c4be8 python[3459611]: 2026-08-20 08:57:33,182 [FAST] [INFO] [piwniczaki] 40 produktow w 21.9s
+    2026-08-20T08:58:04+0200 vps-733c4be8 python[3459611]: 2026-08-20 08:58:04,821 [FAST] [INFO] [piwniczaki] 40 produktow w 21.0s
 
 === 6. ENGINE ===
-  Polls: 9 | Scans reported: 6 | Errors: 0
+  Polls: 8 | Scans reported: 5 | Errors: 0
   Last 5 lines:
-    2026-08-20T08:50:12+0200 vps-733c4be8 python[3457191]: 2026-08-20 08:50:12,968 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T08:50:35+0200 vps-733c4be8 python[3457191]: 2026-08-20 08:50:35,552 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T08:50:57+0200 vps-733c4be8 python[3457191]: 2026-08-20 08:50:57,648 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T08:51:20+0200 vps-733c4be8 python[3457191]: 2026-08-20 08:51:20,192 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
-    2026-08-20T08:51:42+0200 vps-733c4be8 python[3457191]: 2026-08-20 08:51:42,538 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T08:56:42+0200 vps-733c4be8 python[3459616]: 2026-08-20 08:56:42,352 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T08:57:04+0200 vps-733c4be8 python[3459616]: 2026-08-20 08:57:04,845 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T08:57:27+0200 vps-733c4be8 python[3459616]: 2026-08-20 08:57:27,408 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T08:57:49+0200 vps-733c4be8 python[3459616]: 2026-08-20 08:57:49,829 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
+    2026-08-20T08:58:11+0200 vps-733c4be8 python[3459616]: 2026-08-20 08:58:11,671 [ENGINE] [INFO] [tcgumisia-proxy] 70 products (pokemon+pre-order)
 
 === 7. PROBLEM SHOPS (FAST/SLOW) ===
 
-  zaurketto                 6     10      0  MOSTLY_EMPTY
-  czytam.pl                 0      9      0  ALL_EMPTY
-  smakliter                 7      8      0  MOSTLY_EMPTY
-  planetaprezent            7      8      0  MOSTLY_EMPTY
-  juniorkurczak             6      7      0  MOSTLY_EMPTY
-  hearts                    6      7      0  MOSTLY_EMPTY
+  smakliter                 8     11      0  MOSTLY_EMPTY
+  planetaprezent            9     10      0  MOSTLY_EMPTY
+  loficards                 8     10      0  MOSTLY_EMPTY
+  krakenshop                9     10      0  MOSTLY_EMPTY
+  kimland                   8     10      0  MOSTLY_EMPTY
+  juniorkurczak             8      9      0  MOSTLY_EMPTY
+  hearts                    7      9      0  MOSTLY_EMPTY
+  stapis                    7      8      0  MOSTLY_EMPTY
+  zaurketto                 6      7      0  MOSTLY_EMPTY
   gryujanusza               7      7      0  DEGRADED
-  blindbox                  5      7      0  MOSTLY_EMPTY
-  rozmaitosci               6      6      0  DEGRADED
-  loficards                 6      6      0  DEGRADED
-  kartomat                  5      6      0  MOSTLY_EMPTY
-  cardfan                   5      6      0  MOSTLY_EMPTY
-  xzone                     6      5      0  DEGRADED
-  stapis                    5      5      0  DEGRADED
-  pokespot                  5      5      0  DEGRADED
-  pokemaniak                5      5      0  DEGRADED
-  pegazgry                  5      5      0  DEGRADED
-  lootquest                 5      5      0  DEGRADED
-  krakenshop                5      5      0  DEGRADED
-  kimland                   5      5      0  DEGRADED
+  pokemaniak                5      6      1  DEGRADED
+  piwniczaki                6      6      0  DEGRADED
+  pegazgry                  6      6      0  DEGRADED
+  lootquest                 6      6      0  DEGRADED
+  kartomat                  7      6      0  DEGRADED
+  rozmaitosci               5      5      0  DEGRADED
+  pokecollect               6      5      0  DEGRADED
+  czytam                    4      5      0  MOSTLY_EMPTY
+  cardfan                   5      5      0  DEGRADED
+  blindbox                  5      5      0  DEGRADED
 
 === 8. COOLDOWNS + CONSECUTIVE ERRORS ===
 
@@ -87,18 +91,25 @@
   (none)
 
 === 10. TIMEOUTS ===
-  Total: 0
+    1 x pokemaniak
+  Total: 1
 
 === 11. ERRORS (unique, last 20) ===
-  2026-08-20 08:49:49,390 [FAST] [ERROR] [przyczolek] ERROR: Cannot connect to host przyczolek.pl:443 ssl:default [None]
+  2026-08-20 08:55:24,488 [FAST] [ERROR] [grybezpradu] ERROR: Server disconnected
+  2026-08-20 08:56:54,822 [FAST] [ERROR] [alpakagra] ERROR: Server disconnected
+  2026-08-20 08:56:54,823 [FAST] [ERROR] [kartexpol] ERROR: Server disconnected
+  2026-08-20 08:56:58,591 [FAST] [ERROR] [graal] ERROR: Server disconnected
+  2026-08-20 08:56:58,609 [FAST] [ERROR] [kantodrop] ERROR: Server disconnected
+  2026-08-20 08:57:31,363 [FAST] [ERROR] [pokespot] ERROR: Server disconnected
+  2026-08-20 08:57:31,363 [FAST] [ERROR] [tcgheaven] ERROR: Server disconnected
 
 === 12. DB ===
   Products: 12564
-  Events 1h: 16
-  Events 24h: 345
+  Events 1h: 17
+  Events 24h: 342
   Breakdown (24h):
-    RESTOCK              114
-    SOLD_OUT             110
+    RESTOCK              113
+    SOLD_OUT             108
     PRICE_CHANGE         101
     NEW_PRODUCT          20
 
@@ -147,7 +158,7 @@
 
 === 16. SUMMARY ===
   Window: last 0.05h
-  Scans: 720 | Engine polls: 9 | Errors: 1 | Timeouts: 0
+  Scans: 760 | Engine polls: 8 | Errors: 7 | Timeouts: 1
 
 ╔══════════════════════════════════════════════════════════════╗
 ║                     END DEEP DIAGNOSTIC                     ║
