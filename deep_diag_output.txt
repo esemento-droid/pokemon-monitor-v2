@@ -1,6 +1,57 @@
-Total: 252 products
-Pokémon TCG: First Partner Booster Collection #3 | img=https://www.empik.com/b/mp/img/svg/no_picture.svg
-Pokémon TCG: Mega Evolution - Pitch Black - Booste | img=https://www.empik.com/b/mp/img/svg/no_picture.svg
-Pokémon TCG: Mega Evolution - Pitch Black - Elite  | img=https://www.empik.com/b/mp/img/svg/no_picture.svg
-Pokémon TCG: Mega Evolution - Pitch Black - Booste | img=https://www.empik.com/b/mp/img/svg/no_picture.svg
-Pokémon TCG: Mega Evolution - Pitch Black - 3-Pack | img=https://www.empik.com/b/mp/img/svg/no_picture.svg
+[
+  {
+    "name": "Pokemon Trenuj ze Mną Magazyn",
+    "imgs": [
+      {
+        "src": "https://www.empik.com/b/mp/img/svg/no_picture.svg",
+        "dataSrc": "",
+        "dataLazy": "",
+        "dataOriginal": "",
+        "srcset": "",
+        "className": "lazy",
+        "alt": "Pokemon Trenuj ze Mną Magazyn",
+        "outerHTML": "<img class=\"lazy\" src=\"/b/mp/img/svg/no_picture.svg\" lazy-img=\"https://ecsmedia.pl/cir/p/pokemon-trenuj-ze-mna-magazyn-1941301/e5f231cc82f14346869f48d25eff4f93.webp\" alt=\"Pokemon Trenuj ze Mną Magazyn\">"
+      }
+    ]
+  },
+  {
+    "name": "Pokémon TCG: First Partner Booster Collection #3",
+    "imgs": [
+      {
+        "src": "https://www.empik.com/b/mp/img/svg/no_picture.svg",
+        "dataSrc": "",
+        "dataLazy": "",
+        "dataOriginal": "",
+        "srcset": "",
+        "className": "lazy",
+        "alt": "Pokémon TCG: First Partner Booster Collection #3",
+        "outerHTML": "<img class=\"lazy\" src=\"/b/mp/img/svg/no_picture.svg\" lazy-img=\"https://ecsmedia.pl/c/pokemon-tcg-first-partner-booster-collection-3-p-iext232404323.jpg\" alt=\"Pokémon TCG: First Partner Booster Collection #3\">"
+      }
+    ]
+  },
+  {
+    "name": "Pokémon TCG: Mega Evolution - Pitch Black - Booste",
+    "imgs": [
+      {
+        "src": "https://www.empik.com/b/mp/img/svg/no_picture.svg",
+        "dataSrc": "",
+        "dataLazy": "",
+        "dataOriginal": "",
+        "srcset": "",
+        "className": "lazy",
+        "alt": "Pokémon TCG: Mega Evolution - Pitch Black - Booster",
+        "outerHTML": "<img class=\"lazy\" src=\"/b/mp/img/svg/no_picture.svg\" lazy-img=\"https://ecsmedia.pl/c/pokemon-tcg-mega-evolution-pitch-black-booster-p-iext231833752.jpg\" alt=\"Pokémon TCG: Mega Evolution - Pitch Black - Booster\">"
+      },
+      {
+        "src": "https://www.empik.com/b/mp/img/svg/premium/premium_badge_v2.svg",
+        "dataSrc": "",
+        "dataLazy": "",
+        "dataOriginal": "",
+        "srcset": "",
+        "className": "svgBadge",
+        "alt": "",
+        "outerHTML": "<img class=\"svgBadge\" src=\"/b/mp/img/svg/premium/premium_badge_v2.svg\">"
+      }
+    ]
+  }
+]
