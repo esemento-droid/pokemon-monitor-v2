@@ -203,68 +203,12 @@ class TorpedoDaemon:
 
             log.info(f"[{email}] Cart hydrated ({time.time()-t0:.1f}s)")
 
-            # === STEP 2: Click "Przejdź do kasy" ===
-            for _ in range(10):
-                can_order = await page.evaluate("""() => {
-                    const btn = document.querySelector('button[data-ng-click="order()"]');
-                    return btn && !btn.disabled;
-                }""")
-                if can_order:
-                    break
-                await page.wait_for_timeout(500)
-
-            # Use Playwright click (triggers Angular properly, not just JS click)
-            try:
-                order_btn = page.locator('button[data-ng-click="order()"]').first
-                await order_btn.click(timeout=5000)
-            except:
-                await page.evaluate("""() => {
-                    const form = document.getElementById('orderForm');
-                    if (form) form.submit();
-                }""")
-            
-            # Sky-Shop order() submits form#orderForm (POST /order with cart_id)
-            # If Playwright click didn't navigate, force form submit with cart_id from Angular
-            await page.wait_for_timeout(2000)
-            current_url = page.url
-            if '/order' not in current_url:
-                log.info(f"[{email}] order() click didn't navigate, forcing form submit...")
-                cart_id = await page.evaluate("""() => {
-                    const input = document.querySelector('#orderForm input[name="cart_id"]');
-                    const val = input ? input.value : '';
-                    // If Angular didn't render the value, try getting from scope via element
-                    if (!val || val.includes('{')) {
-                        // Try __ngContext or data attribute
-                        const ctrl = document.querySelector('[data-ng-controller="CartCtrl"][data-ng-init*="CLASSIC"]');
-                        if (ctrl && ctrl.__ngContext__) return '';
-                    }
-                    return val;
-                }""")
-                log.info(f"[{email}] cart_id from DOM: '{cart_id}'")
-                
-                if cart_id and not '{' in cart_id:
-                    # Submit form with real cart_id
-                    await page.evaluate(f"""() => {{
-                        const form = document.getElementById('orderForm');
-                        if (form) {{
-                            form.querySelector('input[name="cart_id"]').value = '{cart_id}';
-                            form.submit();
-                        }}
-                    }}""")
-                else:
-                    # Force submit form as-is (Angular may have bound it)
-                    await page.evaluate("""() => {
-                        const form = document.getElementById('orderForm');
-                        if (form) form.submit();
-                    }""")
-                
-                # Wait for navigation to /order
-                try:
-                    await page.wait_for_url("**/order**", timeout=10000)
-                except:
-                    pass
-
-            log.info(f"[{email}] Checkout click ({time.time()-t0:.1f}s) URL: {page.url}")
+            # === STEP 2: Navigate to /order directly (POST via goto, Angular handles it) ===
+            # Sky-Shop: /order page renders checkout IF cart has items
+            # Bypass "Przejdź do kasy" button — go directly
+            await page.goto(f"{SHOP_URL}/order", wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(3000)
+            log.info(f"[{email}] Order page navigated ({time.time()-t0:.1f}s) URL: {page.url}")
 
             # === STEP 3: Wait for checkout render ===
             # After click, Sky-Shop navigates to /order (full page or Angular route)
