@@ -5,6 +5,7 @@ from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
 SHOP = "rgfk"
+SHOP_DISABLED = True  # Anubis challenge not solvable with any method
 BASE_URL = "https://rgfk.pl/k/51874/pokemon-tcg"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 EXCLUDE = [

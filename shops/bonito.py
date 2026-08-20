@@ -13,7 +13,7 @@ import re
 log = logging.getLogger("monitor")
 
 SHOP = "bonito"
-BROWSER_TYPE = "standard"  # VPS IP (not mobile proxy which is banned)
+BROWSER_TYPE = "stealth"  # stealth patchright passes JS challenges better
 SCAN_TIMEOUT = 150  # JS challenge needs patience
 SEARCH_URL = "https://bonito.pl/szukaj?fraza=pokemon+tcg"
 
