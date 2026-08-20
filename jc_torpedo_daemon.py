@@ -162,11 +162,12 @@ async def torpedo_buy(account, product_id):
             log.error(f"[{email}] ATC error: {e}")
             return False
 
-        # === 4. GO TO ORDER PAGE (POST /order with cart_id) → get csrf + shipment ===
+        # === 4. GO TO ORDER PAGE → get csrf + shipment ===
         try:
             # Set sky2_cart_id cookie (required by Sky-Shop to link session to cart)
             jar.update_cookies({"sky2_cart_id": cart_id}, response_url=aiohttp.client.URL(SHOP_URL))
             
+            # First try POST /order (normal flow)
             r = await s.post(
                 f"{SHOP_URL}/order",
                 data={"cart_id": cart_id},
@@ -184,31 +185,44 @@ async def torpedo_buy(account, product_id):
             order_html = await r.text()
             log.info(f"[{email}] Order page: {len(order_html)} bytes, URL: {r.url}")
 
-            # Extract csrf_token for order_finish
-            csrf_match = re.search(r'name="csrf_token"\s*value="([^"]+)"', order_html)
+            # csrf_token is empty in HTML (Angular fills it client-side)
+            # Sky-Shop pattern: csrf = hash + timestamp. We can try:
+            # 1. Extract from login page (we already have it from step 1)
+            # 2. Use the login csrf (may work if session-bound)
+            # 3. Try submitting WITHOUT csrf (some shops don't validate on logged-in sessions)
+            
+            # Extract whatever csrf we can find
+            csrf_match = re.search(r'name="csrf_token"\s*value="([a-f0-9]+)"', order_html)
             if not csrf_match:
-                # Try other patterns: meta tag, script var, data attribute
                 csrf_match = re.search(r'csrf_token["\s:=]+([a-f0-9]{40,})', order_html)
             csrf_token = csrf_match.group(1) if csrf_match else ""
+            
+            # If no csrf from order page, try getting from a GET to /order or /cart
+            if not csrf_token:
+                # Try GET /order (different render path)
+                r2 = await s.get(
+                    f"{SHOP_URL}/order",
+                    headers={"Referer": f"{SHOP_URL}/cart/"},
+                    proxy=PROXY,
+                    timeout=aiohttp.ClientTimeout(total=5),
+                )
+                order_html2 = await r2.text()
+                csrf_match2 = re.search(r'name="csrf_token"\s*value="([a-f0-9]+)"', order_html2)
+                if csrf_match2:
+                    csrf_token = csrf_match2.group(1)
+                    log.info(f"[{email}] Got csrf from GET /order")
+            
+            # If still no csrf — use empty (try submitting without it)
+            if not csrf_token:
+                log.warning(f"[{email}] No csrf found — will try submit without it")
 
             # Extract shipment IDs
-            shipment_ids = re.findall(r'name="shipment"[^>]*value="([^"{\[]+)"', order_html)
+            combined_html = order_html
+            shipment_ids = re.findall(r'name="shipment"[^>]*value="([^"{\[]+)"', combined_html)
             if not shipment_ids:
-                shipment_ids = re.findall(r'id="param-delivery-([^"]+)"', order_html)
-            if not shipment_ids:
-                shipment_ids = re.findall(r'"shipmentId"[:\s]+"([^"]+)"', order_html)
-            if not shipment_ids:
-                shipment_ids = re.findall(r'shipment[^>]*value="(\w{3,})"', order_html)
+                shipment_ids = re.findall(r'id="param-delivery-([^"]+)"', combined_html)
 
-            log.info(f"[{email}] Order: csrf={'yes' if csrf_token else 'NO'}, shipments={shipment_ids[:3]} ({time.time()-t0:.2f}s)")
-
-            if not csrf_token:
-                # Dump a section around "csrf" if exists
-                csrf_idx = order_html.find("csrf")
-                snippet = order_html[max(0,csrf_idx-50):csrf_idx+200] if csrf_idx > 0 else "csrf NOT FOUND in HTML"
-                log.error(f"[{email}] No csrf! Near 'csrf': {snippet}")
-                return False
-
+            log.info(f"[{email}] Order: csrf={'yes' if csrf_token else 'EMPTY'}, shipments={shipment_ids[:3]} ({time.time()-t0:.2f}s)")
             shipment_id = shipment_ids[0] if shipment_ids else ""
 
         except Exception as e:
