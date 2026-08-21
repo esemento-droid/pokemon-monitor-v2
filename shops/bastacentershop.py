@@ -1,4 +1,5 @@
-# Re-enabled 2026-08-21: user confirmed site works
+# DISABLED: kategoria pusta, nigdy nie miala produktow Pokemon TCG
+SHOP_DISABLED = True
 
 import aiohttp
 from bs4 import BeautifulSoup
