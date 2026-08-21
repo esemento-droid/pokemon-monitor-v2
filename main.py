@@ -53,6 +53,15 @@ SLOW_SHOPS = {
     "maginarium", "monsteriada", "wilczek",
 }
 
+# CF-dependent shops: need longer delays to avoid overwhelming the solver
+# Solver has semaphore(6) × ~40s/solve = ~9 solves/min capacity
+# 10 CF shops at 30-60s delay = 10-20 req/min → starvation!
+# At 90-150s delay = ~5-7 req/min → fits within capacity with margin
+CF_SHOPS = {
+    "sklepkleks", "battlestash", "tcgzielona", "morigal",
+    "eduksiazka", "dystryktzero", "gralnia", "xjoy", "mepel",
+}
+
 VERY_SLOW_SHOPS = {
     "efantasy", "twojekarty", "canislupus", "tcgtrener",
     "mangiusmoczejciotki", "vanaheim", "kartomaniak", "limango",
@@ -289,6 +298,8 @@ def _get_delay(name, stats, error=False, scan_time=0.0):
 
     if name in VERY_SLOW_SHOPS:
         base = random.randint(45, 90)
+    elif name in CF_SHOPS:
+        base = random.randint(90, 150)
     elif name in SLOW_SHOPS:
         base = random.randint(30, 60)
     elif name in SHOPIFY_SHOPS:
