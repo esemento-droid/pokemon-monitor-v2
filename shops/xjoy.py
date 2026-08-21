@@ -1,8 +1,8 @@
 """
 Scraper: xjoy.pl (PrestaShop 1.6 + Cloudflare)
 Category: /278-pokemon-tcg (91 products, 4 pages)
-Method: CF Solver (Camoufox/patchright) → HTML parse
-Category: SLOW (CF_SHOPS)
+Method: CF Solver (patchright Chromium) → HTML parse
+Group: SLOW (CF_SHOPS)
 
 DOM structure (PrestaShop 1.6):
 - Container: .product-container
@@ -12,6 +12,11 @@ DOM structure (PrestaShop 1.6):
 - URL: a[itemprop=url][href]
 - Availability: .product-availability → "W magazynie" / "Brak"
 - Pagination: ?p=2, ?p=3, ?p=4 (24 per page, 91 total)
+
+STRATEGY: Fetch ONLY page 1 per scan (24 products, ~55s).
+Full 4-page scan every 3rd cycle via _scan_counter.
+This way xjoy uses only 1 CF solver slot per scan (not 4!),
+leaving other slots free for sklepkleks/morigal/mepel etc.
 """
 
 import asyncio
@@ -19,11 +24,14 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "xjoy"
-SCAN_TIMEOUT = 180
+SCAN_TIMEOUT = 180  # 1 page = ~55s solve + buffer
 BASE = "https://www.xjoy.pl"
 CATEGORY_URL = f"{BASE}/278-pokemon-tcg"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
-MAX_PAGES = 5
+MAX_PAGES = 4  # 91 products / 24 per page = 4 pages
+FULL_SCAN_EVERY = 3  # Full 4-page scan every 3rd cycle
+
+_scan_counter = 0
 
 EXCLUDE = [
     # Accessories
@@ -43,7 +51,7 @@ EXCLUDE = [
     # Junk
     "figurk", "puzzle", "zeszyt", "marvel", "dc comics", "harry potter",
     "lord of the rings", "warhammer", "witcher", "mtg:", "mtg ",
-    # Accessories identifiers
+    # Accessories identifiers (PrestaShop xjoy specific)
     "4-pocket", "9-pocket", "4pkt", "9pkt", "100+", "2\" album",
     "dual deck box", "pro dual",
 ]
@@ -106,7 +114,6 @@ def _parse_page(html: str, seen: set) -> list[dict]:
                 # Get largest from srcset
                 srcset = img_el.get("srcset", "")
                 if srcset:
-                    # Last entry in srcset is largest
                     parts = [s.strip().split(" ")[0] for s in srcset.split(",") if s.strip()]
                     image = parts[-1] if parts else ""
                 if not image:
@@ -115,7 +122,6 @@ def _parse_page(html: str, seen: set) -> list[dict]:
         # Availability
         avail_el = item.select_one(".product-availability, .availability")
         avail_text = avail_el.get_text(strip=True).lower() if avail_el else ""
-        # "W magazynie" = available, anything else = OOS
         available = "magazyn" in avail_text or "w magazynie" in avail_text or "in stock" in avail_text
 
         # Also check for add-to-cart button presence (stronger signal)
@@ -141,58 +147,84 @@ def _parse_page(html: str, seen: set) -> list[dict]:
     return products
 
 
+async def _fetch_page(url: str) -> str:
+    """Fetch a single page via CF bridge. Returns HTML or empty string."""
+    payload = {
+        "cmd": "request.get",
+        "url": url,
+        "maxTimeout": 120000,  # 120s — CF solver needs up to 55s + queue
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{FLARESOLVERR_URL}",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=150),  # Client-side: 150s
+            ) as resp:
+                data = await resp.json()
+
+        if data.get("status") != "ok":
+            print(f"[XJOY] CF error {url[-30:]}: {data.get('message', '')[:60]}")
+            return ""
+
+        html = data.get("solution", {}).get("response", "")
+
+        # Validate: not a challenge page and has content
+        if not html or len(html) < 1000:
+            print(f"[XJOY] Short response {url[-30:]}: {len(html or '')} chars")
+            return ""
+
+        if "weryfikac" in html.lower() and len(html) < 30000:
+            print(f"[XJOY] Challenge page returned for {url[-30:]}")
+            return ""
+
+        return html
+
+    except asyncio.TimeoutError:
+        print(f"[XJOY] Timeout 150s for {url[-30:]}")
+        return ""
+    except Exception as e:
+        print(f"[XJOY] Error {url[-30:]}: {type(e).__name__}: {e}")
+        return ""
+
+
 async def get_products() -> list[dict]:
-    """Fetch all pages of xjoy Pokemon TCG category via CF solver."""
+    """
+    Fetch xjoy products. Strategy:
+    - Normal scan: page 1 only (24 products, 1 CF solver slot, ~55s)
+    - Every 3rd scan: all 4 pages (full inventory, sequential, ~4×55s)
+    
+    This prevents xjoy from hogging CF solver slots and blocking other shops.
+    """
+    global _scan_counter
+    _scan_counter += 1
+
     products = []
     seen: set = set()
 
-    # Fetch all pages (xjoy uses ?p=N for pagination)
-    urls = [CATEGORY_URL] + [f"{CATEGORY_URL}?p={p}" for p in range(2, MAX_PAGES + 1)]
+    # Determine which pages to fetch this cycle
+    if _scan_counter % FULL_SCAN_EVERY == 1 or _scan_counter == 1:
+        # Full scan — all pages, SEQUENTIAL (1 solver slot at a time)
+        urls = [CATEGORY_URL] + [f"{CATEGORY_URL}?p={p}" for p in range(2, MAX_PAGES + 1)]
+        print(f"[XJOY] Full scan (cycle {_scan_counter}, {len(urls)} pages)")
+    else:
+        # Quick scan — page 1 only (most restocks appear on page 1 = newest products)
+        urls = [CATEGORY_URL]
 
     for url in urls:
-        payload = {
-            "cmd": "request.get",
-            "url": url,
-            "maxTimeout": 60000,
-        }
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{FLARESOLVERR_URL}",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=180),
-                ) as resp:
-                    data = await resp.json()
-
-            if data.get("status") != "ok":
-                print(f"[XJOY] CF solver error for {url[-30:]}: {data.get('message', '')[:80]}")
-                continue
-
-            html = data.get("solution", {}).get("response", "")
-            if not html or len(html) < 1000:
-                print(f"[XJOY] Empty/short response for {url[-30:]}: {len(html or '')} chars")
-                continue
-
-            # Verify it's not a challenge page
-            if "weryfikac" in html.lower() and len(html) < 30000:
-                continue
-
+        html = await _fetch_page(url)
+        if html:
             page_products = _parse_page(html, seen)
             products.extend(page_products)
-
-            # If page returned 0 new products, we've hit the end
-            if not page_products and url != CATEGORY_URL:
-                break
-
-        except Exception as e:
-            print(f"[XJOY] Error fetching {url}: {type(e).__name__}: {e}")
-            continue
+        elif url == CATEGORY_URL:
+            # Page 1 failed — abort (CF not working for xjoy right now)
+            print(f"[XJOY] Page 1 failed — aborting scan")
+            return []
 
     # Sort: OOS first, available last (Discord snapshot order)
     products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
 
-    print(f"[XJOY] {len(products)} produktow (po exclude)")
+    print(f"[XJOY] {len(products)} produktow (cycle {_scan_counter})")
     return products
 
 
