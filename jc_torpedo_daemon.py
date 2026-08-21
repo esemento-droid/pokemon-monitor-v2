@@ -440,15 +440,21 @@ class TorpedoDaemon:
     # ==============================================================
 
     async def _heartbeat(self, email):
-        """Keep session alive (fetch cart API)."""
+        """Keep session alive (fetch cart API). Detect stale pages."""
         page = self.pages.get(email)
         if not page:
             return
         try:
             await page.evaluate("""() => fetch('/proxy_public_api?endpoint=/sky2/api-public/carts/bulk/latest', {headers: {'Accept':'application/json','currency':'PLN','lang':'pl'}})""")
             self.last_heartbeat[email] = time.time()
-        except:
-            pass
+        except Exception as e:
+            err_str = str(e)
+            if any(x in err_str for x in ["Target page", "browser has been closed",
+                                            "context or browser", "closed"]):
+                log.warning(f"[{email}] Heartbeat: page stale ({err_str[:50]}) — marking unstaged")
+                self.staged[email] = False
+            else:
+                log.warning(f"[{email}] Heartbeat failed: {err_str[:60]}")
 
     async def maintenance(self):
         """Run heartbeats and re-stages."""
@@ -465,10 +471,15 @@ class TorpedoDaemon:
             # Re-stage every 30 min OR if not staged
             if not self.staged.get(email) or (now - self.last_stage.get(email, 0) > RESTAGE_INTERVAL):
                 log.info(f"[DAEMON] Re-staging {email}...")
-                try:
-                    await self._full_stage(acc)
-                except Exception as e:
-                    log.error(f"[DAEMON] Re-stage {email} failed: {e}")
+                for attempt in range(3):
+                    try:
+                        await self._full_stage(acc)
+                        if self.staged.get(email):
+                            break
+                    except Exception as e:
+                        log.error(f"[DAEMON] Re-stage {email} attempt {attempt+1}/3 failed: {e}")
+                        if attempt < 2:
+                            await asyncio.sleep(5)
                 await asyncio.sleep(3)
 
         # If ALL accounts unstaged — try full browser restart every 10 min
@@ -478,25 +489,72 @@ class TorpedoDaemon:
         if ok == 0 and (now - getattr(self, '_last_full_restart', 0)) > 600:
             log.warning("[DAEMON] 0 staged accounts — full browser restart")
             self._last_full_restart = now
+            await self._nuclear_restart()
+
+    async def _nuclear_restart(self):
+        """Full browser restart with proxy fallback. Handles stale _pw gracefully."""
+        try:
+            # Close old browser
+            if self.browser:
+                try:
+                    await self.browser.close()
+                except Exception:
+                    pass
+            self.browser = None
+
+            # Close and recreate playwright instance (prevents stale state)
+            if self._pw:
+                try:
+                    await self._pw.stop()
+                except Exception:
+                    pass
+            self._pw = None
+
+            from patchright.async_api import async_playwright
+            self._pw = await async_playwright().start()
+
+            # Try with proxy first
             try:
-                await self.browser.close()
-                from patchright.async_api import async_playwright
-                if not self._pw:
-                    self._pw = await async_playwright().start()
                 self.browser = await self._pw.chromium.launch(
                     headless=True,
                     args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
                     proxy=PROXY,
                 )
-                log.info("[DAEMON] Browser restarted, re-staging all...")
-                for acc in self.accounts:
+                log.info("[DAEMON] Browser restarted (with proxy)")
+            except Exception as e:
+                log.warning(f"[DAEMON] Proxy launch failed ({e}) — trying direct...")
+                self.browser = await self._pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+                )
+                log.info("[DAEMON] Browser restarted (direct, no proxy)")
+
+            # Clear stale page/context references
+            self.contexts.clear()
+            self.pages.clear()
+
+            # Re-stage all accounts with retry
+            log.info("[DAEMON] Re-staging all accounts after restart...")
+            for acc in self.accounts:
+                for attempt in range(3):
                     try:
                         await self._full_stage(acc)
+                        if self.staged.get(acc["email"]):
+                            break
                     except Exception as e:
-                        log.error(f"[DAEMON] Re-stage after restart {acc['email']} failed: {e}")
-                    await asyncio.sleep(3)
-            except Exception as e:
-                log.error(f"[DAEMON] Full restart failed: {e}")
+                        log.error(f"[DAEMON] Re-stage after restart {acc['email']} attempt {attempt+1}/3: {e}")
+                        if attempt < 2:
+                            await asyncio.sleep(5)
+                await asyncio.sleep(3)
+
+            ok = sum(1 for v in self.staged.values() if v)
+            log.info(f"[DAEMON] After nuclear restart: {ok}/{len(self.accounts)} staged")
+            if ok > 0:
+                await self._discord(f"♻️ **TORPEDO RESTART** — {ok}/{len(self.accounts)} staged")
+
+        except Exception as e:
+            log.error(f"[DAEMON] Nuclear restart FAILED: {e}")
+            await self._discord(f"❌ **TORPEDO** nuclear restart failed: {e}")
 
     # ==============================================================
     # STOCK POLLING (self-monitoring, faster than scraper)

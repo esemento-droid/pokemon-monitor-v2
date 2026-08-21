@@ -26,7 +26,8 @@ import time
 logger = logging.getLogger("monitor")
 
 PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
-MAX_CONCURRENT = 6   # Max simultaneous CF solves (shared across both browsers)
+MAX_CONCURRENT = 6   # Max simultaneous CF solves (Chromium browsers only)
+CAMOUFOX_CONCURRENT = 2  # Separate slots for Camoufox (don't starve Chromium)
 SOLVE_TIMEOUT = 55   # Max seconds for entire solve
 CF_WAIT_MAX = 40     # Max seconds to wait for CF challenge (was 30, CF docs say 60s)
 TURNSTILE_CLICK_AT = [2, 5, 8, 12, 18, 25, 32]  # Seconds at which to attempt click
@@ -43,6 +44,7 @@ _browser_direct = None    # Browser without proxy (VPS IP)
 _camoufox_browser = None  # Camoufox (Firefox anti-detect) — lazy init for HARD_SHOPS
 _pw = None
 _semaphore = None
+_camoufox_semaphore = None  # Separate semaphore for Camoufox (prevents starvation)
 _lock = asyncio.Lock()
 _started = False
 _consecutive_fails = 0
@@ -52,7 +54,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 
 async def _ensure_browsers():
     """Start both browsers if not running. headless=False + Xvfb."""
-    global _browser_proxy, _browser_direct, _pw, _semaphore, _started
+    global _browser_proxy, _browser_direct, _pw, _semaphore, _camoufox_semaphore, _started
 
     if _started and _browser_proxy and _browser_proxy.is_connected():
         return
@@ -96,8 +98,9 @@ async def _ensure_browsers():
         )
 
         _semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+        _camoufox_semaphore = asyncio.Semaphore(CAMOUFOX_CONCURRENT)
         _started = True
-        logger.info("[CF_SOLVER] Dual browsers ready (proxy + direct, concurrent=%d)", MAX_CONCURRENT)
+        logger.info("[CF_SOLVER] Dual browsers ready (proxy + direct, concurrent=%d, camoufox_slots=%d)", MAX_CONCURRENT, CAMOUFOX_CONCURRENT)
 
 
 async def _restart_browsers():
@@ -110,17 +113,9 @@ async def _restart_browsers():
                 await b.close()
             except Exception:
                 pass
-    if _camoufox_browser:
-        try:
-            if hasattr(_camoufox_browser, '_cm'):
-                await _camoufox_browser._cm.__aexit__(None, None, None)
-            else:
-                await _camoufox_browser.close()
-        except Exception:
-            pass
+    await _close_camoufox()
     _browser_proxy = None
     _browser_direct = None
-    _camoufox_browser = None
     if _pw:
         try:
             await _pw.stop()
@@ -328,11 +323,27 @@ async def _ensure_camoufox():
     global _camoufox_browser
 
     if _camoufox_browser:
-        return _camoufox_browser
+        # Check if browser is still connected (crash recovery)
+        try:
+            if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
+                logger.warning("[CF_SOLVER] Camoufox browser disconnected — resetting for re-init")
+                await _close_camoufox()
+            else:
+                return _camoufox_browser
+        except Exception:
+            logger.warning("[CF_SOLVER] Camoufox health check failed — resetting for re-init")
+            await _close_camoufox()
 
     async with _lock:
+        # Double-check after acquiring lock
         if _camoufox_browser:
-            return _camoufox_browser
+            try:
+                if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
+                    await _close_camoufox()
+                else:
+                    return _camoufox_browser
+            except Exception:
+                await _close_camoufox()
 
         try:
             from camoufox.async_api import AsyncCamoufox
@@ -361,7 +372,22 @@ async def _ensure_camoufox():
             return None
         except Exception as e:
             logger.error(f"[CF_SOLVER] Camoufox start failed: {type(e).__name__}: {e}")
+            _camoufox_browser = None
             return None
+
+
+async def _close_camoufox():
+    """Safely close Camoufox browser and reset global reference."""
+    global _camoufox_browser
+    if _camoufox_browser:
+        try:
+            if hasattr(_camoufox_browser, '_cm'):
+                await _camoufox_browser._cm.__aexit__(None, None, None)
+            else:
+                await _camoufox_browser.close()
+        except Exception:
+            pass
+    _camoufox_browser = None
 
 
 async def _solve_with_camoufox(url, timeout):
@@ -429,7 +455,15 @@ async def _solve_with_camoufox(url, timeout):
         return html
 
     except Exception as e:
-        logger.error(f"[CF_SOLVER] [camoufox] Error: {url[:55]}: {str(e)[:80]}")
+        err_str = str(e)
+        # Detect browser crash — reset for lazy re-init on next call
+        if any(x in err_str for x in ["Target page", "browser has been closed",
+                                        "context or browser", "Connection closed",
+                                        "Browser closed", "not connected"]):
+            logger.warning(f"[CF_SOLVER] [camoufox] Browser crashed: {err_str[:60]} — will re-init")
+            await _close_camoufox()
+        else:
+            logger.error(f"[CF_SOLVER] [camoufox] Error: {url[:55]}: {err_str[:80]}")
         return None
     finally:
         if page:
@@ -453,13 +487,9 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
 
     global _consecutive_fails
 
-    async with _semaphore:
-        shop = _get_shop_from_url(url)
-
-        # HARD_SHOPS: go DIRECTLY to Camoufox (Firefox), skip Chromium paths entirely
-        # Chromium paths are proven to fail for these shops (IP + fingerprint blocked)
-        # Don't waste 55s on direct path only to timeout before Camoufox can try
-        if shop in HARD_SHOPS:
+    # HARD_SHOPS: use separate Camoufox semaphore (doesn't block Chromium slots)
+    if _get_shop_from_url(url) in HARD_SHOPS:
+        async with _camoufox_semaphore:
             html = await _solve_with_camoufox(url, timeout)
             if html:
                 _consecutive_fails = 0
@@ -468,6 +498,9 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             if _consecutive_fails >= RESTART_THRESHOLD:
                 asyncio.ensure_future(_restart_browsers())
             return None
+
+    async with _semaphore:
+        shop = _get_shop_from_url(url)
 
         # Determine order: which browser to try first
         if shop in VPS_FIRST_SHOPS:
@@ -530,7 +563,7 @@ async def health_check():
     Call periodically (e.g. every 5 min) from the SLOW process.
     Returns True if healthy, False if restart was needed.
     """
-    global _browser_proxy, _browser_direct, _started, _consecutive_fails
+    global _browser_proxy, _browser_direct, _camoufox_browser, _started, _consecutive_fails
 
     if not _started:
         return True  # Not started yet, will init on first use
@@ -544,6 +577,16 @@ async def health_check():
     if _browser_direct and not _browser_direct.is_connected():
         logger.warning("[CF_SOLVER] Health check: direct browser disconnected!")
         needs_restart = True
+
+    # Check Camoufox health separately (reset without full restart)
+    if _camoufox_browser:
+        try:
+            if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
+                logger.warning("[CF_SOLVER] Health check: Camoufox disconnected — resetting")
+                await _close_camoufox()
+        except Exception:
+            logger.warning("[CF_SOLVER] Health check: Camoufox check failed — resetting")
+            await _close_camoufox()
 
     # If consecutive fails are high but below restart threshold, preemptively restart
     if _consecutive_fails >= 10:
@@ -568,14 +611,7 @@ async def close():
             except Exception:
                 pass
     # Close Camoufox via its context manager
-    if _camoufox_browser:
-        try:
-            if hasattr(_camoufox_browser, '_cm'):
-                await _camoufox_browser._cm.__aexit__(None, None, None)
-            else:
-                await _camoufox_browser.close()
-        except Exception:
-            pass
+    await _close_camoufox()
     _browser_proxy = None
     _browser_direct = None
     _camoufox_browser = None
