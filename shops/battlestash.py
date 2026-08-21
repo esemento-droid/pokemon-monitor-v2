@@ -1,20 +1,22 @@
 """
 Scraper: battlestash.pl
-Platform: WooCommerce (behind Cloudflare)
+Platform: WooCommerce + Flatsome theme (behind Cloudflare)
 Method: CF Solver (Camoufox) → HTML category page parsing
 Category URL: /kategoria/gry-karciane/pokemon-tcg/
-Note: WP REST API (/wp-json/) returns 403 behind CF without challenge page.
-      Must use HTML category page which shows Turnstile → solvable by Camoufox.
+Selector: .product-small.type-product (Flatsome grid)
+Data source: GTM4WP data-gtm4wp_product_data JSON (price, stock, name)
+             + HTML fallback (image, availability class)
 """
-import aiohttp
 import asyncio
 import json
 import re
 import html as html_lib
+
+import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "battlestash.pl"
-SCAN_TIMEOUT = 180  # Extended: CF solver needs 55s+ for Turnstile
+SCAN_TIMEOUT = 180
 BASE_URL = "https://battlestash.pl"
 CATEGORY_URL = f"{BASE_URL}/kategoria/gry-karciane/pokemon-tcg/"
 MAX_PAGES = 3
@@ -54,89 +56,97 @@ async def fetch_flaresolverr(url):
 
 
 def parse_products_from_html(html_content):
-    """Parse products from WooCommerce category page HTML."""
+    """Parse products from Flatsome WooCommerce category page."""
     products = []
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # WooCommerce standard: products in <ul class="products"> > <li class="product">
-    product_items = soup.select("li.product, .product-item, .products .product")
-    if not product_items:
-        # Try broader selectors
-        product_items = soup.select("[class*='product']")
+    # Flatsome: div.product-small with class type-product (top-level product containers)
+    items = soup.select("div.product-small.type-product")
 
-    for item in product_items:
+    for item in items:
         try:
-            # Skip non-product elements
             classes = " ".join(item.get("class", []))
-            if "product-category" in classes or "widget" in classes:
-                continue
 
-            # Name
-            name_el = item.select_one("h2 a, .woocommerce-loop-product__title, h3 a, .product-title a, a.woocommerce-LoopProduct-link h2")
-            if not name_el:
-                name_el = item.select_one("h2, h3, .product-title")
-            if not name_el:
+            # === GTM DATA (primary — has price, stock, name, URL) ===
+            gtm_el = item.select_one("span.gtm4wp_productdata[data-gtm4wp_product_data]")
+            gtm = {}
+            if gtm_el:
+                try:
+                    gtm = json.loads(gtm_el.get("data-gtm4wp_product_data", "{}"))
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # === NAME ===
+            name = ""
+            if gtm.get("item_name"):
+                name = gtm["item_name"]
+            else:
+                name_el = item.select_one(".name.product-title a, .woocommerce-loop-product__title a")
+                if name_el:
+                    name = name_el.get_text(strip=True)
+            if not name:
                 continue
-            name = name_el.get_text(strip=True)
             name = html_lib.unescape(name)
-            if not name or len(name) < 5:
-                continue
 
-            # URL
-            link_el = item.select_one("a[href*='/produkt/'], a[href*='/product/'], h2 a, h3 a, a.woocommerce-LoopProduct-link")
-            if not link_el:
-                link_el = item.select_one("a[href]")
-            url = link_el.get("href", "") if link_el else ""
-            if not url or "kategoria" in url:
+            # === URL ===
+            url = ""
+            if gtm.get("productlink"):
+                url = gtm["productlink"]
+            else:
+                link_el = item.select_one(".name.product-title a, a[href*='/produkt/']")
+                if link_el:
+                    url = link_el.get("href", "")
+            if not url:
                 continue
             if not url.startswith("http"):
                 url = BASE_URL + url
 
-            # Price
-            price_el = item.select_one(".price .woocommerce-Price-amount, .price ins .woocommerce-Price-amount, .price bdi")
-            if not price_el:
-                price_el = item.select_one(".price")
+            # === PRICE ===
             price = "brak"
-            if price_el:
-                price_text = price_el.get_text(strip=True)
-                # Extract numeric price (Polish: "199,00 zł" or "199.00 zł")
-                price_match = re.search(r'([\d.,]+)', price_text.replace("\xa0", "").replace(" ", ""))
-                if price_match:
-                    price_raw = price_match.group(1).replace(",", ".")
-                    # Handle case where there are multiple dots (thousands separator)
-                    parts = price_raw.split(".")
-                    if len(parts) > 2:
-                        price_raw = "".join(parts[:-1]) + "." + parts[-1]
-                    try:
-                        price_val = float(price_raw)
-                        if price_val > 0:
-                            price = f"{price_val:.2f} PLN"
-                    except ValueError:
-                        pass
+            if gtm.get("price"):
+                price_val = float(gtm["price"])
+                if price_val > 0:
+                    price = f"{price_val:.2f} PLN"
+            else:
+                price_el = item.select_one(".price bdi, .price .woocommerce-Price-amount")
+                if price_el:
+                    price_text = price_el.get_text(strip=True)
+                    price_match = re.search(r'([\d.,]+)', price_text.replace("\xa0", ""))
+                    if price_match:
+                        pv = price_match.group(1).replace(",", ".")
+                        try:
+                            price = f"{float(pv):.2f} PLN"
+                        except ValueError:
+                            pass
 
-            # Availability (WooCommerce: outofstock class on <li>)
-            available = True
-            if "outofstock" in classes or "out-of-stock" in classes:
+            # === AVAILABILITY ===
+            available = False
+            if gtm.get("stockstatus"):
+                available = gtm["stockstatus"] == "instock"
+            elif "instock" in classes:
+                available = True
+            elif "outofstock" in classes:
                 available = False
-            # Also check for "Wyprzedane"/"Brak" badge
-            stock_el = item.select_one(".out-of-stock, .sold-out, [class*='outofstock']")
-            if stock_el:
-                available = False
+            else:
+                # Check for add-to-cart button
+                atc = item.select_one(".add_to_cart_button, a[href*='add-to-cart']")
+                available = atc is not None
 
-            # Image
-            img_el = item.select_one("img[data-src], img[src]")
+            # === IMAGE ===
+            img_el = item.select_one("img.attachment-woocommerce_thumbnail, .box-image img")
             image = ""
             if img_el:
-                image = img_el.get("data-src") or img_el.get("data-lazy-src") or img_el.get("src", "")
-                # Skip placeholder images
-                if "placeholder" in image.lower() or "woocommerce-placeholder" in image.lower():
+                image = img_el.get("src", "")
+                if "woocommerce-placeholder" in image:
                     image = ""
-                if image and not image.startswith("http"):
-                    image = BASE_URL + image
 
-            # Generate ID from URL slug
-            slug_match = re.search(r'/(?:produkt|product)/([^/]+)', url)
-            pid = slug_match.group(1) if slug_match else re.sub(r'[^a-z0-9]', '', name.lower()[:30])
+            # === ID ===
+            pid = str(gtm.get("internal_id", ""))
+            if not pid:
+                slug_match = re.search(r'/produkt/([^/]+)', url)
+                pid = slug_match.group(1) if slug_match else ""
+            if not pid:
+                continue
 
             products.append({
                 "id": f"battlestash_{pid}",
@@ -168,15 +178,6 @@ async def get_products():
         if not raw or len(raw) < 1000:
             break
 
-        # DEBUG: save HTML for analysis (remove after fix)
-        if page == 1 and not products:
-            try:
-                with open("/tmp/battlestash_debug.html", "w") as f:
-                    f.write(raw[:50000])
-                print(f"[BATTLESTASH] DEBUG: saved {len(raw)} chars to /tmp/battlestash_debug.html")
-            except:
-                pass
-
         page_products = parse_products_from_html(raw)
         if not page_products:
             break
@@ -192,7 +193,7 @@ async def get_products():
 
         # Check if there's a next page
         soup = BeautifulSoup(raw, "html.parser")
-        next_link = soup.select_one(f"a.page-numbers[href*='page/{page+1}'], a.next")
+        next_link = soup.select_one(f"a.page-numbers[href*='page/{page+1}'], a.next.page-numbers")
         if not next_link:
             break
 
