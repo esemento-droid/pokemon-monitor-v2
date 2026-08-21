@@ -1,14 +1,14 @@
 """
-Scraper: archivebyx.com (WooCommerce — buty/odzież + Pokemon TCG)
-Search URL: /?s=pokemon+tcg&post_type=product
-Static HTML (no CF on product pages).
-Uses proxy with direct fallback (VPS IP may be blocked).
+Scraper: archivebyx.com (Shopify — buty/odzież + Pokemon TCG)
+DISABLED: 2026-08-21 — Migrated to Shopify. Only foreign editions (JP/Korean/Thai/Indonesian), all OOS.
+Nothing relevant for English sealed Pokemon TCG monitoring.
 """
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "archivebyx"
+SHOP_DISABLED = True  # 2026-08-21: only foreign editions, all OOS, not relevant
 BASE = "https://www.archivebyx.com"
 SEARCH_URL = f"{BASE}/?s=pokemon+tcg&post_type=product"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
