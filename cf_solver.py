@@ -456,6 +456,19 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
     async with _semaphore:
         shop = _get_shop_from_url(url)
 
+        # HARD_SHOPS: go DIRECTLY to Camoufox (Firefox), skip Chromium paths entirely
+        # Chromium paths are proven to fail for these shops (IP + fingerprint blocked)
+        # Don't waste 55s on direct path only to timeout before Camoufox can try
+        if shop in HARD_SHOPS:
+            html = await _solve_with_camoufox(url, timeout)
+            if html:
+                _consecutive_fails = 0
+                return html
+            _consecutive_fails += 1
+            if _consecutive_fails >= RESTART_THRESHOLD:
+                asyncio.ensure_future(_restart_browsers())
+            return None
+
         # Determine order: which browser to try first
         if shop in VPS_FIRST_SHOPS:
             browsers = [
@@ -477,15 +490,6 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             if html:
                 _consecutive_fails = 0
                 return html
-
-            # HARD_SHOPS: try Camoufox (Firefox) instead of Chromium fallback
-            # Different browser engine = different fingerprint = CF doesn't recognize
-            if shop in HARD_SHOPS:
-                html = await _solve_with_camoufox(url, timeout)
-                if html:
-                    _consecutive_fails = 0
-                    return html
-                break
 
         # Both paths failed
         _consecutive_fails += 1
