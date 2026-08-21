@@ -115,16 +115,16 @@ def load_shops():
 
 async def shop_worker(name, module, logger, process_type):
     """Independent async worker for one shop."""
-    # Staggered startup: SLOW shops spread over 120s (prevents FS thundering herd)
+    # Staggered startup: SLOW shops spread over 180s (prevents CF solver thundering herd)
     # FAST shops spread over 30s (lightweight HTTP, no issue)
     if name in SLOW_SHOPS or name in VERY_SLOW_SHOPS:
-        await asyncio.sleep(random.uniform(5, 120))
+        await asyncio.sleep(random.uniform(10, 180))
     else:
         await asyncio.sleep(random.uniform(0, 30))
 
     import time as _time
     _worker_start = _time.time()
-    GRACE_PERIOD = 180  # 3 min grace: don't count errors toward cooldown
+    GRACE_PERIOD = 480  # 8 min grace: CF solver needs ~5min to warmup + serve all shops
 
     stats = {"ok": 0, "err": 0, "consecutive_err": 0, "turbo": False, "cooldown_until": 0}
     _shutdown = False

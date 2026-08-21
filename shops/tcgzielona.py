@@ -11,6 +11,7 @@ import json
 import html as html_lib
 
 SHOP = "tcg-zielona"
+SCAN_TIMEOUT = 180  # CF solver: semaphore queue + 55s solve per page × 3 pages
 API_URL = "https://tcg-zielona.pl/wp-json/wc/store/v1/products"
 CATEGORY = "pokemon-tcg"
 PER_PAGE = 100
@@ -43,10 +44,10 @@ async def get_products():
 
             # Use FlareSolverr to bypass Cloudflare
             try:
-                payload = {"cmd": "request.get", "url": url, "maxTimeout": 30000}
+                payload = {"cmd": "request.get", "url": url, "maxTimeout": 55000}
                 async with session.post(
                     FLARESOLVERR_URL, json=payload,
-                    timeout=aiohttp.ClientTimeout(total=45),
+                    timeout=aiohttp.ClientTimeout(total=70),
                 ) as resp:
                     if resp.status != 200:
                         print(f"[tcg-zielona] FlareSolverr HTTP {resp.status} page {page}")
