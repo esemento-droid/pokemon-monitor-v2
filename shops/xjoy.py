@@ -28,6 +28,8 @@ EXCLUDE = [
     "japanese", "japoński", "japońsk", "(jp)", "koreański", "korean",
     "chiński", "chinese", "(chi)", "figurk", "puzzle", "zeszyt",
     "marvel", "dc comics", "harry potter", "lord of the rings",
+    "warhammer", "witcher", "andromeda", "mtg:", "mtg ", " rpg",
+    "champions:", "snap binder", "draft night",
 ]
 
 
@@ -64,7 +66,25 @@ def _parse_page(html: str, seen: set) -> list[dict]:
         img = item.select_one("img")
         image = ""
         if img:
-            image = img.get("data-full-size-image-url") or img.get("data-src") or img.get("src") or ""
+            image = (img.get("data-full-size-image-url")
+                     or img.get("data-src")
+                     or img.get("data-lazy-src")
+                     or img.get("data-original")
+                     or img.get("src") or "")
+            # Skip placeholder/lazy pixel images
+            if image and ("data:image" in image or "pixel" in image or len(image) < 10):
+                image = img.get("data-src") or img.get("data-lazy-src") or ""
+        # Fallback: look for noscript img or picture source
+        if not image:
+            noscript = item.select_one("noscript img")
+            if noscript:
+                image = noscript.get("src", "")
+        if not image:
+            source = item.select_one("picture source, source[srcset]")
+            if source:
+                srcset = source.get("srcset", "")
+                if srcset:
+                    image = srcset.split(",")[0].split(" ")[0]
 
         avail_el = item.select_one(".product-availability, .availability")
         avail_text = avail_el.get_text(strip=True).lower() if avail_el else ""
