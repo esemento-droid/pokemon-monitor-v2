@@ -2,6 +2,7 @@ import asyncio
 import time
 
 SCAN_DELAY = 120
+SHOP_DISABLED = True  # 2026-08-21: VPS IP + mobile proxy IP both banned by am76.pl. Need different proxy.
 import re
 import aiohttp
 from bs4 import BeautifulSoup
