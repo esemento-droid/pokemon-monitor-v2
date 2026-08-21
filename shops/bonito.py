@@ -12,7 +12,7 @@ import os
 log = logging.getLogger("monitor")
 
 SHOP = "bonito"
-# Re-enabled 2026-08-21: user confirmed site works
+# Re-enabled 2026-08-21: user says site works
 SCAN_TIMEOUT = 150
 SEARCH_URL = "https://bonito.pl/szukaj?fraza=pokemon+tcg"
 
