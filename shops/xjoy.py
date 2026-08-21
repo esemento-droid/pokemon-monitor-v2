@@ -1,49 +1,69 @@
 """
-Scraper: xjoy.pl (PrestaShop + Cloudflare)
-Category: /278-pokemon-tcg
-Method: FlareSolverr → HTML parse (PrestaShop product-miniature)
-Category: SLOW (FlareSolverr)
-NOTE: Must be added to SLOW_SHOPS in main.py
+Scraper: xjoy.pl (PrestaShop 1.6 + Cloudflare)
+Category: /278-pokemon-tcg (91 products, 4 pages)
+Method: CF Solver (Camoufox/patchright) → HTML parse
+Category: SLOW (CF_SHOPS)
+
+DOM structure (PrestaShop 1.6):
+- Container: .product-container
+- Name: a[itemprop=url][title] OR .product_img_link[title]
+- Price: meta[itemprop=price] (numeric, e.g. "25.99")
+- Image: meta[itemprop=image] (full URL)
+- URL: a[itemprop=url][href]
+- Availability: .product-availability → "W magazynie" / "Brak"
+- Pagination: ?p=2, ?p=3, ?p=4 (24 per page, 91 total)
 """
 
 import asyncio
-
 import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "xjoy"
-SCAN_TIMEOUT = 180  # Extended: CF solver needs 55s+ for Turnstile on this site
+SCAN_TIMEOUT = 180
 BASE = "https://www.xjoy.pl"
 CATEGORY_URL = f"{BASE}/278-pokemon-tcg"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 MAX_PAGES = 5
 
 EXCLUDE = [
+    # Accessories
     "sleeves", "koszulk", "playmat", "album", "pro-binder", "toploader",
     "holder", "protector", "ultra pro", "ultra-pro", "portfolio", "segregator",
-    "deck box", "alcove", "one piece", "lorcana", "yu-gi-oh", "digimon",
+    "deck box", "alcove", "deck protector", "snap binder", "penny sleeve",
+    # Other games
+    "one piece", "lorcana", "yu-gi-oh", "digimon",
     "naruto", "star wars", "magic the gathering", "flesh & blood",
-    "dragon shield", "weiss schwarz", "battle deck", "league battle",
-    "v battle", "world championship", "wcs deck", "battle academy",
+    "dragon shield", "weiss schwarz",
+    # Decks
+    "battle deck", "league battle", "v battle", "world championship",
+    "wcs deck", "battle academy",
+    # Foreign editions
     "japanese", "japoński", "japońsk", "(jp)", "koreański", "korean",
-    "chiński", "chinese", "(chi)", "figurk", "puzzle", "zeszyt",
-    "marvel", "dc comics", "harry potter", "lord of the rings",
-    "warhammer", "witcher", "andromeda", "mtg:", "mtg ", " rpg",
-    "champions:", "snap binder", "draft night",
+    "chiński", "chinese", "(chi)",
+    # Junk
+    "figurk", "puzzle", "zeszyt", "marvel", "dc comics", "harry potter",
+    "lord of the rings", "warhammer", "witcher", "mtg:", "mtg ",
+    # Accessories identifiers
+    "4-pocket", "9-pocket", "4pkt", "9pkt", "100+", "2\" album",
+    "dual deck box", "pro dual",
 ]
 
 
 def _parse_page(html: str, seen: set) -> list[dict]:
+    """Parse a single page of xjoy products."""
     products = []
     soup = BeautifulSoup(html, "lxml")
-    items = soup.select("article, .product-miniature, article.product-miniature")
+    items = soup.select(".product-container")
 
     for item in items:
-        name_el = item.select_one(".product-title a, h2 a, h3 a")
-        if not name_el:
+        # Name + URL from itemprop link
+        link_el = item.select_one("a[itemprop=url]") or item.select_one("a.product_img_link")
+        if not link_el:
             continue
-        name = name_el.get_text(strip=True)
-        url = name_el.get("href", "")
+
+        name = link_el.get("title", "").strip()
+        url = link_el.get("href", "").strip()
+
         if not name or not url or url in seen:
             continue
         seen.add(url)
@@ -52,44 +72,59 @@ def _parse_page(html: str, seen: set) -> list[dict]:
         if any(ex in name_lower for ex in EXCLUDE):
             continue
 
-        price_el = item.select_one(".product-price, .price, [itemprop=price]")
-        price = price_el.get_text(strip=True) if price_el else "brak"
+        # Price from schema.org meta
+        price_meta = item.select_one("meta[itemprop=price]")
+        if price_meta:
+            price_val = price_meta.get("content", "")
+            try:
+                pv = float(price_val)
+                if pv < 10:
+                    continue  # Single packs / junk
+                price = f"{pv:.2f} zł"
+            except (ValueError, TypeError):
+                price = "brak"
+        else:
+            # Fallback: text price
+            price_el = item.select_one(".product-price, .price")
+            price = price_el.get_text(strip=True) if price_el else "brak"
+            try:
+                import re
+                pv = float(re.search(r"(\d+[.,]\d+)", price).group(1).replace(",", "."))
+                if pv < 10:
+                    continue
+            except (AttributeError, ValueError):
+                pass
 
-        try:
-            import re
-            pv = float(re.search(r"(\d+[.,]\d+)", price).group(1).replace(",", "."))
-            if pv < 10:
-                continue
-        except (AttributeError, ValueError):
-            pass
-
-        img = item.select_one("img")
+        # Image from schema.org meta or srcset
         image = ""
-        if img:
-            image = (img.get("data-full-size-image-url")
-                     or img.get("data-src")
-                     or img.get("data-lazy-src")
-                     or img.get("data-original")
-                     or img.get("src") or "")
-            # Skip placeholder/lazy pixel images
-            if image and ("data:image" in image or "pixel" in image or len(image) < 10):
-                image = img.get("data-src") or img.get("data-lazy-src") or ""
-        # Fallback: look for noscript img or picture source
+        img_meta = item.select_one("meta[itemprop=image]")
+        if img_meta:
+            image = img_meta.get("content", "")
         if not image:
-            noscript = item.select_one("noscript img")
-            if noscript:
-                image = noscript.get("src", "")
-        if not image:
-            source = item.select_one("picture source, source[srcset]")
-            if source:
-                srcset = source.get("srcset", "")
+            img_el = item.select_one("img[itemprop=image]")
+            if img_el:
+                # Get largest from srcset
+                srcset = img_el.get("srcset", "")
                 if srcset:
-                    image = srcset.split(",")[0].split(" ")[0]
+                    # Last entry in srcset is largest
+                    parts = [s.strip().split(" ")[0] for s in srcset.split(",") if s.strip()]
+                    image = parts[-1] if parts else ""
+                if not image:
+                    image = img_el.get("src", "")
 
+        # Availability
         avail_el = item.select_one(".product-availability, .availability")
         avail_text = avail_el.get_text(strip=True).lower() if avail_el else ""
-        available = "dostępn" in avail_text or "w magazyn" in avail_text or "in stock" in avail_text
+        # "W magazynie" = available, anything else = OOS
+        available = "magazyn" in avail_text or "w magazynie" in avail_text or "in stock" in avail_text
 
+        # Also check for add-to-cart button presence (stronger signal)
+        if not available:
+            atc = item.select_one("a.ajax_add_to_cart_button, .add-to-cart")
+            if atc:
+                available = True
+
+        # Product ID from URL
         pid = url.rstrip("/").split("/")[-1].split(".html")[0]
 
         products.append({
@@ -107,78 +142,55 @@ def _parse_page(html: str, seen: set) -> list[dict]:
 
 
 async def get_products() -> list[dict]:
+    """Fetch all pages of xjoy Pokemon TCG category via CF solver."""
     products = []
     seen: set = set()
 
-    payload = {
-        "cmd": "request.get",
-        "url": CATEGORY_URL,
-        "maxTimeout": 60000,
-    }
+    # Fetch all pages (xjoy uses ?p=N for pagination)
+    urls = [CATEGORY_URL] + [f"{CATEGORY_URL}?p={p}" for p in range(2, MAX_PAGES + 1)]
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{FLARESOLVERR_URL}",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=70),
-            ) as resp:
-                data = await resp.json()
-
-        if data.get("status") != "ok":
-            print(f"[XJOY] FlareSolverr error: {data.get('message','')}")
-            return []
-
-        html = data.get("solution", {}).get("response", "")
-        if not html:
-            print(f"[XJOY] empty response")
-            return []
-
-    except Exception as e:
-        print(f"[XJOY] Error: {e}")
-        return []
-
-    products.extend(_parse_page(html, seen))
-
-    # Check for pagination and fetch more pages
-    soup = BeautifulSoup(html, "lxml")
-    page_links = soup.select(".pagination a, a[rel=next]")
-    page_nums = set()
-    for link in page_links:
-        href = link.get("href", "")
-        if "page=" in href:
-            try:
-                num = int(href.split("page=")[-1].split("&")[0])
-                page_nums.add(num)
-            except ValueError:
-                pass
-
-    max_page = max(page_nums) if page_nums else 1
-    max_page = min(max_page, MAX_PAGES)
-
-    # Fetch additional pages via FlareSolverr
-    for page in range(2, max_page + 1):
-        page_payload = {
+    for url in urls:
+        payload = {
             "cmd": "request.get",
-            "url": f"{CATEGORY_URL}?page={page}",
+            "url": url,
             "maxTimeout": 60000,
         }
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{FLARESOLVERR_URL}",
-                    json=page_payload,
-                    timeout=aiohttp.ClientTimeout(total=70),
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=120),
                 ) as resp:
-                    page_data = await resp.json()
-            if page_data.get("status") == "ok":
-                page_html = page_data.get("solution", {}).get("response", "")
-                if page_html:
-                    products.extend(_parse_page(page_html, seen))
-        except Exception:
-            pass
+                    data = await resp.json()
 
-    print(f"[XJOY] {len(products)} produktow")
+            if data.get("status") != "ok":
+                continue
+
+            html = data.get("solution", {}).get("response", "")
+            if not html or len(html) < 1000:
+                continue
+
+            # Verify it's not a challenge page
+            if "weryfikac" in html.lower() and len(html) < 30000:
+                continue
+
+            page_products = _parse_page(html, seen)
+            products.extend(page_products)
+
+            # If page returned 0 new products, we've hit the end
+            if not page_products and url != CATEGORY_URL:
+                break
+
+        except Exception as e:
+            print(f"[XJOY] Error fetching {url}: {e}")
+            continue
+
+    # Sort: OOS first, available last (Discord snapshot order)
+    products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
+
+    print(f"[XJOY] {len(products)} produktow (po exclude)")
     return products
 
 
@@ -187,5 +199,5 @@ if __name__ == "__main__":
     avail = [p for p in prods if p["available"]]
     print(f"Total: {len(prods)}, Available: {len(avail)}")
     for p in prods:
-        status = "V" if p["available"] else "X"
-        print(f"  {status} {p['name'][:60]:60} | {p['price']}")
+        status = "✅" if p["available"] else "❌"
+        print(f"  {status} {p['name'][:60]:60} | {p['price']:12}")
