@@ -14,7 +14,7 @@ import re
 from bs4 import BeautifulSoup
 
 SHOP = "eduksiazka"
-SCAN_TIMEOUT = 120  # CF solver needs time
+SCAN_TIMEOUT = 180  # CF solver: semaphore queue wait + 55s solve
 # Search URL for pokemon tcg products
 URL = "https://eduksiazka.pl/gry-64/pokemon-karty-i-akcesoria-128"
 FLARESOLVERR_URL = "http://localhost:8191/v1"

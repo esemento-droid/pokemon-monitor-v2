@@ -9,7 +9,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "mepel"
-SCAN_TIMEOUT = 120  # CF solver needs time
+SCAN_TIMEOUT = 180  # CF solver: semaphore queue wait + 55s solve
 URL = "https://mepel.pl/product-category/pokemon-tcg/"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 
