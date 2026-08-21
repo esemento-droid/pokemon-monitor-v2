@@ -11,6 +11,7 @@ import html as html_lib
 from bs4 import BeautifulSoup
 
 SHOP = "morigal"
+SCAN_TIMEOUT = 180  # CF solver: semaphore queue + 55s solve
 BASE = "https://morigal.pl"
 CAT_URL = f"{BASE}/pokemon-tcg-c-2313/"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
