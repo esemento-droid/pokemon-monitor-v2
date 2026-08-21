@@ -356,11 +356,11 @@ async def _ensure_camoufox():
             logger.info("[CF_SOLVER] Camoufox ready (Firefox + proxy + geoip)")
             return _camoufox_browser
 
-        except ImportError:
-            logger.error("[CF_SOLVER] Camoufox not installed! Run: pip install camoufox && python -m camoufox fetch")
+        except ImportError as e:
+            logger.error(f"[CF_SOLVER] Camoufox import failed: {e}")
             return None
         except Exception as e:
-            logger.error(f"[CF_SOLVER] Camoufox start failed: {e}")
+            logger.error(f"[CF_SOLVER] Camoufox start failed: {type(e).__name__}: {e}")
             return None
 
 
