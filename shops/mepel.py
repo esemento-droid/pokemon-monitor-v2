@@ -9,6 +9,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "mepel"
+SCAN_TIMEOUT = 120  # CF solver needs time
 URL = "https://mepel.pl/product-category/pokemon-tcg/"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 
@@ -30,7 +31,7 @@ async def get_products() -> list[dict]:
     payload = {
         "cmd": "request.get",
         "url": URL,
-        "maxTimeout": 30000,
+        "maxTimeout": 55000,
     }
 
     try:
@@ -38,7 +39,7 @@ async def get_products() -> list[dict]:
             async with session.post(
                 f"{FLARESOLVERR_URL}",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=45),
+                timeout=aiohttp.ClientTimeout(total=70),
             ) as resp:
                 data = await resp.json()
 

@@ -91,10 +91,10 @@ async def get_products():
 
     try:
         async with aiohttp.ClientSession() as session:
-            payload = {"cmd": "request.get", "url": CAT_URL, "maxTimeout": 30000}
+            payload = {"cmd": "request.get", "url": CAT_URL, "maxTimeout": 55000}
             async with session.post(
                 FLARESOLVERR_URL, json=payload,
-                timeout=aiohttp.ClientTimeout(total=45),
+                timeout=aiohttp.ClientTimeout(total=70),
             ) as resp:
                 if resp.status != 200:
                     print(f"[morigal] FlareSolverr HTTP {resp.status}")
