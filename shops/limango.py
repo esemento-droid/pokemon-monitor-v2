@@ -217,9 +217,9 @@ async def get_products():
             if len(page_products) < 50:
                 break
 
-    # Price comparison — live fetch from klockoradar.pl (no CF, no cache, no cron)
-    # Flow: fuzzy match name → set_number → 1 HTTP req to klockoradar → lowest price → embed
-    if products and HAS_PRICE_COMPARE:
+    # Price comparison — DISABLED (2026-08-21: OVH abuse report from klockoradar.pl owner)
+    # Was generating 1200+ req/h, bursts of 14 req/s. Re-enable ONLY with proper rate limiting.
+    if False and products and HAS_PRICE_COMPARE:
         try:
             # Load sitemap for fuzzy matching (name → set_number)
             # Try disk cache first, fallback to live fetch
