@@ -1,19 +1,21 @@
 """
 CF Solver — lightweight FlareSolverr replacement.
 
-DUAL-PATH ARCHITECTURE (2026-08-20):
-- PRIMARY: patchright headless=False + mobile proxy (works for 5/7 CF shops)
-- FALLBACK: patchright headless=False WITHOUT proxy (VPS IP) for stubborn shops
-  CF blocks mobile IP on gralnia/xjoy but datacenter IP + good fingerprint can pass.
+TRI-PATH ARCHITECTURE (2026-08-21):
+- PATH 1: patchright headless=False + mobile proxy (works for 6/9 CF shops)
+- PATH 2: patchright headless=False WITHOUT proxy (VPS IP) — fallback
+- PATH 3: Camoufox (Firefox anti-detect) + mobile proxy — for HARD_SHOPS
+  Camoufox uses Firefox fingerprint (not Chromium) → CF can't detect automation.
+  Used ONLY for gralnia/xjoy/battlestash where both Chromium paths fail.
 
-KEY INSIGHTS from research (Theyka/Turnstile-Solver, EzSolver, scrapfly.io):
-1. headless=False is MANDATORY (Turnstile detects headless)
-2. Fresh context per solve (cookie poisoning = instant fail)
-3. Human-like mouse click (coordinates + jitter, not element.click())
-4. VPS IP may pass where residential fails (IP reputation per-domain)
-5. Timeout 45s+ for Turnstile (CF docs say "at least 60s" for challenge solve)
+KEY INSIGHTS:
+1. headless=False is MANDATORY for Chromium (Turnstile detects headless)
+2. Camoufox can run headless=True safely (Firefox fingerprint spoofed at C++ level)
+3. Fresh context per solve (cookie poisoning = instant fail)
+4. Human-like mouse click (coordinates + jitter, not element.click())
+5. Different browser engine = different fingerprint = CF treats it as new user
 
-RESOURCE: 2 browsers × ~100MB each = ~200MB idle. Pages ~60MB each, freed after solve.
+RESOURCE: 2 Chromium browsers × ~100MB + 1 Camoufox (lazy) × ~150MB = ~350MB max.
 """
 import asyncio
 import logging
@@ -33,11 +35,12 @@ RESTART_THRESHOLD = 15  # Restart browsers after this many consecutive failures
 # Shops that consistently fail on mobile proxy → try VPS IP first
 VPS_FIRST_SHOPS = {"gralnia", "xjoy"}
 
-# Shops that need extra time (aggressive Turnstile)
+# Shops that need extra time (aggressive Turnstile) → use Camoufox (Firefox)
 HARD_SHOPS = {"xjoy", "gralnia", "battlestash"}
 
 _browser_proxy = None     # Browser with mobile proxy
 _browser_direct = None    # Browser without proxy (VPS IP)
+_camoufox_browser = None  # Camoufox (Firefox anti-detect) — lazy init for HARD_SHOPS
 _pw = None
 _semaphore = None
 _lock = asyncio.Lock()
@@ -99,7 +102,7 @@ async def _ensure_browsers():
 
 async def _restart_browsers():
     """Full restart — nuclear option."""
-    global _browser_proxy, _browser_direct, _pw, _started, _consecutive_fails
+    global _browser_proxy, _browser_direct, _camoufox_browser, _pw, _started, _consecutive_fails
     logger.warning("[CF_SOLVER] FULL RESTART — %d consecutive failures", _consecutive_fails)
     for b in [_browser_proxy, _browser_direct]:
         if b:
@@ -107,8 +110,17 @@ async def _restart_browsers():
                 await b.close()
             except Exception:
                 pass
+    if _camoufox_browser:
+        try:
+            if hasattr(_camoufox_browser, '_cm'):
+                await _camoufox_browser._cm.__aexit__(None, None, None)
+            else:
+                await _camoufox_browser.close()
+        except Exception:
+            pass
     _browser_proxy = None
     _browser_direct = None
+    _camoufox_browser = None
     if _pw:
         try:
             await _pw.stop()
@@ -311,6 +323,122 @@ def _get_shop_from_url(url):
     return "unknown"
 
 
+async def _ensure_camoufox():
+    """Lazy-init Camoufox browser for HARD_SHOPS. Firefox-based anti-detect."""
+    global _camoufox_browser
+
+    if _camoufox_browser:
+        return _camoufox_browser
+
+    async with _lock:
+        if _camoufox_browser:
+            return _camoufox_browser
+
+        try:
+            from camoufox.async_api import AsyncCamoufox
+            logger.info("[CF_SOLVER] Starting Camoufox (Firefox anti-detect + proxy)...")
+
+            # Camoufox context manager returns browser directly
+            # We use it slightly differently — start and keep reference
+            _cm = AsyncCamoufox(
+                headless=True,  # Safe for Camoufox (Firefox fingerprint spoofed at C++ level)
+                proxy={
+                    "server": f"http://{PROXY_ADDR}",
+                },
+                geoip=True,  # Match geolocation to proxy IP
+                humanize=True,  # Human-like cursor movement
+                os="windows",  # Most common OS fingerprint
+                disable_coop=True,  # Allow clicking Turnstile in cross-origin iframe
+            )
+            _camoufox_browser = await _cm.__aenter__()
+            # Store context manager to close later
+            _camoufox_browser._cm = _cm
+            logger.info("[CF_SOLVER] Camoufox ready (Firefox + proxy + geoip)")
+            return _camoufox_browser
+
+        except ImportError:
+            logger.error("[CF_SOLVER] Camoufox not installed! Run: pip install camoufox && python -m camoufox fetch")
+            return None
+        except Exception as e:
+            logger.error(f"[CF_SOLVER] Camoufox start failed: {e}")
+            return None
+
+
+async def _solve_with_camoufox(url, timeout):
+    """Solve CF challenge using Camoufox (Firefox anti-detect). For HARD_SHOPS only."""
+    browser = await _ensure_camoufox()
+    if not browser:
+        return None
+
+    page = None
+    try:
+        page = await browser.new_page()
+        await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+
+        # Wait for CF challenge to resolve (same logic as Chromium path)
+        shop = _get_shop_from_url(url)
+        wait_max = CF_WAIT_MAX + 15  # HARD_SHOPS always get extended time
+
+        resolved = False
+        for wait_sec in range(wait_max):
+            title = await page.title()
+            content_check = await page.evaluate(
+                "() => document.body ? document.body.innerText.substring(0, 200) : ''"
+            )
+            title_lower = (title or "").lower()
+            content_lower = (content_check or "").lower()
+
+            is_challenge = (
+                any(x in title_lower for x in ["moment", "checking", "attention", "just a moment"]) or
+                any(x in content_lower for x in ["verif", "checking your browser", "please wait",
+                                                  "enable javascript", "ray id"])
+            )
+
+            if not is_challenge:
+                resolved = True
+                break
+
+            # Camoufox has humanize=True, just click in iframe area
+            if wait_sec in TURNSTILE_CLICK_AT:
+                try:
+                    # Simple click approach — Camoufox handles humanization
+                    await page.mouse.click(210, 290)
+                    await asyncio.sleep(1)
+                except Exception:
+                    pass
+
+            await asyncio.sleep(1)
+
+        if not resolved:
+            logger.warning(f"[CF_SOLVER] [camoufox] Not resolved: {url[:55]} after {wait_max}s")
+            return None
+
+        await asyncio.sleep(2)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:
+            pass
+
+        html = await page.content()
+
+        if not html or len(html) < 500:
+            logger.warning(f"[CF_SOLVER] [camoufox] Empty: {url[:55]} ({len(html or '')} chars)")
+            return None
+
+        logger.info(f"[CF_SOLVER] [camoufox] Solved OK: {url[:50]} ({len(html)} chars)")
+        return html
+
+    except Exception as e:
+        logger.error(f"[CF_SOLVER] [camoufox] Error: {url[:55]}: {str(e)[:80]}")
+        return None
+    finally:
+        if page:
+            try:
+                await page.close()
+            except Exception:
+                pass
+
+
 async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
     """
     Dual-path Cloudflare challenge solver.
@@ -350,9 +478,13 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
                 _consecutive_fails = 0
                 return html
 
-            # Don't try fallback for HARD_SHOPS — they block semaphore too long
-            # and consistently fail on both paths. Let them retry next cycle.
+            # HARD_SHOPS: try Camoufox (Firefox) instead of Chromium fallback
+            # Different browser engine = different fingerprint = CF doesn't recognize
             if shop in HARD_SHOPS:
+                html = await _solve_with_camoufox(url, timeout)
+                if html:
+                    _consecutive_fails = 0
+                    return html
                 break
 
         # Both paths failed
@@ -422,8 +554,8 @@ async def health_check():
 
 
 async def close():
-    """Shutdown both browsers."""
-    global _browser_proxy, _browser_direct, _pw, _started, _consecutive_fails
+    """Shutdown all browsers."""
+    global _browser_proxy, _browser_direct, _camoufox_browser, _pw, _started, _consecutive_fails
     _consecutive_fails = 0
     for b in [_browser_proxy, _browser_direct]:
         if b:
@@ -431,8 +563,18 @@ async def close():
                 await b.close()
             except Exception:
                 pass
+    # Close Camoufox via its context manager
+    if _camoufox_browser:
+        try:
+            if hasattr(_camoufox_browser, '_cm'):
+                await _camoufox_browser._cm.__aexit__(None, None, None)
+            else:
+                await _camoufox_browser.close()
+        except Exception:
+            pass
     _browser_proxy = None
     _browser_direct = None
+    _camoufox_browser = None
     if _pw:
         try:
             await _pw.stop()
