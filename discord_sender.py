@@ -5,15 +5,10 @@ from collections import deque
 from urllib.parse import quote
 from config import DISCORD_WEBHOOK, DISCORD_MAX_PER_MINUTE
 
-# Price comparison for LEGO shops (auto-enrichment)
-try:
-    from price_compare import get_price_comparison, format_price_comparison
-    HAS_PRICE_COMPARE = True
-except ImportError:
-    HAS_PRICE_COMPARE = False
-
-# Shops whose products get automatic price comparison with promoklocki/klockoradar
-LEGO_SHOPS = {"limango", "taniaksiazka_lego"}
+# Price comparison — DISABLED PERMANENTLY (OVH abuse 2026-08-21)
+# DO NOT re-enable. Was scraping klockoradar.pl/promoklocki.pl without limits.
+HAS_PRICE_COMPARE = False
+LEGO_SHOPS = set()  # empty — no price enrichment
 
 
 class DiscordSender:

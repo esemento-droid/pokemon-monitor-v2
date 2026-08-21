@@ -2,7 +2,7 @@ import asyncio
 import time
 
 SCAN_DELAY = 120
-# SHOP_DISABLED removed 2026-08-21: user confirmed site works, re-enabling
+# Re-enabled 2026-08-21: user says site works
 import re
 import aiohttp
 from bs4 import BeautifulSoup
