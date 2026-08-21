@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-SCAN_DELAY = 600
+SCAN_DELAY = 120
 import re
 import aiohttp
 from bs4 import BeautifulSoup
@@ -22,14 +22,24 @@ EXCLUDE = [
     "figurk", "figure set"
 ]
 
-async def fetch_page(session, url):
+async def fetch_page(session, url, proxy="http://127.0.0.1:8888"):
     try:
-        async with session.get(url, allow_redirects=True, proxy="http://127.0.0.1:8888", timeout=aiohttp.ClientTimeout(total=30)) as resp:
+        async with session.get(url, allow_redirects=True, proxy=proxy, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             if resp.status != 200:
                 return ""
             raw = await resp.read()
             return raw.decode("windows-1250", errors="ignore")
     except Exception:
+        # Fallback: try without proxy if proxy fails
+        if proxy:
+            try:
+                async with session.get(url, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                    if resp.status != 200:
+                        return ""
+                    raw = await resp.read()
+                    return raw.decode("windows-1250", errors="ignore")
+            except Exception:
+                pass
         return ""
 
 def parse_products(html, seen_ids):

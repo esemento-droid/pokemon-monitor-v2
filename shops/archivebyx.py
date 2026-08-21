@@ -2,6 +2,7 @@
 Scraper: archivebyx.com (WooCommerce — buty/odzież + Pokemon TCG)
 Search URL: /?s=pokemon+tcg&post_type=product
 Static HTML (no CF on product pages).
+Uses proxy with direct fallback (VPS IP may be blocked).
 """
 
 import aiohttp
@@ -11,6 +12,7 @@ SHOP = "archivebyx"
 BASE = "https://www.archivebyx.com"
 SEARCH_URL = f"{BASE}/?s=pokemon+tcg&post_type=product"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+PROXY = "http://127.0.0.1:8888"
 
 EXCLUDE = [
     "sleeves", "koszulk", "playmat", "album", "pro-binder", "toploader",
@@ -25,15 +27,31 @@ EXCLUDE = [
 ]
 
 
+async def _fetch_html(session, url, proxy=None):
+    """Fetch HTML with optional proxy."""
+    try:
+        async with session.get(url, proxy=proxy, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+            if resp.status != 200:
+                return None
+            return await resp.text()
+    except Exception:
+        return None
+
+
 async def get_products() -> list[dict]:
     products = []
 
+    html = None
     async with aiohttp.ClientSession(headers={"User-Agent": UA}) as session:
-        async with session.get(SEARCH_URL, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-            if resp.status != 200:
-                print(f"[ARCHIVEBYX] HTTP {resp.status}")
-                return []
-            html = await resp.text()
+        # Try with proxy first (VPS IP may be blocked)
+        html = await _fetch_html(session, SEARCH_URL, proxy=PROXY)
+        if not html:
+            # Fallback: direct (no proxy)
+            html = await _fetch_html(session, SEARCH_URL, proxy=None)
+
+    if not html:
+        print("[ARCHIVEBYX] Both proxy and direct failed")
+        return []
 
     soup = BeautifulSoup(html, "lxml")
     items = soup.select("li.product, li.type-product")
