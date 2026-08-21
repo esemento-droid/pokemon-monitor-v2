@@ -13,12 +13,10 @@ import os
 
 import aiohttp
 
-# Price comparison — live from klockoradar (no cache needed)
-try:
-    from price_compare import match_set_number, format_price_comparison as _fmt, PROMOKLOCKI_BASE
-    HAS_PRICE_COMPARE = True
-except ImportError:
-    HAS_PRICE_COMPARE = False
+# Price comparison — DISABLED PERMANENTLY (OVH abuse report 2026-08-21)
+# Was scraping klockoradar.pl/promoklocki.pl aggressively (1200+ req/h)
+# DO NOT re-enable without explicit user permission + proper rate limiting
+HAS_PRICE_COMPARE = False
 
 SHOP = "limango"
 BASE = "https://www.limango.pl"
