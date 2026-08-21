@@ -285,7 +285,9 @@ async def _solve_with_browser(browser, url, timeout, label="proxy"):
             is_challenge = (
                 any(x in title_lower for x in ["moment", "checking", "attention", "just a moment"]) or
                 any(x in content_lower for x in ["verif", "checking your browser", "please wait",
-                                                  "enable javascript", "ray id"])
+                                                  "enable javascript", "ray id",
+                                                  "weryfikac", "czekanie na odpowied",
+                                                  "witryna sprawdza", "cloudflare"])
             )
 
             if not is_challenge:
@@ -470,7 +472,9 @@ async def _solve_with_camoufox(url, timeout):
             is_challenge = (
                 any(x in title_lower for x in ["moment", "checking", "attention", "just a moment"]) or
                 any(x in content_lower for x in ["verif", "checking your browser", "please wait",
-                                                  "enable javascript", "ray id"])
+                                                  "enable javascript", "ray id",
+                                                  "weryfikac", "czekanie na odpowied",
+                                                  "witryna sprawdza", "cloudflare"])
             )
 
             if not is_challenge:
