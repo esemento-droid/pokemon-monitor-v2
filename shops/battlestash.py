@@ -168,6 +168,15 @@ async def get_products():
         if not raw or len(raw) < 1000:
             break
 
+        # DEBUG: save HTML for analysis (remove after fix)
+        if page == 1 and not products:
+            try:
+                with open("/tmp/battlestash_debug.html", "w") as f:
+                    f.write(raw[:50000])
+                print(f"[BATTLESTASH] DEBUG: saved {len(raw)} chars to /tmp/battlestash_debug.html")
+            except:
+                pass
+
         page_products = parse_products_from_html(raw)
         if not page_products:
             break
