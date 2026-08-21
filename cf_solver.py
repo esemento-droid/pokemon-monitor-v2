@@ -28,6 +28,7 @@ MAX_CONCURRENT = 6   # Max simultaneous CF solves (shared across both browsers)
 SOLVE_TIMEOUT = 55   # Max seconds for entire solve
 CF_WAIT_MAX = 40     # Max seconds to wait for CF challenge (was 30, CF docs say 60s)
 TURNSTILE_CLICK_AT = [2, 5, 8, 12, 18, 25, 32]  # Seconds at which to attempt click
+RESTART_THRESHOLD = 15  # Restart browsers after this many consecutive failures
 
 # Shops that consistently fail on mobile proxy → try VPS IP first
 VPS_FIRST_SHOPS = {"gralnia", "xjoy"}
@@ -356,7 +357,7 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
 
         # Both paths failed
         _consecutive_fails += 1
-        if _consecutive_fails >= 30:
+        if _consecutive_fails >= RESTART_THRESHOLD:
             asyncio.ensure_future(_restart_browsers())
 
         return None
@@ -385,6 +386,39 @@ async def solve_fs_compat(url, max_timeout=30000, session=None):
             "message": f"Challenge not solved for {url[:60]}",
             "solution": {"response": ""},
         }
+
+
+async def health_check():
+    """
+    Proactive health check — verify browsers are alive and responsive.
+    Call periodically (e.g. every 5 min) from the SLOW process.
+    Returns True if healthy, False if restart was needed.
+    """
+    global _browser_proxy, _browser_direct, _started, _consecutive_fails
+
+    if not _started:
+        return True  # Not started yet, will init on first use
+
+    needs_restart = False
+
+    if _browser_proxy and not _browser_proxy.is_connected():
+        logger.warning("[CF_SOLVER] Health check: proxy browser disconnected!")
+        needs_restart = True
+
+    if _browser_direct and not _browser_direct.is_connected():
+        logger.warning("[CF_SOLVER] Health check: direct browser disconnected!")
+        needs_restart = True
+
+    # If consecutive fails are high but below restart threshold, preemptively restart
+    if _consecutive_fails >= 10:
+        logger.warning(f"[CF_SOLVER] Health check: {_consecutive_fails} consecutive fails — preemptive restart")
+        needs_restart = True
+
+    if needs_restart:
+        await _restart_browsers()
+        return False
+
+    return True
 
 
 async def close():

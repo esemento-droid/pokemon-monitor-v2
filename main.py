@@ -48,7 +48,7 @@ SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
 SLOW_SHOPS = {
     "am76", "blindbox", "flamberg", "mrpuggy", "pikashop",
     "paladynat", "czytam", "kuzniakart", "sklepkleks",
-    "battlestash", "tcg-zielona", "morigal",
+    "battlestash", "tcgzielona", "morigal",
     "eduksiazka", "dystryktzero", "gralnia", "xjoy", "mepel",
     "maginarium", "monsteriada", "wilczek",
 }
@@ -379,9 +379,9 @@ async def _async_process(process_name, shop_names_modules):
             logger.info(f"[{process_name}] CF Bridge started on :8191 (FlareSolverr replacement)")
             # Warmup: trigger cf_solver browser pool initialization BEFORE shops start
             try:
-                from cf_solver import _ensure_browser
+                from cf_solver import _ensure_browsers
                 logger.info(f"[{process_name}] Warming up CF solver browser pool...")
-                await asyncio.wait_for(_ensure_browser(), timeout=60)
+                await asyncio.wait_for(_ensure_browsers(), timeout=60)
                 logger.info(f"[{process_name}] CF solver browser pool READY")
             except Exception as we:
                 logger.warning(f"[{process_name}] CF solver warmup failed: {we} — shops will trigger on first use")
@@ -392,6 +392,21 @@ async def _async_process(process_name, shop_names_modules):
     for name, module in shop_names_modules:
         tasks.append(asyncio.create_task(shop_worker(name, module, logger, process_name)))
     tasks.append(asyncio.create_task(heartbeat_worker(logger, process_name, len(shop_names_modules))))
+
+    # CF solver health check (SLOW process only) — proactive browser restart
+    if process_name == "SLOW":
+        async def _cf_health_loop():
+            await asyncio.sleep(300)  # First check after 5 min
+            while True:
+                try:
+                    from cf_solver import health_check
+                    healthy = await health_check()
+                    if not healthy:
+                        logger.warning("[SLOW] CF solver health check triggered browser restart")
+                except Exception as e:
+                    logger.warning(f"[SLOW] CF health check error: {e}")
+                await asyncio.sleep(300)  # Check every 5 min
+        tasks.append(asyncio.create_task(_cf_health_loop()))
 
     logger.info(f"[{process_name}] {len(shop_names_modules)} async workers started")
 

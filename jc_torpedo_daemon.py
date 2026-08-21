@@ -106,16 +106,42 @@ class TorpedoDaemon:
         )
         log.info("[DAEMON] Browser started (patchright stealth + proxy)")
 
-        # Login + stage all accounts
+        # Login + stage all accounts (with retry on failure)
         for acc in self.accounts:
-            try:
-                await self._full_stage(acc)
-            except Exception as e:
-                log.error(f"[DAEMON] [{acc['email']}] Stage failed: {e}")
+            for attempt in range(3):
+                try:
+                    await self._full_stage(acc)
+                    if self.staged.get(acc["email"]):
+                        break
+                except Exception as e:
+                    log.error(f"[DAEMON] [{acc['email']}] Stage attempt {attempt+1}/3 failed: {e}")
+                    if attempt < 2:
+                        await asyncio.sleep(10)
+
             await asyncio.sleep(3)
 
         ok = sum(1 for v in self.staged.values() if v)
         log.info(f"[DAEMON] {ok}/{len(self.accounts)} accounts staged and ready 🚀")
+
+        # If zero staged, try restarting browser with direct connection (no proxy)
+        if ok == 0:
+            log.warning("[DAEMON] 0 accounts staged — retrying WITHOUT proxy...")
+            try:
+                await self.browser.close()
+            except:
+                pass
+            self.browser = await self._pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+            )
+            for acc in self.accounts:
+                try:
+                    await self._full_stage(acc)
+                except Exception as e:
+                    log.error(f"[DAEMON] [{acc['email']}] Direct stage failed: {e}")
+                await asyncio.sleep(3)
+            ok = sum(1 for v in self.staged.values() if v)
+            log.info(f"[DAEMON] After direct retry: {ok}/{len(self.accounts)} staged")
 
     # ==============================================================
     # LOGIN + STAGE (full checkout prep)
@@ -445,6 +471,33 @@ class TorpedoDaemon:
                     log.error(f"[DAEMON] Re-stage {email} failed: {e}")
                 await asyncio.sleep(3)
 
+        # If ALL accounts unstaged — try full browser restart every 10 min
+        ok = sum(1 for v in self.staged.values() if v)
+        if ok == 0 and not hasattr(self, '_last_full_restart'):
+            self._last_full_restart = 0
+        if ok == 0 and (now - getattr(self, '_last_full_restart', 0)) > 600:
+            log.warning("[DAEMON] 0 staged accounts — full browser restart")
+            self._last_full_restart = now
+            try:
+                await self.browser.close()
+                from patchright.async_api import async_playwright
+                if not self._pw:
+                    self._pw = await async_playwright().start()
+                self.browser = await self._pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+                    proxy=PROXY,
+                )
+                log.info("[DAEMON] Browser restarted, re-staging all...")
+                for acc in self.accounts:
+                    try:
+                        await self._full_stage(acc)
+                    except Exception as e:
+                        log.error(f"[DAEMON] Re-stage after restart {acc['email']} failed: {e}")
+                    await asyncio.sleep(3)
+            except Exception as e:
+                log.error(f"[DAEMON] Full restart failed: {e}")
+
     # ==============================================================
     # STOCK POLLING (self-monitoring, faster than scraper)
     # ==============================================================
@@ -462,6 +515,7 @@ class TorpedoDaemon:
         # Use first staged account for polling
         poll_email = next((e for e, ok in self.staged.items() if ok), None)
         if not poll_email:
+            # No staged accounts — skip polling silently (maintenance will fix this)
             return
 
         page = self.pages.get(poll_email)
