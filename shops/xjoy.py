@@ -27,6 +27,7 @@ EXCLUDE = [
     "v battle", "world championship", "wcs deck", "battle academy",
     "japanese", "japoński", "japońsk", "(jp)", "koreański", "korean",
     "chiński", "chinese", "(chi)", "figurk", "puzzle", "zeszyt",
+    "marvel", "dc comics", "harry potter", "lord of the rings",
 ]
 
 
