@@ -554,14 +554,34 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                     if new_page:
                         page = new_page
                     else:
-                        logger.error(f"[{name}] Heal failed — cooldown 30min")
-                        await asyncio.sleep(1800)
-                        stats["heal_count"] = 0
+                        # heal_page failed → browser dead → respawn
+                        logger.warning(f"[{name}] Heal failed after timeout — respawning browser...")
+                        await mgr._respawn_browser(browser_type)
+                        await asyncio.sleep(10)
+                        new_page = await mgr.create_page(name, browser_type=browser_type)
+                        if new_page:
+                            page = new_page
+                            stats["heal_count"] = 0
+                            logger.info(f"[{name}] Browser respawned after timeout ✅")
+                        else:
+                            logger.error(f"[{name}] Respawn FAILED — cooldown 5min")
+                            await asyncio.sleep(300)
+                            stats["heal_count"] = 0
                         continue
                 else:
-                    logger.warning(f"[{name}] TIMEOUT — heal limit reached, cooldown 30min")
-                    await asyncio.sleep(1800)
-                    stats["heal_count"] = 0
+                    # 3 heals exhausted → respawn browser
+                    logger.warning(f"[{name}] TIMEOUT — 3 heals exhausted, respawning browser...")
+                    await mgr._respawn_browser(browser_type)
+                    await asyncio.sleep(10)
+                    new_page = await mgr.create_page(name, browser_type=browser_type)
+                    if new_page:
+                        page = new_page
+                        stats["heal_count"] = 0
+                        logger.info(f"[{name}] Browser respawned after 3 timeout heals ✅")
+                    else:
+                        logger.error(f"[{name}] Respawn FAILED — cooldown 10min")
+                        await asyncio.sleep(600)
+                        stats["heal_count"] = 0
                     continue
 
         except Exception as e:
@@ -580,13 +600,34 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                     if new_page:
                         page = new_page
                     else:
-                        await asyncio.sleep(1800)
-                        stats["heal_count"] = 0
+                        # heal_page failed → browser itself is dead → respawn browser
+                        logger.warning(f"[{name}] Heal failed — browser dead, respawning...")
+                        await mgr._respawn_browser(browser_type)
+                        await asyncio.sleep(10)
+                        new_page = await mgr.create_page(name, browser_type=browser_type)
+                        if new_page:
+                            page = new_page
+                            stats["heal_count"] = 0
+                            logger.info(f"[{name}] Browser respawned — page recreated ✅")
+                        else:
+                            logger.error(f"[{name}] Browser respawn FAILED — cooldown 5min")
+                            await asyncio.sleep(300)
+                            stats["heal_count"] = 0
                         continue
                 else:
-                    logger.warning(f"[{name}] Crash — heal limit, cooldown 30min")
-                    await asyncio.sleep(1800)
-                    stats["heal_count"] = 0
+                    # 3 heals exhausted → browser is probably dead, try respawn
+                    logger.warning(f"[{name}] 3 heals exhausted — respawning browser...")
+                    await mgr._respawn_browser(browser_type)
+                    await asyncio.sleep(10)
+                    new_page = await mgr.create_page(name, browser_type=browser_type)
+                    if new_page:
+                        page = new_page
+                        stats["heal_count"] = 0
+                        logger.info(f"[{name}] Browser respawned after 3 heals — page recreated ✅")
+                    else:
+                        logger.error(f"[{name}] Full respawn FAILED — cooldown 10min")
+                        await asyncio.sleep(600)
+                        stats["heal_count"] = 0
                     continue
 
         # Delay between scans (independent per shop — no blocking others)
