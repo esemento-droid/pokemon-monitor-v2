@@ -44,7 +44,7 @@ async def get_products():
             payload = {"cmd": "request.get", "url": CAT_URL, "maxTimeout": 55000}
             async with session.post(
                 FLARESOLVERR_URL, json=payload,
-                timeout=aiohttp.ClientTimeout(total=70),
+                timeout=aiohttp.ClientTimeout(total=120),
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
