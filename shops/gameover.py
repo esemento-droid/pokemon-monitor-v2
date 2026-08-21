@@ -3,7 +3,7 @@ import re
 from bs4 import BeautifulSoup
 
 SHOP = "gameover"
-SHOP_DISABLED = True  # 2026-08-21: hosting suspended (302 → suspendedpage.cgi)
+# Re-enabled 2026-08-21: user confirmed site works
 BASE = "https://www.krakow.gameover.pl"
 SEARCH_URL = f"{BASE}/sklep/index.php?d=szukaj&szukaj=Pokemon+tcg"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
