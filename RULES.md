@@ -2,6 +2,14 @@
 
 ## ⚠️ KRYTYCZNE — NIE ŁAMAĆ NIGDY
 
+### 0. DIAGNOSTYKA = JEDEN SKRYPT, NIE 10 KOMEND
+- Gdy trzeba zbadać problem (scraper, strona, CF, API) → JEDEN skrypt .py który robi WSZYSTKO naraz
+- NIGDY nie iteruj z userem "odpal to... teraz to... jeszcze to..." — to 10 paste.rs URLs zamiast jednego
+- Skrypt MUSI: postawić pełną diagnozę w jednym uruchomieniu (HTML dump, selektory, produkty, paginacja, errory)
+- Push skrypt do repo → user robi git pull && DISPLAY=:99 ./venv/bin/python3 infra/diag_NAZWA.py
+- Przykład: infra/diag_xjoy_full.py — jedno uruchomienie = pełny obraz (CF status + DOM structure + produkty + paginacja)
+- **ZASADA**: Jeśli potrzebujesz >1 komendy diagnostycznej → ZRÓB SKRYPT
+
 ### 1. NIGDY nie usuwaj plików bez sprawdzenia importów
 ```bash
 grep -rn "filename" *.py main.py detector.py
