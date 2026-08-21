@@ -39,7 +39,7 @@ async def get_products() -> list[dict]:
             async with session.post(
                 f"{FLARESOLVERR_URL}",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=70),
+                timeout=aiohttp.ClientTimeout(total=120),
             ) as resp:
                 data = await resp.json()
 

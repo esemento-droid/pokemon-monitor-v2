@@ -47,7 +47,7 @@ async def get_products():
                 payload = {"cmd": "request.get", "url": url, "maxTimeout": 55000}
                 async with session.post(
                     FLARESOLVERR_URL, json=payload,
-                    timeout=aiohttp.ClientTimeout(total=70),
+                    timeout=aiohttp.ClientTimeout(total=120),
                 ) as resp:
                     if resp.status != 200:
                         print(f"[tcg-zielona] FlareSolverr HTTP {resp.status} page {page}")
