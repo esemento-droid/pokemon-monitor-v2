@@ -52,14 +52,43 @@ _consecutive_fails = 0
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 
+class _BrowserDeadError(Exception):
+    """Internal: signals that a browser process died and needs restart."""
+    pass
+
+
 async def _ensure_browsers():
     """Start both browsers if not running. headless=False + Xvfb."""
     global _browser_proxy, _browser_direct, _pw, _semaphore, _camoufox_semaphore, _started
 
-    if _started and _browser_proxy and _browser_proxy.is_connected():
-        return
+    # Check if browsers are actually alive (not just _started flag)
+    if _started:
+        proxy_alive = _browser_proxy and _browser_proxy.is_connected()
+        direct_alive = _browser_direct and _browser_direct.is_connected()
+        if proxy_alive and direct_alive:
+            return
+        # At least one is dead — full restart needed
+        logger.warning("[CF_SOLVER] _ensure_browsers: stale state (proxy=%s, direct=%s) — reinitializing",
+                       proxy_alive, direct_alive)
+        # Clean up stale references
+        for b in [_browser_proxy, _browser_direct]:
+            if b:
+                try:
+                    await asyncio.wait_for(b.close(), timeout=5)
+                except Exception:
+                    pass
+        _browser_proxy = None
+        _browser_direct = None
+        if _pw:
+            try:
+                await asyncio.wait_for(_pw.stop(), timeout=5)
+            except Exception:
+                pass
+        _pw = None
+        _started = False
 
     async with _lock:
+        # Double-check after lock
         if _started and _browser_proxy and _browser_proxy.is_connected():
             return
 
@@ -97,20 +126,24 @@ async def _ensure_browsers():
             ]
         )
 
-        _semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-        _camoufox_semaphore = asyncio.Semaphore(CAMOUFOX_CONCURRENT)
+        if not _semaphore:
+            _semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+        if not _camoufox_semaphore:
+            _camoufox_semaphore = asyncio.Semaphore(CAMOUFOX_CONCURRENT)
         _started = True
         logger.info("[CF_SOLVER] Dual browsers ready (proxy + direct, concurrent=%d, camoufox_slots=%d)", MAX_CONCURRENT, CAMOUFOX_CONCURRENT)
 
 
 async def _restart_browsers():
-    """Full restart — nuclear option."""
+    """Full restart — nuclear option. Handles all edge cases gracefully."""
     global _browser_proxy, _browser_direct, _camoufox_browser, _pw, _started, _consecutive_fails
     logger.warning("[CF_SOLVER] FULL RESTART — %d consecutive failures", _consecutive_fails)
+    
+    # Close everything safely
     for b in [_browser_proxy, _browser_direct]:
         if b:
             try:
-                await b.close()
+                await asyncio.wait_for(b.close(), timeout=10)
             except Exception:
                 pass
     await _close_camoufox()
@@ -118,13 +151,27 @@ async def _restart_browsers():
     _browser_direct = None
     if _pw:
         try:
-            await _pw.stop()
+            await asyncio.wait_for(_pw.stop(), timeout=10)
         except Exception:
             pass
     _pw = None
     _started = False
     _consecutive_fails = 0
-    await _ensure_browsers()
+    
+    # Wait a moment for processes to die
+    await asyncio.sleep(3)
+    
+    # Retry browser start with backoff
+    for attempt in range(3):
+        try:
+            await _ensure_browsers()
+            logger.info("[CF_SOLVER] RESTART successful (attempt %d)", attempt + 1)
+            return
+        except Exception as e:
+            logger.error(f"[CF_SOLVER] RESTART attempt {attempt + 1}/3 failed: {e}")
+            await asyncio.sleep(5 * (attempt + 1))
+    
+    logger.error("[CF_SOLVER] RESTART FAILED after 3 attempts — solver will retry on next request")
 
 
 async def _human_click_turnstile(page, wait_sec):
@@ -287,6 +334,12 @@ async def _solve_with_browser(browser, url, timeout, label="proxy"):
         err_str = str(e)
         if "ERR_PROXY" in err_str or "Connect call failed" in err_str:
             logger.warning(f"[CF_SOLVER] [{label}] Proxy fail: {url[:55]}")
+        elif any(x in err_str for x in ["Target page", "browser has been closed",
+                                          "context or browser", "Connection closed",
+                                          "Browser closed", "not connected"]):
+            # Browser died — signal for restart (don't count as normal fail)
+            logger.warning(f"[CF_SOLVER] [{label}] Browser DEAD: {err_str[:60]} — triggering restart")
+            raise _BrowserDeadError(err_str)
         else:
             logger.error(f"[CF_SOLVER] [{label}] Error: {url[:55]}: {err_str[:80]}")
         return None
@@ -494,9 +547,8 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             if html:
                 _consecutive_fails = 0
                 return html
-            _consecutive_fails += 1
-            if _consecutive_fails >= RESTART_THRESHOLD:
-                asyncio.ensure_future(_restart_browsers())
+            # Camoufox failed — don't count toward Chromium restart threshold
+            # _solve_with_camoufox handles its own crash recovery (resets _camoufox_browser)
             return None
 
     async with _semaphore:
@@ -518,7 +570,13 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             if not browser or not browser.is_connected():
                 continue
 
-            html = await _solve_with_browser(browser, url, timeout, label)
+            try:
+                html = await _solve_with_browser(browser, url, timeout, label)
+            except _BrowserDeadError:
+                # Browser process died — restart immediately and retry with other browser
+                logger.warning(f"[CF_SOLVER] Browser '{label}' died during solve — restarting...")
+                asyncio.ensure_future(_restart_browsers())
+                continue
 
             if html:
                 _consecutive_fails = 0
@@ -527,7 +585,7 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
         # Both paths failed
         _consecutive_fails += 1
         if _consecutive_fails >= RESTART_THRESHOLD:
-            asyncio.ensure_future(_restart_browsers())
+            await _restart_browsers()
 
         return None
 
