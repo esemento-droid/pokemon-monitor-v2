@@ -2,9 +2,11 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "smyk.com"
-# Smyk hides OOS products from search — when product disappears from results,
-# mark it as unavailable in DB so reappearance triggers RESTOCK
-MARK_MISSING_AS_OOS = True
+# Smyk search results are UNSTABLE (ranking changes between scans).
+# MARK_MISSING_AS_OOS disabled: causes false RESTOCK alerts when products
+# disappear/reappear in search results due to ranking changes.
+# Real restocks still detected via available: false→true transition.
+MARK_MISSING_AS_OOS = False
 URLS = [
     "https://www.smyk.com/pl/pl/search?q=Pokemon%20tcg",
     "https://www.smyk.com/pl/pl/search?q=Pokemon",

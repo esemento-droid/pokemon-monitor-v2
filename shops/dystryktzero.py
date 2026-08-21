@@ -9,6 +9,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "dystryktzero"
+SCAN_TIMEOUT = 180  # CF solver: semaphore queue + 55s solve
 URL = "https://www.dystryktzero.pl/karty-pokemon/"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 

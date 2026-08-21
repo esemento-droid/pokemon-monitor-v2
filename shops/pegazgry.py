@@ -4,7 +4,7 @@ import asyncio
 import re
 
 SHOP = "pegazgry"
-MARK_MISSING_AS_OOS = True  # Site hides OOS from listing — mark missing products as unavailable for RESTOCK detection
+MARK_MISSING_AS_OOS = False  # Disabled: pagination instability causes false RESTOCK alerts
 BASE = "https://pegaz-gry.pl"
 URL = BASE + "/22-pokemon-tcg-gra-karciana-sklep-bydgoszcz"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126"}
