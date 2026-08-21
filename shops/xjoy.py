@@ -161,15 +161,17 @@ async def get_products() -> list[dict]:
                 async with session.post(
                     f"{FLARESOLVERR_URL}",
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=120),
+                    timeout=aiohttp.ClientTimeout(total=180),
                 ) as resp:
                     data = await resp.json()
 
             if data.get("status") != "ok":
+                print(f"[XJOY] CF solver error for {url[-30:]}: {data.get('message', '')[:80]}")
                 continue
 
             html = data.get("solution", {}).get("response", "")
             if not html or len(html) < 1000:
+                print(f"[XJOY] Empty/short response for {url[-30:]}: {len(html or '')} chars")
                 continue
 
             # Verify it's not a challenge page
@@ -184,7 +186,7 @@ async def get_products() -> list[dict]:
                 break
 
         except Exception as e:
-            print(f"[XJOY] Error fetching {url}: {e}")
+            print(f"[XJOY] Error fetching {url}: {type(e).__name__}: {e}")
             continue
 
     # Sort: OOS first, available last (Discord snapshot order)
