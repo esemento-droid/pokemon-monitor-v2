@@ -1,8 +1,8 @@
 """
 Scraper: xjoy.pl (PrestaShop 1.6 + Cloudflare)
 Category: /278-pokemon-tcg (91 products, 4 pages)
-Method: CF Solver (patchright Chromium) → HTML parse
-Group: SLOW (CF_SHOPS)
+Method: CF Solver (Camoufox Firefox) → HTML parse
+Group: SLOW (CF_SHOPS / HARD_SHOPS)
 
 DOM structure (PrestaShop 1.6):
 - Container: .product-container
@@ -13,10 +13,9 @@ DOM structure (PrestaShop 1.6):
 - Availability: .product-availability → "W magazynie" / "Brak"
 - Pagination: ?p=2, ?p=3, ?p=4 (24 per page, 91 total)
 
-STRATEGY: Fetch ONLY page 1 per scan (24 products, ~55s).
-Full 4-page scan every 3rd cycle via _scan_counter.
-This way xjoy uses only 1 CF solver slot per scan (not 4!),
-leaving other slots free for sklepkleks/morigal/mepel etc.
+STRATEGY: ALWAYS fetch ALL pages (Camoufox has its own semaphore,
+doesn't block other shops). Sequential fetch, ~70s per page × 4 = ~280s.
+SCAN_TIMEOUT = 360s to accommodate.
 """
 
 import asyncio
@@ -24,12 +23,11 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "xjoy"
-SCAN_TIMEOUT = 180  # 1 page = ~55s solve + buffer
+SCAN_TIMEOUT = 480  # 4 pages × ~70-90s each + generous buffer (better slow than never)
 BASE = "https://www.xjoy.pl"
 CATEGORY_URL = f"{BASE}/278-pokemon-tcg"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 MAX_PAGES = 4  # 91 products / 24 per page = 4 pages
-FULL_SCAN_EVERY = 3  # Full 4-page scan every 3rd cycle
 
 _scan_counter = 0
 
@@ -124,11 +122,18 @@ def _parse_page(html: str, seen: set) -> list[dict]:
         avail_text = avail_el.get_text(strip=True).lower() if avail_el else ""
         available = "magazyn" in avail_text or "w magazynie" in avail_text or "in stock" in avail_text
 
-        # Also check for add-to-cart button presence (stronger signal)
+        # Also check for add-to-cart button presence (stronger signal on PrestaShop)
         if not available:
-            atc = item.select_one("a.ajax_add_to_cart_button, .add-to-cart")
+            atc = item.select_one("a.ajax_add_to_cart_button, .add-to-cart, button.ajax_add_to_cart_button")
             if atc:
                 available = True
+
+        # Fallback: if no availability indicator at all, check for "brak" / "niedostępny"
+        if not avail_el:
+            # No availability element = assume available (PrestaShop hides it when in stock)
+            available = True
+        elif "brak" in avail_text or "niedost" in avail_text or "wyczerpan" in avail_text:
+            available = False
 
         # Product ID from URL
         pid = url.rstrip("/").split("/")[-1].split(".html")[0]
@@ -190,11 +195,10 @@ async def _fetch_page(url: str) -> str:
 
 async def get_products() -> list[dict]:
     """
-    Fetch xjoy products. Strategy:
-    - Normal scan: page 1 only (24 products, 1 CF solver slot, ~55s)
-    - Every 3rd scan: all 4 pages (full inventory, sequential, ~4×55s)
+    Fetch ALL xjoy pages every scan.
     
-    This prevents xjoy from hogging CF solver slots and blocking other shops.
+    xjoy is a HARD_SHOP (Camoufox, separate semaphore) — doesn't block other shops.
+    Sequential fetch: 4 pages × ~70s = ~280s. SCAN_TIMEOUT = 360s.
     """
     global _scan_counter
     _scan_counter += 1
@@ -202,14 +206,8 @@ async def get_products() -> list[dict]:
     products = []
     seen: set = set()
 
-    # Determine which pages to fetch this cycle
-    if _scan_counter % FULL_SCAN_EVERY == 1 or _scan_counter == 1:
-        # Full scan — all pages, SEQUENTIAL (1 solver slot at a time)
-        urls = [CATEGORY_URL] + [f"{CATEGORY_URL}?p={p}" for p in range(2, MAX_PAGES + 1)]
-        print(f"[XJOY] Full scan (cycle {_scan_counter}, {len(urls)} pages)")
-    else:
-        # Quick scan — page 1 only (most restocks appear on page 1 = newest products)
-        urls = [CATEGORY_URL]
+    # Always fetch all pages
+    urls = [CATEGORY_URL] + [f"{CATEGORY_URL}?p={p}" for p in range(2, MAX_PAGES + 1)]
 
     for url in urls:
         html = await _fetch_page(url)
@@ -220,6 +218,7 @@ async def get_products() -> list[dict]:
             # Page 1 failed — abort (CF not working for xjoy right now)
             print(f"[XJOY] Page 1 failed — aborting scan")
             return []
+        # If page 2-4 fails, continue with what we have (don't abort)
 
     # Sort: OOS first, available last (Discord snapshot order)
     products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
