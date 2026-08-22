@@ -1,8 +1,15 @@
 """
 Scraper: xjoy.pl (PrestaShop 1.6 + Cloudflare)
 Category: /278-pokemon-tcg (91 products, 4 pages)
-Method: CF Solver (Camoufox Firefox) → HTML parse
-Group: SLOW (CF_SHOPS / HARD_SHOPS)
+Method: PERSISTENT CAMOUFOX PAGE (scan_with_page)
+Group: NODRIVER (browser_manager → camoufox browser type)
+
+Architecture:
+- ONE persistent Camoufox browser page (tab) — lives forever
+- Scan = page.goto(url) + wait for CF + parse HTML
+- Zero start/stop cycles, zero zombie processes
+- Self-healing: if page crashes → browser_manager recreates it
+- CF challenge passes in ~18s (proven by diagnostic)
 
 DOM structure (PrestaShop 1.6):
 - Container: .product-container
@@ -12,21 +19,17 @@ DOM structure (PrestaShop 1.6):
 - URL: a[itemprop=url][href]
 - Availability: .product-availability → "W magazynie" / "Brak"
 - Pagination: ?p=2, ?p=3, ?p=4 (24 per page, 91 total)
-
-STRATEGY: ALWAYS fetch ALL pages (Camoufox has its own semaphore,
-doesn't block other shops). Sequential fetch, ~70s per page × 4 = ~280s.
-SCAN_TIMEOUT = 360s to accommodate.
 """
 
 import asyncio
-import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "xjoy"
-SCAN_TIMEOUT = 300  # 4 pages × ~30s each (solve=18s) + buffer + retry
+BROWSER_TYPE = "camoufox"  # Uses persistent Camoufox browser (not patchright)
+SCAN_TIMEOUT = 300  # 4 pages × ~30s each + CF challenge wait + buffer
+SCAN_DELAY = 90  # Scan every 90-135s (CF rate limit friendly)
 BASE = "https://www.xjoy.pl"
 CATEGORY_URL = f"{BASE}/278-pokemon-tcg"
-FLARESOLVERR_URL = "http://localhost:8191/v1"
 MAX_PAGES = 4  # 91 products / 24 per page = 4 pages
 
 _scan_counter = 0
@@ -109,7 +112,6 @@ def _parse_page(html: str, seen: set) -> list[dict]:
         if not image:
             img_el = item.select_one("img[itemprop=image]")
             if img_el:
-                # Get largest from srcset
                 srcset = img_el.get("srcset", "")
                 if srcset:
                     parts = [s.strip().split(" ")[0] for s in srcset.split(",") if s.strip()]
@@ -122,15 +124,14 @@ def _parse_page(html: str, seen: set) -> list[dict]:
         avail_text = avail_el.get_text(strip=True).lower() if avail_el else ""
         available = "magazyn" in avail_text or "w magazynie" in avail_text or "in stock" in avail_text
 
-        # Also check for add-to-cart button presence (stronger signal on PrestaShop)
+        # Also check for add-to-cart button presence
         if not available:
             atc = item.select_one("a.ajax_add_to_cart_button, .add-to-cart, button.ajax_add_to_cart_button")
             if atc:
                 available = True
 
-        # Fallback: if no availability indicator at all, check for "brak" / "niedostępny"
+        # Fallback: no availability element = assume available (PrestaShop hides when in stock)
         if not avail_el:
-            # No availability element = assume available (PrestaShop hides it when in stock)
             available = True
         elif "brak" in avail_text or "niedost" in avail_text or "wyczerpan" in avail_text:
             available = False
@@ -152,53 +153,77 @@ def _parse_page(html: str, seen: set) -> list[dict]:
     return products
 
 
-async def _fetch_page(url: str) -> str:
-    """Fetch a single page via CF bridge. Returns HTML or empty string."""
-    payload = {
-        "cmd": "request.get",
-        "url": url,
-        "maxTimeout": 90000,  # 90s — Camoufox solve takes ~18s, 60s timeout + buffer
-    }
+async def _wait_for_cf(page, max_wait=45):
+    """Wait for Cloudflare challenge to resolve. Returns True if resolved."""
+    for i in range(max_wait):
+        try:
+            title = await page.title()
+            body = await page.evaluate(
+                "() => document.body ? document.body.innerText.substring(0, 200) : ''"
+            )
+            combined = ((title or "") + (body or "")).lower()
+
+            is_challenge = any(x in combined for x in [
+                "moment", "checking", "attention", "just a moment",
+                "verif", "checking your browser", "please wait",
+                "weryfikac", "czekanie na odpowied", "witryna sprawdza", "cloudflare"
+            ])
+
+            if not is_challenge:
+                return True
+
+            # Click Turnstile checkbox area (Camoufox humanize handles movement)
+            if i in [2, 5, 8, 12, 18, 25, 32, 40]:
+                try:
+                    await page.mouse.click(210, 290)
+                except Exception:
+                    pass
+
+        except Exception:
+            # Page might be navigating — wait and retry
+            pass
+
+        await asyncio.sleep(1)
+
+    return False
+
+
+async def _fetch_page_with_browser(page, url):
+    """Navigate persistent page to URL, wait for CF, return HTML."""
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{FLARESOLVERR_URL}",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=100),  # Client-side: 100s
-            ) as resp:
-                data = await resp.json()
+        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    except Exception:
+        pass  # Timeout on goto is OK — page might still load
 
-        if data.get("status") != "ok":
-            print(f"[XJOY] CF error {url[-30:]}: {data.get('message', '')[:60]}")
-            return ""
-
-        html = data.get("solution", {}).get("response", "")
-
-        # Validate: not a challenge page and has content
-        if not html or len(html) < 1000:
-            print(f"[XJOY] Short response {url[-30:]}: {len(html or '')} chars")
-            return ""
-
-        if "weryfikac" in html.lower() and len(html) < 30000:
-            print(f"[XJOY] Challenge page returned for {url[-30:]}")
-            return ""
-
-        return html
-
-    except asyncio.TimeoutError:
-        print(f"[XJOY] Timeout 100s for {url[-30:]}")
-        return ""
-    except Exception as e:
-        print(f"[XJOY] Error {url[-30:]}: {type(e).__name__}: {e}")
+    # Wait for CF challenge to resolve
+    resolved = await _wait_for_cf(page, max_wait=45)
+    if not resolved:
         return ""
 
+    # Extra wait for content to render
+    await asyncio.sleep(2)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:
+        pass
 
-async def get_products() -> list[dict]:
+    html = await page.content()
+
+    # Validate
+    if not html or len(html) < 1000:
+        return ""
+    if "weryfikac" in html.lower() and len(html) < 30000:
+        return ""
+
+    return html
+
+
+async def scan_with_page(page) -> list[dict]:
     """
-    Fetch ALL xjoy pages every scan.
+    Scan xjoy using persistent Camoufox page.
     
-    xjoy is a HARD_SHOP (Camoufox, separate semaphore) — doesn't block other shops.
-    Sequential fetch: 4 pages × ~70s = ~280s. SCAN_TIMEOUT = 360s.
+    Sequential page navigation: page 1 → page 2 → page 3 → page 4.
+    Same page, different URLs. CF cookie persists across navigations.
     """
     global _scan_counter
     _scan_counter += 1
@@ -206,29 +231,47 @@ async def get_products() -> list[dict]:
     products = []
     seen: set = set()
 
-    # Always fetch all pages
+    # All pages to fetch
     urls = [CATEGORY_URL] + [f"{CATEGORY_URL}?p={p}" for p in range(2, MAX_PAGES + 1)]
 
     for url in urls:
-        html = await _fetch_page(url)
-        if not html and url != CATEGORY_URL:
-            # Retry once for pages 2-4 (CF sometimes fails intermittently)
-            await asyncio.sleep(5)
-            html = await _fetch_page(url)
+        html = await _fetch_page_with_browser(page, url)
+        if not html and url == CATEGORY_URL:
+            # Page 1 failed — CF not passing, abort
+            print(f"[XJOY] Page 1 CF failed — aborting scan")
+            return []
+        if not html:
+            # Page 2-4 failed — retry once
+            await asyncio.sleep(3)
+            html = await _fetch_page_with_browser(page, url)
         if html:
             page_products = _parse_page(html, seen)
             products.extend(page_products)
-        elif url == CATEGORY_URL:
-            # Page 1 failed — abort (CF not working for xjoy right now)
-            print(f"[XJOY] Page 1 failed — aborting scan")
-            return []
-        # If page 2-4 fails after retry, continue with what we have (don't abort)
+        # Brief delay between pages (be nice to CF)
+        await asyncio.sleep(2)
 
     # Sort: OOS first, available last (Discord snapshot order)
     products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))
 
     print(f"[XJOY] {len(products)} produktow (cycle {_scan_counter})")
     return products
+
+
+# Legacy get_products() for standalone testing
+async def get_products() -> list[dict]:
+    """Standalone test mode — launches own Camoufox browser."""
+    from camoufox.async_api import AsyncCamoufox
+
+    async with AsyncCamoufox(
+        headless=True,
+        proxy={"server": "http://127.0.0.1:8888"},
+        geoip=True,
+        humanize=True,
+        os="windows",
+    ) as browser:
+        page = await browser.new_page()
+        result = await scan_with_page(page)
+        return result
 
 
 if __name__ == "__main__":

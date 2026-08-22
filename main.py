@@ -41,6 +41,7 @@ NODRIVER_SHOPS = {
     "empik", "mediaexpert", "proshop", "boosterpoint",
     "strefamarzen", "tantis",
     "libristo",
+    "xjoy",  # Persistent Camoufox browser (was SLOW/CF_SHOPS, moved for stability)
 }
 
 SHOPIFY_SHOPS = {"pokeloot", "skladgier"}
@@ -49,7 +50,7 @@ SLOW_SHOPS = {
     "am76", "blindbox", "flamberg", "mrpuggy", "pikashop",
     "paladynat", "czytam", "kuzniakart", "sklepkleks",
     "battlestash", "tcgzielona", "morigal",
-    "eduksiazka", "dystryktzero", "gralnia", "xjoy", "mepel",
+    "eduksiazka", "dystryktzero", "gralnia", "mepel",
     "maginarium", "monsteriada", "wilczek",
 }
 
@@ -59,7 +60,7 @@ SLOW_SHOPS = {
 # At 90-150s delay = ~5-7 req/min → fits within capacity with margin
 CF_SHOPS = {
     "sklepkleks", "battlestash", "tcgzielona", "morigal",
-    "eduksiazka", "dystryktzero", "gralnia", "xjoy", "mepel",
+    "eduksiazka", "dystryktzero", "gralnia", "mepel",
 }
 
 VERY_SLOW_SHOPS = {

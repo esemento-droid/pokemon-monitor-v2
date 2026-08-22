@@ -39,7 +39,7 @@ VPS_FIRST_SHOPS = {"gralnia"}
 # Shops that need extra time (aggressive Turnstile) → use Camoufox (Firefox)
 # NOTE: Camoufox is unstable (crashes after 1-2h). Only put shops here that
 # ABSOLUTELY cannot pass via Chromium proxy/direct. All others should use Chromium.
-HARD_SHOPS = {"gralnia", "battlestash", "xjoy"}  # All need Camoufox (Firefox)
+HARD_SHOPS = {"gralnia", "battlestash"}  # xjoy moved to NODRIVER (persistent Camoufox page)
 
 _browser_proxy = None     # Browser with mobile proxy
 _browser_direct = None    # Browser without proxy (VPS IP)
