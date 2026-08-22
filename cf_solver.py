@@ -44,6 +44,8 @@ HARD_SHOPS = {"gralnia", "battlestash", "xjoy"}  # All need Camoufox (Firefox)
 _browser_proxy = None     # Browser with mobile proxy
 _browser_direct = None    # Browser without proxy (VPS IP)
 _camoufox_browser = None  # Camoufox (Firefox anti-detect) — lazy init for HARD_SHOPS
+_camoufox_started_at = 0  # Timestamp when Camoufox was last initialized
+CAMOUFOX_MAX_AGE = 2700   # 45 min — proactive restart before crash (crashes at ~1-2h)
 _pw = None
 _semaphore = None
 _camoufox_semaphore = None  # Separate semaphore for Camoufox (prevents starvation)
@@ -393,35 +395,37 @@ async def _ensure_camoufox():
     """Lazy-init Camoufox browser for HARD_SHOPS. Firefox-based anti-detect.
     
     Crash recovery: if browser died, wait briefly for cleanup then re-init with retry.
+    Proactive restart: if browser is older than CAMOUFOX_MAX_AGE (45min), restart it
+    BEFORE it crashes (known instability after 1-2h).
     """
-    global _camoufox_browser
+    global _camoufox_browser, _camoufox_started_at
 
     if _camoufox_browser:
+        # Proactive restart: browser too old → restart before crash
+        if time.time() - _camoufox_started_at > CAMOUFOX_MAX_AGE:
+            logger.info("[CF_SOLVER] Camoufox proactive restart (age %.0fmin > %dmin limit)",
+                       (time.time() - _camoufox_started_at) / 60, CAMOUFOX_MAX_AGE // 60)
+            await _close_camoufox()
+            await asyncio.sleep(2)
         # Check if browser is still connected (crash recovery)
-        try:
-            if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
-                logger.warning("[CF_SOLVER] Camoufox browser disconnected — resetting for re-init")
-                await _close_camoufox()
-                await asyncio.sleep(3)  # Wait for zombie processes to die
-            else:
-                return _camoufox_browser
-        except Exception:
-            logger.warning("[CF_SOLVER] Camoufox health check failed — resetting for re-init")
+        elif not _camoufox_browser.is_connected() if hasattr(_camoufox_browser, 'is_connected') else False:
+            logger.warning("[CF_SOLVER] Camoufox browser disconnected — resetting for re-init")
             await _close_camoufox()
             await asyncio.sleep(3)
+        else:
+            return _camoufox_browser
 
     async with _lock:
         # Double-check after acquiring lock
         if _camoufox_browser:
-            try:
-                if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
-                    await _close_camoufox()
-                    await asyncio.sleep(2)
-                else:
-                    return _camoufox_browser
-            except Exception:
+            if time.time() - _camoufox_started_at > CAMOUFOX_MAX_AGE:
                 await _close_camoufox()
                 await asyncio.sleep(2)
+            elif hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
+                await _close_camoufox()
+                await asyncio.sleep(2)
+            else:
+                return _camoufox_browser
 
         # Retry with backoff (Camoufox can fail to start if previous instance didn't fully die)
         for attempt in range(3):
@@ -442,6 +446,7 @@ async def _ensure_camoufox():
                 _camoufox_browser = await asyncio.wait_for(_cm.__aenter__(), timeout=30)
                 # Store context manager to close later
                 _camoufox_browser._cm = _cm
+                _camoufox_started_at = time.time()
                 logger.info("[CF_SOLVER] Camoufox ready (Firefox + proxy + geoip)")
                 return _camoufox_browser
 
@@ -480,8 +485,8 @@ async def _close_camoufox():
 async def _solve_with_camoufox(url, timeout):
     """Solve CF challenge using Camoufox (Firefox anti-detect). For HARD_SHOPS only.
     
-    Crash recovery: on browser death, resets _camoufox_browser so next call re-inits.
-    Brief cooldown (3s) after crash to avoid rapid re-init loops.
+    Proven: healthy Camoufox solves in ~18s. If >60s = browser stale.
+    On any failure: reset browser for fresh init on next call.
     """
     browser = await _ensure_camoufox()
     if not browser:
@@ -489,7 +494,7 @@ async def _solve_with_camoufox(url, timeout):
 
     page = None
     try:
-        page = await asyncio.wait_for(browser.new_page(), timeout=15)
+        page = await asyncio.wait_for(browser.new_page(), timeout=10)
         await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
 
         # Wait for CF challenge to resolve (same logic as Chromium path)
@@ -529,7 +534,10 @@ async def _solve_with_camoufox(url, timeout):
             await asyncio.sleep(1)
 
         if not resolved:
-            logger.warning(f"[CF_SOLVER] [camoufox] Not resolved: {url[:55]} after {wait_max}s")
+            logger.warning(f"[CF_SOLVER] [camoufox] Not resolved: {url[:55]} after {wait_max}s — forcing re-init")
+            # If CF not resolved despite page loading = browser fingerprint burned
+            # Force re-init next time (fresh fingerprint)
+            await _close_camoufox()
             return None
 
         await asyncio.sleep(2)
@@ -547,19 +555,19 @@ async def _solve_with_camoufox(url, timeout):
         logger.info(f"[CF_SOLVER] [camoufox] Solved OK: {url[:50]} ({len(html)} chars)")
         return html
 
-    except Exception as e:
-        err_str = str(e)
-        # Detect browser crash — reset for lazy re-init on next call
+    except (asyncio.TimeoutError, Exception) as e:
+        err_str = str(e) if not isinstance(e, asyncio.TimeoutError) else f"Timeout {timeout}s"
+        # ANY failure = reset browser. Camoufox is cheap to restart (~3s)
+        # and a stale browser will keep failing. Fresh start = fresh fingerprint.
         if any(x in err_str for x in ["Target page", "browser has been closed",
                                         "context or browser", "Connection closed",
                                         "Browser closed", "not connected",
-                                        "Protocol error"]):
-            logger.warning(f"[CF_SOLVER] [camoufox] Browser crashed: {err_str[:60]} — will re-init on next call")
-            await _close_camoufox()
-            # Brief cooldown — don't immediately re-init (zombie processes need time to die)
-            await asyncio.sleep(3)
+                                        "Protocol error", "Timeout"]):
+            logger.warning(f"[CF_SOLVER] [camoufox] Browser stale/dead: {err_str[:60]} — forcing re-init")
         else:
             logger.error(f"[CF_SOLVER] [camoufox] Error: {url[:55]}: {err_str[:80]}")
+        await _close_camoufox()
+        await asyncio.sleep(2)
         return None
     finally:
         if page:
@@ -590,9 +598,9 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
 
     # HARD_SHOPS: use separate Camoufox semaphore (doesn't block Chromium slots)
     if _get_shop_from_url(url) in HARD_SHOPS:
-        # Camoufox needs much more time (Firefox + proxy + humanize + Turnstile = slow)
-        # goto can take 60-90s, then CF challenge wait up to 55s = need 180s minimum
-        camoufox_timeout = 180
+        # Camoufox solves in ~18s when healthy. If >60s = browser stale/dead.
+        # Proactive restart at 45min prevents crashes, so 60s timeout is safe.
+        camoufox_timeout = 60
         async with _camoufox_semaphore:
             html = await _solve_with_camoufox(url, camoufox_timeout)
             if html:
@@ -693,6 +701,10 @@ async def health_check():
         try:
             if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
                 logger.warning("[CF_SOLVER] Health check: Camoufox disconnected — resetting")
+                await _close_camoufox()
+            elif time.time() - _camoufox_started_at > CAMOUFOX_MAX_AGE:
+                logger.info("[CF_SOLVER] Health check: Camoufox age %.0fmin — proactive restart",
+                           (time.time() - _camoufox_started_at) / 60)
                 await _close_camoufox()
         except Exception:
             logger.warning("[CF_SOLVER] Health check: Camoufox check failed — resetting")
