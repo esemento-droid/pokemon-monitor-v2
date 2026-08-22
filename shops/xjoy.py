@@ -211,6 +211,10 @@ async def get_products() -> list[dict]:
 
     for url in urls:
         html = await _fetch_page(url)
+        if not html and url != CATEGORY_URL:
+            # Retry once for pages 2-4 (CF sometimes fails intermittently)
+            await asyncio.sleep(5)
+            html = await _fetch_page(url)
         if html:
             page_products = _parse_page(html, seen)
             products.extend(page_products)
@@ -218,7 +222,7 @@ async def get_products() -> list[dict]:
             # Page 1 failed — abort (CF not working for xjoy right now)
             print(f"[XJOY] Page 1 failed — aborting scan")
             return []
-        # If page 2-4 fails, continue with what we have (don't abort)
+        # If page 2-4 fails after retry, continue with what we have (don't abort)
 
     # Sort: OOS first, available last (Discord snapshot order)
     products.sort(key=lambda x: (x.get("available", False), x.get("name", "")))

@@ -457,8 +457,14 @@ class TorpedoDaemon:
                 log.warning(f"[{email}] Heartbeat failed: {err_str[:60]}")
 
     async def maintenance(self):
-        """Run heartbeats and re-stages."""
+        """Run heartbeats and re-stages.
+        
+        IMPORTANT: Don't trigger nuclear restart during active re-stage
+        (_full_stage temporarily sets staged=False for each account).
+        """
         now = time.time()
+        _restaging = False  # Flag: are we actively re-staging?
+        
         for acc in self.accounts:
             email = acc["email"]
             if email not in self.pages:
@@ -470,6 +476,7 @@ class TorpedoDaemon:
 
             # Re-stage every 30 min OR if not staged
             if not self.staged.get(email) or (now - self.last_stage.get(email, 0) > RESTAGE_INTERVAL):
+                _restaging = True
                 log.info(f"[DAEMON] Re-staging {email}...")
                 for attempt in range(3):
                     try:
@@ -482,7 +489,12 @@ class TorpedoDaemon:
                             await asyncio.sleep(5)
                 await asyncio.sleep(3)
 
-        # If ALL accounts unstaged — try full browser restart every 10 min
+        # Only consider nuclear restart if we weren't just re-staging
+        # (re-stage temporarily sets staged=False → false positive)
+        if _restaging:
+            return  # Skip nuclear check — re-stage just ran, give it time
+            
+        # If ALL accounts unstaged (and we didn't just re-stage) — browser is dead
         ok = sum(1 for v in self.staged.values() if v)
         if ok == 0 and not hasattr(self, '_last_full_restart'):
             self._last_full_restart = 0
@@ -551,13 +563,8 @@ class TorpedoDaemon:
 
             ok = sum(1 for v in self.staged.values() if v)
             log.info(f"[DAEMON] After nuclear restart: {ok}/{len(self.accounts)} staged")
-            # Only notify Discord on successful restart (reduce spam)
-            if ok >= len(self.accounts) // 2:
-                await self._discord(f"♻️ **TORPEDO RESTART** — {ok}/{len(self.accounts)} staged")
-            elif ok > 0:
-                await self._discord(f"⚠️ **TORPEDO** partial restart — only {ok}/{len(self.accounts)} staged")
-            else:
-                log.error("[DAEMON] Nuclear restart: 0 staged — will retry in 10min")
+            # Don't spam Discord with routine restarts — only log.
+            # User gets health_alert if 0 staged persists > 10min.
 
         except Exception as e:
             log.error(f"[DAEMON] Nuclear restart FAILED: {e}")
