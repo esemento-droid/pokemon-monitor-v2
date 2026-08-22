@@ -8,7 +8,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "gralnia"
-SCAN_TIMEOUT = 300  # Extended: Camoufox needs up to 180s for solve + CF challenge
+SCAN_TIMEOUT = 120  # Camoufox solve = ~18s, but CF challenge wait adds ~20s
 URL = "https://gralnia.org/?s=pokemon+tcg&post_type=product"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
 
@@ -30,7 +30,7 @@ async def get_products() -> list[dict]:
     payload = {
         "cmd": "request.get",
         "url": URL,
-        "maxTimeout": 240000,
+        "maxTimeout": 90000,
     }
 
     try:
@@ -38,7 +38,7 @@ async def get_products() -> list[dict]:
             async with session.post(
                 f"{FLARESOLVERR_URL}",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=260),
+                timeout=aiohttp.ClientTimeout(total=100),
             ) as resp:
                 data = await resp.json()
 

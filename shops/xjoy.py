@@ -23,7 +23,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "xjoy"
-SCAN_TIMEOUT = 480  # 4 pages × ~70-90s each + generous buffer (better slow than never)
+SCAN_TIMEOUT = 300  # 4 pages × ~30s each (solve=18s) + buffer + retry
 BASE = "https://www.xjoy.pl"
 CATEGORY_URL = f"{BASE}/278-pokemon-tcg"
 FLARESOLVERR_URL = "http://localhost:8191/v1"
@@ -157,14 +157,14 @@ async def _fetch_page(url: str) -> str:
     payload = {
         "cmd": "request.get",
         "url": url,
-        "maxTimeout": 240000,  # 240s — Camoufox needs up to 180s solve + buffer
+        "maxTimeout": 90000,  # 90s — Camoufox solve takes ~18s, 60s timeout + buffer
     }
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{FLARESOLVERR_URL}",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=260),  # Client-side: 260s (above maxTimeout)
+                timeout=aiohttp.ClientTimeout(total=100),  # Client-side: 100s
             ) as resp:
                 data = await resp.json()
 
@@ -186,7 +186,7 @@ async def _fetch_page(url: str) -> str:
         return html
 
     except asyncio.TimeoutError:
-        print(f"[XJOY] Timeout 260s for {url[-30:]}")
+        print(f"[XJOY] Timeout 100s for {url[-30:]}")
         return ""
     except Exception as e:
         print(f"[XJOY] Error {url[-30:]}: {type(e).__name__}: {e}")

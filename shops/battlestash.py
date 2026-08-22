@@ -16,7 +16,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 SHOP = "battlestash.pl"
-SCAN_TIMEOUT = 300
+SCAN_TIMEOUT = 120
 BASE_URL = "https://battlestash.pl"
 CATEGORY_URL = f"{BASE_URL}/kategoria/gry-karciane/pokemon-tcg/"
 MAX_PAGES = 3
@@ -40,10 +40,10 @@ async def fetch_flaresolverr(url):
     """Fetch URL via CF Bridge (cf_solver.py) to bypass Cloudflare."""
     try:
         async with aiohttp.ClientSession() as session:
-            payload = {"cmd": "request.get", "url": url, "maxTimeout": 240000}
+            payload = {"cmd": "request.get", "url": url, "maxTimeout": 90000}
             async with session.post(
                 FLARESOLVERR_URL, json=payload,
-                timeout=aiohttp.ClientTimeout(total=260),
+                timeout=aiohttp.ClientTimeout(total=100),
             ) as resp:
                 if resp.status != 200:
                     return ""
