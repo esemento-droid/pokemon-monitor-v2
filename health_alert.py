@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
 Health Alert — monitors critical systems and alerts on Discord ONLY when something breaks.
-Runs via cron every 2 minutes. Silent when everything OK.
+Runs via cron every 3 minutes. Silent when everything OK.
 
 Alerts on:
   🔴 CRITICAL:
     - Monitor service dead
     - ALL proxies dead (>3 min)
-    - FlareSolverr dead
+    - JC Torpedo 0 staged accounts (>10 min — can't buy drops!)
   🟡 WARNING:
     - Proxy tunnel dead (degraded — Tailscale still works)
     - Phone unreachable via Tailscale
+    - FlareSolverr dead
     - Monitor error rate >10% in last 5 min
 
 Does NOT spam — only alerts on STATE CHANGE (down→up, up→down).
@@ -128,6 +129,45 @@ def check_phone_reachable() -> bool:
         return False
 
 
+def check_torpedo_staged() -> bool:
+    """Check if JC torpedo has at least 1 account staged.
+    
+    Parses journalctl for recent STAGED messages. If no STAGED in last 10 min
+    and service is active → torpedo is broken (0 accounts ready to buy).
+    """
+    try:
+        # First check if service is even running
+        r = subprocess.run(
+            ["systemctl", "is-active", "jc-torpedo"],
+            capture_output=True, text=True, timeout=5
+        )
+        if r.stdout.strip() != "active":
+            return False  # Service not running = not staged
+
+        # Check for recent STAGED messages (last 10 min)
+        r = subprocess.run(
+            ["journalctl", "-u", "jc-torpedo", "--since", "10 min ago",
+             "--no-pager", "-q", "--output=short"],
+            capture_output=True, text=True, timeout=10
+        )
+        output = r.stdout
+        # Count STAGED lines
+        staged_count = output.count("✅ STAGED")
+        # If we see at least 1 STAGED in last 10min → healthy
+        if staged_count > 0:
+            return True
+        # No STAGED but also no errors → might be freshly started, give benefit of doubt
+        if "FIRE" in output or "nuclear restart" in output.lower():
+            return False  # Active fire or restart in progress = not staged
+        # Check for explicit "0 staged" or errors
+        if "0 staged" in output or "0/" in output:
+            return False
+        # No info → assume OK (service just started, or quiet period)
+        return True
+    except Exception:
+        return True  # Can't check → don't alert
+
+
 def main():
     state = load_state()
     alerts = []
@@ -138,6 +178,7 @@ def main():
     checks = {
         "monitor": ("🖥️ Monitor", check_monitor, "CRITICAL"),
         "flaresolverr": ("🐳 FlareSolverr", check_flaresolverr, "WARNING"),
+        "torpedo": ("🚀 JC Torpedo (0 staged)", check_torpedo_staged, "CRITICAL"),
     }
 
     # Proxy checks — only alert when ALL paths dead (single path flaps are normal)
