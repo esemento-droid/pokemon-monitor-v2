@@ -48,17 +48,25 @@ class BrowserManager:
     Each shop gets a PAGE (tab) in the shared context.
     new_context() = new Chrome renderer process = memory/CPU leak.
     new_page() in existing context = lightweight tab, no new process.
+    
+    THREE browser types:
+    - stealth: patchright Chromium (headless=False, proxy) — CF/anti-bot shops
+    - standard: playwright Chromium (headless=True, no proxy) — simple JS shops
+    - camoufox: Camoufox Firefox (headless=True, proxy) — HARD CF shops (xjoy)
     """
 
     def __init__(self):
         self._stealth_browser = None   # patchright (CF bypass)
         self._standard_browser = None  # playwright (simple headless)
+        self._camoufox_browser = None  # Camoufox (Firefox anti-detect for HARD CF)
         self._stealth_context = None   # ONE shared context for all stealth shops
         self._standard_context = None  # ONE shared context for all standard shops
+        self._camoufox_context = None  # ONE shared context for camoufox shops
         self._pw_stealth = None        # patchright playwright instance
         self._pw_standard = None       # playwright instance
+        self._pw_camoufox = None       # camoufox context manager
         self._pages = {}               # shop_name → page
-        self._browser_types = {}       # shop_name → "stealth" or "standard"
+        self._browser_types = {}       # shop_name → "stealth" or "standard" or "camoufox"
         self._started = False
         self._respawn_lock = asyncio.Lock()  # Prevent multiple concurrent respawns
         self._last_respawn = {}        # browser_type → timestamp
@@ -114,8 +122,13 @@ class BrowserManager:
             logger.error(f"[BROWSER_MGR] Standard browser launch FAILED: {e}")
             self._standard_browser = None
 
+        # Camoufox browser (Firefox anti-detect) — for HARD CF shops (xjoy)
+        # Only launch if any shop needs it (lazy — checked in create_page)
+        # Camoufox is heavier (~400MB) so we only start on demand
+        self._camoufox_browser = None  # Will be started on first create_page("camoufox")
+
         self._started = True
-        logger.info(f"[BROWSER_MGR] Ready. Stealth: {'OK' if self._stealth_browser else 'FAIL'}, Standard: {'OK' if self._standard_browser else 'FAIL'}")
+        logger.info(f"[BROWSER_MGR] Ready. Stealth: {'OK' if self._stealth_browser else 'FAIL'}, Standard: {'OK' if self._standard_browser else 'FAIL'}, Camoufox: lazy")
 
     async def create_page(self, shop_name, browser_type="standard", user_agent=None):
         """
@@ -127,6 +140,12 @@ class BrowserManager:
 
         if browser_type == "stealth":
             context = self._stealth_context
+        elif browser_type == "camoufox":
+            context = self._camoufox_context
+            if not context:
+                # Lazy-init Camoufox on first use
+                await self._start_camoufox()
+                context = self._camoufox_context
         else:
             context = self._standard_context
 
@@ -166,6 +185,32 @@ class BrowserManager:
 
         logger.warning(f"[BROWSER_MGR] Healing page for [{shop_name}] (page close + new page, same context)")
         return await self.create_page(shop_name, browser_type, user_agent)
+
+    async def _start_camoufox(self):
+        """Lazy-init Camoufox browser. Called on first create_page with browser_type='camoufox'."""
+        if self._camoufox_browser:
+            return
+        try:
+            from camoufox.async_api import AsyncCamoufox
+            logger.info("[BROWSER_MGR] Starting Camoufox (Firefox anti-detect + proxy)...")
+            PROXY_ADDR = os.environ.get("PROXY_ADDR", "127.0.0.1:8888")
+            self._pw_camoufox = AsyncCamoufox(
+                headless=True,
+                proxy={"server": f"http://{PROXY_ADDR}"},
+                geoip=True,
+                humanize=True,
+                os="windows",
+                disable_coop=True,
+            )
+            self._camoufox_browser = await self._pw_camoufox.__aenter__()
+            # Camoufox doesn't use contexts like Chromium — pages created directly on browser
+            # But we create a "context" reference for consistency
+            self._camoufox_context = self._camoufox_browser
+            logger.info("[BROWSER_MGR] Camoufox ready (Firefox + proxy + geoip)")
+        except Exception as e:
+            logger.error(f"[BROWSER_MGR] Camoufox launch FAILED: {e}")
+            self._camoufox_browser = None
+            self._camoufox_context = None
 
     async def _respawn_browser(self, browser_type):
         """Respawn a crashed browser + recreate shared context.
@@ -208,7 +253,7 @@ class BrowserManager:
                     logger.error(f"[BROWSER_MGR] Stealth respawn FAILED: {e}")
                     self._stealth_browser = None
                     self._stealth_context = None
-            else:
+            elif browser_type == "standard":
                 old = self._standard_browser
                 if old:
                     try:
@@ -226,6 +271,30 @@ class BrowserManager:
                     logger.error(f"[BROWSER_MGR] Standard respawn FAILED: {e}")
                     self._standard_browser = None
                     self._standard_context = None
+            elif browser_type == "camoufox":
+                # Close old Camoufox + kill zombies
+                if self._camoufox_browser:
+                    try:
+                        if self._pw_camoufox:
+                            await self._pw_camoufox.__aexit__(None, None, None)
+                    except Exception:
+                        pass
+                self._camoufox_browser = None
+                self._camoufox_context = None
+                self._pw_camoufox = None
+                # Kill zombie camoufox processes
+                try:
+                    import subprocess
+                    subprocess.run(["pkill", "-f", "camoufox-bin.*-juggler-pipe"], timeout=5, capture_output=True)
+                except Exception:
+                    pass
+                await asyncio.sleep(2)
+                # Restart
+                await self._start_camoufox()
+                if self._camoufox_browser:
+                    logger.info("[BROWSER_MGR] Camoufox respawned")
+                else:
+                    logger.error("[BROWSER_MGR] Camoufox respawn FAILED")
 
             # Clear pages for affected browser type — workers will call create_page() or heal_page()
             affected = [name for name, btype in self._browser_types.items() if btype == browser_type]
@@ -268,6 +337,11 @@ class BrowserManager:
         if self._pw_standard:
             try:
                 await self._pw_standard.stop()
+            except Exception:
+                pass
+        if self._camoufox_browser and self._pw_camoufox:
+            try:
+                await self._pw_camoufox.__aexit__(None, None, None)
             except Exception:
                 pass
 
