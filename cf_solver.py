@@ -590,8 +590,11 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
 
     # HARD_SHOPS: use separate Camoufox semaphore (doesn't block Chromium slots)
     if _get_shop_from_url(url) in HARD_SHOPS:
+        # Camoufox needs much more time (Firefox + proxy + humanize + Turnstile = slow)
+        # goto can take 60-90s, then CF challenge wait up to 55s = need 180s minimum
+        camoufox_timeout = 180
         async with _camoufox_semaphore:
-            html = await _solve_with_camoufox(url, timeout)
+            html = await _solve_with_camoufox(url, camoufox_timeout)
             if html:
                 _consecutive_fails = 0
                 return html
