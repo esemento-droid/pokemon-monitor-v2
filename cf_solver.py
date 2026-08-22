@@ -464,7 +464,7 @@ async def _ensure_camoufox():
 
 
 async def _close_camoufox():
-    """Safely close Camoufox browser and reset global reference. Handles zombie cleanup."""
+    """Safely close Camoufox browser and reset global reference. Kill zombies if graceful fails."""
     global _camoufox_browser
     if _camoufox_browser:
         try:
@@ -473,10 +473,17 @@ async def _close_camoufox():
             else:
                 await asyncio.wait_for(_camoufox_browser.close(), timeout=10)
         except Exception:
-            # Force-kill if graceful close fails
+            # Force-kill if graceful close fails — prevent zombie buildup
             try:
                 if hasattr(_camoufox_browser, 'process') and _camoufox_browser.process:
                     _camoufox_browser.process.kill()
+            except Exception:
+                pass
+            # Nuclear: kill any orphaned camoufox-bin processes from this user
+            try:
+                import subprocess
+                subprocess.run(["pkill", "-f", "camoufox-bin.*-juggler-pipe"], 
+                             timeout=5, capture_output=True)
             except Exception:
                 pass
     _camoufox_browser = None
