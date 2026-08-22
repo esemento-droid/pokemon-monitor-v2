@@ -34,12 +34,12 @@ TURNSTILE_CLICK_AT = [2, 5, 8, 12, 18, 25, 32]  # Seconds at which to attempt cl
 RESTART_THRESHOLD = 15  # Restart browsers after this many consecutive failures
 
 # Shops that consistently fail on mobile proxy → try VPS IP first
-VPS_FIRST_SHOPS = {"gralnia", "xjoy"}
+VPS_FIRST_SHOPS = {"gralnia"}
 
 # Shops that need extra time (aggressive Turnstile) → use Camoufox (Firefox)
 # NOTE: Camoufox is unstable (crashes after 1-2h). Only put shops here that
 # ABSOLUTELY cannot pass via Chromium proxy/direct. All others should use Chromium.
-HARD_SHOPS = {"gralnia", "battlestash"}  # xjoy removed — try Chromium first
+HARD_SHOPS = {"gralnia", "battlestash", "xjoy"}  # All need Camoufox (Firefox)
 
 _browser_proxy = None     # Browser with mobile proxy
 _browser_direct = None    # Browser without proxy (VPS IP)
@@ -50,6 +50,7 @@ _camoufox_semaphore = None  # Separate semaphore for Camoufox (prevents starvati
 _lock = asyncio.Lock()
 _started = False
 _consecutive_fails = 0
+_restart_in_progress = False  # Guard against multiple concurrent restart attempts
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
@@ -137,43 +138,54 @@ async def _ensure_browsers():
 
 
 async def _restart_browsers():
-    """Full restart — nuclear option. Handles all edge cases gracefully."""
-    global _browser_proxy, _browser_direct, _camoufox_browser, _pw, _started, _consecutive_fails
-    logger.warning("[CF_SOLVER] FULL RESTART — %d consecutive failures", _consecutive_fails)
+    """Restart Chromium browsers only. Camoufox has its own lazy recovery — don't nuke it.
     
-    # Close everything safely
-    for b in [_browser_proxy, _browser_direct]:
-        if b:
+    Guarded: only one restart can run at a time. Concurrent callers skip silently.
+    """
+    global _browser_proxy, _browser_direct, _pw, _started, _consecutive_fails, _restart_in_progress
+    
+    if _restart_in_progress:
+        logger.info("[CF_SOLVER] Restart already in progress — skipping duplicate request")
+        return
+    
+    _restart_in_progress = True
+    try:
+        logger.warning("[CF_SOLVER] CHROMIUM RESTART — %d consecutive failures", _consecutive_fails)
+        
+        # Close Chromium browsers safely (leave Camoufox alone!)
+        for b in [_browser_proxy, _browser_direct]:
+            if b:
+                try:
+                    await asyncio.wait_for(b.close(), timeout=10)
+                except Exception:
+                    pass
+        _browser_proxy = None
+        _browser_direct = None
+        if _pw:
             try:
-                await asyncio.wait_for(b.close(), timeout=10)
+                await asyncio.wait_for(_pw.stop(), timeout=10)
             except Exception:
                 pass
-    await _close_camoufox()
-    _browser_proxy = None
-    _browser_direct = None
-    if _pw:
-        try:
-            await asyncio.wait_for(_pw.stop(), timeout=10)
-        except Exception:
-            pass
-    _pw = None
-    _started = False
-    _consecutive_fails = 0
-    
-    # Wait a moment for processes to die
-    await asyncio.sleep(3)
-    
-    # Retry browser start with backoff
-    for attempt in range(3):
-        try:
-            await _ensure_browsers()
-            logger.info("[CF_SOLVER] RESTART successful (attempt %d)", attempt + 1)
-            return
-        except Exception as e:
-            logger.error(f"[CF_SOLVER] RESTART attempt {attempt + 1}/3 failed: {e}")
-            await asyncio.sleep(5 * (attempt + 1))
-    
-    logger.error("[CF_SOLVER] RESTART FAILED after 3 attempts — solver will retry on next request")
+        _pw = None
+        _started = False
+        _consecutive_fails = 0
+        
+        # Wait a moment for processes to die
+        await asyncio.sleep(3)
+        
+        # Retry browser start with backoff
+        for attempt in range(3):
+            try:
+                await _ensure_browsers()
+                logger.info("[CF_SOLVER] CHROMIUM RESTART successful (attempt %d)", attempt + 1)
+                return
+            except Exception as e:
+                logger.error(f"[CF_SOLVER] CHROMIUM RESTART attempt {attempt + 1}/3 failed: {e}")
+                await asyncio.sleep(5 * (attempt + 1))
+        
+        logger.error("[CF_SOLVER] CHROMIUM RESTART FAILED after 3 attempts — solver will retry on next request")
+    finally:
+        _restart_in_progress = False
 
 
 async def _human_click_turnstile(page, wait_sec):
@@ -337,10 +349,12 @@ async def _solve_with_browser(browser, url, timeout, label="proxy"):
     except Exception as e:
         err_str = str(e)
         if "ERR_PROXY" in err_str or "Connect call failed" in err_str:
-            logger.warning(f"[CF_SOLVER] [{label}] Proxy fail: {url[:55]}")
+            logger.warning(f"[CF_SOLVER] [{label}] Proxy fail (transient): {url[:55]}")
+            # Don't raise BrowserDeadError — proxy hiccup is not a browser crash
         elif any(x in err_str for x in ["Target page", "browser has been closed",
                                           "context or browser", "Connection closed",
-                                          "Browser closed", "not connected"]):
+                                          "Browser closed", "not connected",
+                                          "Protocol error", "Target.createTarget"]):
             # Browser died — signal for restart (don't count as normal fail)
             logger.warning(f"[CF_SOLVER] [{label}] Browser DEAD: {err_str[:60]} — triggering restart")
             raise _BrowserDeadError(err_str)
@@ -376,7 +390,10 @@ def _get_shop_from_url(url):
 
 
 async def _ensure_camoufox():
-    """Lazy-init Camoufox browser for HARD_SHOPS. Firefox-based anti-detect."""
+    """Lazy-init Camoufox browser for HARD_SHOPS. Firefox-based anti-detect.
+    
+    Crash recovery: if browser died, wait briefly for cleanup then re-init with retry.
+    """
     global _camoufox_browser
 
     if _camoufox_browser:
@@ -385,11 +402,13 @@ async def _ensure_camoufox():
             if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
                 logger.warning("[CF_SOLVER] Camoufox browser disconnected — resetting for re-init")
                 await _close_camoufox()
+                await asyncio.sleep(3)  # Wait for zombie processes to die
             else:
                 return _camoufox_browser
         except Exception:
             logger.warning("[CF_SOLVER] Camoufox health check failed — resetting for re-init")
             await _close_camoufox()
+            await asyncio.sleep(3)
 
     async with _lock:
         # Double-check after acquiring lock
@@ -397,65 +416,80 @@ async def _ensure_camoufox():
             try:
                 if hasattr(_camoufox_browser, 'is_connected') and not _camoufox_browser.is_connected():
                     await _close_camoufox()
+                    await asyncio.sleep(2)
                 else:
                     return _camoufox_browser
             except Exception:
                 await _close_camoufox()
+                await asyncio.sleep(2)
 
-        try:
-            from camoufox.async_api import AsyncCamoufox
-            logger.info("[CF_SOLVER] Starting Camoufox (Firefox anti-detect + proxy)...")
+        # Retry with backoff (Camoufox can fail to start if previous instance didn't fully die)
+        for attempt in range(3):
+            try:
+                from camoufox.async_api import AsyncCamoufox
+                logger.info("[CF_SOLVER] Starting Camoufox (attempt %d/3, Firefox anti-detect + proxy)...", attempt + 1)
 
-            # Camoufox context manager returns browser directly
-            # We use it slightly differently — start and keep reference
-            _cm = AsyncCamoufox(
-                headless=True,  # Safe for Camoufox (Firefox fingerprint spoofed at C++ level)
-                proxy={
-                    "server": f"http://{PROXY_ADDR}",
-                },
-                geoip=True,  # Match geolocation to proxy IP
-                humanize=True,  # Human-like cursor movement
-                os="windows",  # Most common OS fingerprint
-                disable_coop=True,  # Allow clicking Turnstile in cross-origin iframe
-            )
-            _camoufox_browser = await _cm.__aenter__()
-            # Store context manager to close later
-            _camoufox_browser._cm = _cm
-            logger.info("[CF_SOLVER] Camoufox ready (Firefox + proxy + geoip)")
-            return _camoufox_browser
+                _cm = AsyncCamoufox(
+                    headless=True,  # Safe for Camoufox (Firefox fingerprint spoofed at C++ level)
+                    proxy={
+                        "server": f"http://{PROXY_ADDR}",
+                    },
+                    geoip=True,  # Match geolocation to proxy IP
+                    humanize=True,  # Human-like cursor movement
+                    os="windows",  # Most common OS fingerprint
+                    disable_coop=True,  # Allow clicking Turnstile in cross-origin iframe
+                )
+                _camoufox_browser = await asyncio.wait_for(_cm.__aenter__(), timeout=30)
+                # Store context manager to close later
+                _camoufox_browser._cm = _cm
+                logger.info("[CF_SOLVER] Camoufox ready (Firefox + proxy + geoip)")
+                return _camoufox_browser
 
-        except ImportError as e:
-            logger.error(f"[CF_SOLVER] Camoufox import failed: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"[CF_SOLVER] Camoufox start failed: {type(e).__name__}: {e}")
-            _camoufox_browser = None
-            return None
+            except ImportError as e:
+                logger.error(f"[CF_SOLVER] Camoufox import failed: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"[CF_SOLVER] Camoufox start attempt {attempt + 1}/3 failed: {type(e).__name__}: {e}")
+                _camoufox_browser = None
+                if attempt < 2:
+                    await asyncio.sleep(5 * (attempt + 1))  # 5s, 10s backoff
+
+        logger.error("[CF_SOLVER] Camoufox FAILED after 3 attempts — will retry on next request")
+        return None
 
 
 async def _close_camoufox():
-    """Safely close Camoufox browser and reset global reference."""
+    """Safely close Camoufox browser and reset global reference. Handles zombie cleanup."""
     global _camoufox_browser
     if _camoufox_browser:
         try:
             if hasattr(_camoufox_browser, '_cm'):
-                await _camoufox_browser._cm.__aexit__(None, None, None)
+                await asyncio.wait_for(_camoufox_browser._cm.__aexit__(None, None, None), timeout=10)
             else:
-                await _camoufox_browser.close()
+                await asyncio.wait_for(_camoufox_browser.close(), timeout=10)
         except Exception:
-            pass
+            # Force-kill if graceful close fails
+            try:
+                if hasattr(_camoufox_browser, 'process') and _camoufox_browser.process:
+                    _camoufox_browser.process.kill()
+            except Exception:
+                pass
     _camoufox_browser = None
 
 
 async def _solve_with_camoufox(url, timeout):
-    """Solve CF challenge using Camoufox (Firefox anti-detect). For HARD_SHOPS only."""
+    """Solve CF challenge using Camoufox (Firefox anti-detect). For HARD_SHOPS only.
+    
+    Crash recovery: on browser death, resets _camoufox_browser so next call re-inits.
+    Brief cooldown (3s) after crash to avoid rapid re-init loops.
+    """
     browser = await _ensure_camoufox()
     if not browser:
         return None
 
     page = None
     try:
-        page = await browser.new_page()
+        page = await asyncio.wait_for(browser.new_page(), timeout=15)
         await page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
 
         # Wait for CF challenge to resolve (same logic as Chromium path)
@@ -518,9 +552,12 @@ async def _solve_with_camoufox(url, timeout):
         # Detect browser crash — reset for lazy re-init on next call
         if any(x in err_str for x in ["Target page", "browser has been closed",
                                         "context or browser", "Connection closed",
-                                        "Browser closed", "not connected"]):
-            logger.warning(f"[CF_SOLVER] [camoufox] Browser crashed: {err_str[:60]} — will re-init")
+                                        "Browser closed", "not connected",
+                                        "Protocol error"]):
+            logger.warning(f"[CF_SOLVER] [camoufox] Browser crashed: {err_str[:60]} — will re-init on next call")
             await _close_camoufox()
+            # Brief cooldown — don't immediately re-init (zombie processes need time to die)
+            await asyncio.sleep(3)
         else:
             logger.error(f"[CF_SOLVER] [camoufox] Error: {url[:55]}: {err_str[:80]}")
         return None
@@ -545,6 +582,11 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
     await _ensure_browsers()
 
     global _consecutive_fails
+
+    # If restart is in progress, don't waste semaphore slot — return early
+    if _restart_in_progress:
+        await asyncio.sleep(2)  # Brief wait, restart should complete soon
+        return None
 
     # HARD_SHOPS: use separate Camoufox semaphore (doesn't block Chromium slots)
     if _get_shop_from_url(url) in HARD_SHOPS:
@@ -579,10 +621,11 @@ async def solve(url, timeout=SOLVE_TIMEOUT, session_name=None):
             try:
                 html = await _solve_with_browser(browser, url, timeout, label)
             except _BrowserDeadError:
-                # Browser process died — restart immediately and retry with other browser
-                logger.warning(f"[CF_SOLVER] Browser '{label}' died during solve — restarting...")
+                # Browser process died — schedule restart (guarded: only one runs at a time)
+                logger.warning(f"[CF_SOLVER] Browser '{label}' died during solve — scheduling restart...")
                 asyncio.ensure_future(_restart_browsers())
-                continue
+                # Don't retry with "other browser" — it might be dead too. Let restart handle it.
+                break
 
             if html:
                 _consecutive_fails = 0

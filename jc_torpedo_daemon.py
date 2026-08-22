@@ -492,7 +492,9 @@ class TorpedoDaemon:
             await self._nuclear_restart()
 
     async def _nuclear_restart(self):
-        """Full browser restart with proxy fallback. Handles stale _pw gracefully."""
+        """Full browser restart with proxy fallback. Handles stale _pw gracefully.
+        Only sends Discord alert if restart succeeds (avoid spam on repeated failures).
+        """
         try:
             # Close old browser
             if self.browser:
@@ -549,8 +551,13 @@ class TorpedoDaemon:
 
             ok = sum(1 for v in self.staged.values() if v)
             log.info(f"[DAEMON] After nuclear restart: {ok}/{len(self.accounts)} staged")
-            if ok > 0:
+            # Only notify Discord on successful restart (reduce spam)
+            if ok >= len(self.accounts) // 2:
                 await self._discord(f"♻️ **TORPEDO RESTART** — {ok}/{len(self.accounts)} staged")
+            elif ok > 0:
+                await self._discord(f"⚠️ **TORPEDO** partial restart — only {ok}/{len(self.accounts)} staged")
+            else:
+                log.error("[DAEMON] Nuclear restart: 0 staged — will retry in 10min")
 
         except Exception as e:
             log.error(f"[DAEMON] Nuclear restart FAILED: {e}")
