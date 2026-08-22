@@ -157,14 +157,14 @@ async def _fetch_page(url: str) -> str:
     payload = {
         "cmd": "request.get",
         "url": url,
-        "maxTimeout": 120000,  # 120s — CF solver needs up to 55s + queue
+        "maxTimeout": 240000,  # 240s — Camoufox needs up to 180s solve + buffer
     }
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{FLARESOLVERR_URL}",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=150),  # Client-side: 150s
+                timeout=aiohttp.ClientTimeout(total=260),  # Client-side: 260s (above maxTimeout)
             ) as resp:
                 data = await resp.json()
 
@@ -186,7 +186,7 @@ async def _fetch_page(url: str) -> str:
         return html
 
     except asyncio.TimeoutError:
-        print(f"[XJOY] Timeout 150s for {url[-30:]}")
+        print(f"[XJOY] Timeout 260s for {url[-30:]}")
         return ""
     except Exception as e:
         print(f"[XJOY] Error {url[-30:]}: {type(e).__name__}: {e}")
