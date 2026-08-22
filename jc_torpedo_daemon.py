@@ -459,11 +459,9 @@ class TorpedoDaemon:
     async def maintenance(self):
         """Run heartbeats and re-stages.
         
-        IMPORTANT: Don't trigger nuclear restart during active re-stage
-        (_full_stage temporarily sets staged=False for each account).
+        If re-stage fails for ALL accounts → browser is dead → nuclear restart.
         """
         now = time.time()
-        _restaging = False  # Flag: are we actively re-staging?
         
         for acc in self.accounts:
             email = acc["email"]
@@ -476,7 +474,6 @@ class TorpedoDaemon:
 
             # Re-stage every 30 min OR if not staged
             if not self.staged.get(email) or (now - self.last_stage.get(email, 0) > RESTAGE_INTERVAL):
-                _restaging = True
                 log.info(f"[DAEMON] Re-staging {email}...")
                 for attempt in range(3):
                     try:
@@ -489,25 +486,31 @@ class TorpedoDaemon:
                             await asyncio.sleep(5)
                 await asyncio.sleep(3)
 
-        # Only consider nuclear restart if we weren't just re-staging
-        # (re-stage temporarily sets staged=False → false positive)
-        if _restaging:
-            return  # Skip nuclear check — re-stage just ran, give it time
-            
-        # If ALL accounts unstaged (and we didn't just re-stage) — browser is dead
+        # After all re-stages: check if ANY account is staged
         ok = sum(1 for v in self.staged.values() if v)
-        if ok == 0 and not hasattr(self, '_last_full_restart'):
-            self._last_full_restart = 0
-        if ok == 0 and (now - getattr(self, '_last_full_restart', 0)) > 600:
-            log.warning("[DAEMON] 0 staged accounts — full browser restart")
-            self._last_full_restart = now
-            await self._nuclear_restart()
+        if ok == 0:
+            # ALL accounts unstaged even after re-stage attempts → browser is DEAD
+            if not hasattr(self, '_last_full_restart'):
+                self._last_full_restart = 0
+            if (now - self._last_full_restart) > 300:  # Max 1 nuclear restart per 5 min
+                log.warning(f"[DAEMON] 0/{len(self.accounts)} staged after maintenance — NUCLEAR RESTART")
+                self._last_full_restart = now
+                await self._nuclear_restart()
 
     async def _nuclear_restart(self):
-        """Full browser restart with proxy fallback. Handles stale _pw gracefully.
-        Only sends Discord alert if restart succeeds (avoid spam on repeated failures).
+        """Full browser restart with zombie cleanup and proxy fallback.
+        
+        Sends Discord alert ONLY on failure (0 staged after restart = critical).
+        Success is silent (routine self-healing, not worth alerting).
         """
         try:
+            # Kill zombie camoufox/firefox processes that might block port
+            import subprocess
+            try:
+                subprocess.run(["pkill", "-f", "camoufox-bin.*jc"], timeout=5, capture_output=True)
+            except Exception:
+                pass
+            
             # Close old browser
             if self.browser:
                 try:
@@ -523,6 +526,8 @@ class TorpedoDaemon:
                 except Exception:
                     pass
             self._pw = None
+            
+            await asyncio.sleep(2)  # Let zombie processes die
 
             from patchright.async_api import async_playwright
             self._pw = await async_playwright().start()
@@ -563,12 +568,14 @@ class TorpedoDaemon:
 
             ok = sum(1 for v in self.staged.values() if v)
             log.info(f"[DAEMON] After nuclear restart: {ok}/{len(self.accounts)} staged")
-            # Don't spam Discord with routine restarts — only log.
-            # User gets health_alert if 0 staged persists > 10min.
+            
+            # Alert ONLY on failure — 0 staged after nuclear = something seriously wrong
+            if ok == 0:
+                await self._discord(f"🔴 **TORPEDO CRITICAL** — 0/{len(self.accounts)} staged after nuclear restart! Browser/proxy dead?")
 
         except Exception as e:
             log.error(f"[DAEMON] Nuclear restart FAILED: {e}")
-            await self._discord(f"❌ **TORPEDO** nuclear restart failed: {e}")
+            await self._discord(f"🔴 **TORPEDO DEAD** — nuclear restart failed: {str(e)[:60]}")
 
     # ==============================================================
     # STOCK POLLING (self-monitoring, faster than scraper)
