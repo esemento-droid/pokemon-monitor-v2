@@ -33,6 +33,7 @@ ADDING NEW SHOP:
 import asyncio
 import logging
 import os
+import time
 
 logger = logging.getLogger("monitor")
 
@@ -59,6 +60,8 @@ class BrowserManager:
         self._pages = {}               # shop_name → page
         self._browser_types = {}       # shop_name → "stealth" or "standard"
         self._started = False
+        self._respawn_lock = asyncio.Lock()  # Prevent multiple concurrent respawns
+        self._last_respawn = {}        # browser_type → timestamp
 
     async def start(self):
         """Launch persistent browsers + ONE context each."""
@@ -165,59 +168,71 @@ class BrowserManager:
         return await self.create_page(shop_name, browser_type, user_agent)
 
     async def _respawn_browser(self, browser_type):
-        """Respawn a crashed browser + recreate shared context."""
-        logger.warning(f"[BROWSER_MGR] Respawning {browser_type} browser...")
-        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        """Respawn a crashed browser + recreate shared context.
+        
+        Guarded by lock: only one respawn per browser_type at a time.
+        Also has a 30s cooldown to prevent rapid respawn loops.
+        """
+        async with self._respawn_lock:
+            # Cooldown: don't respawn if we just did (prevents storm from N workers)
+            last = self._last_respawn.get(browser_type, 0)
+            if time.time() - last < 30:
+                logger.info(f"[BROWSER_MGR] Respawn {browser_type} skipped — cooldown ({time.time()-last:.0f}s ago)")
+                return
+            
+            logger.warning(f"[BROWSER_MGR] Respawning {browser_type} browser...")
+            self._last_respawn[browser_type] = time.time()
+            ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-        if browser_type == "stealth":
-            old = self._stealth_browser
-            if old:
+            if browser_type == "stealth":
+                old = self._stealth_browser
+                if old:
+                    try:
+                        await old.close()
+                    except Exception:
+                        pass
                 try:
-                    await old.close()
-                except Exception:
-                    pass
-            try:
-                self._stealth_browser = await self._pw_stealth.chromium.launch(
-                    headless=False,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--no-sandbox",
-                        "--disable-gpu",
-                        "--disable-dev-shm-usage",
-                        f"--proxy-server=http://{PROXY_ADDR}",
-                    ]
-                )
-                self._stealth_context = await self._stealth_browser.new_context(user_agent=ua)
-                logger.info("[BROWSER_MGR] Stealth browser + context respawned")
-            except Exception as e:
-                logger.error(f"[BROWSER_MGR] Stealth respawn FAILED: {e}")
-                self._stealth_browser = None
-                self._stealth_context = None
-        else:
-            old = self._standard_browser
-            if old:
+                    self._stealth_browser = await self._pw_stealth.chromium.launch(
+                        headless=False,
+                        args=[
+                            "--disable-blink-features=AutomationControlled",
+                            "--no-sandbox",
+                            "--disable-gpu",
+                            "--disable-dev-shm-usage",
+                            f"--proxy-server=http://{PROXY_ADDR}",
+                        ]
+                    )
+                    self._stealth_context = await self._stealth_browser.new_context(user_agent=ua)
+                    logger.info("[BROWSER_MGR] Stealth browser + context respawned")
+                except Exception as e:
+                    logger.error(f"[BROWSER_MGR] Stealth respawn FAILED: {e}")
+                    self._stealth_browser = None
+                    self._stealth_context = None
+            else:
+                old = self._standard_browser
+                if old:
+                    try:
+                        await old.close()
+                    except Exception:
+                        pass
                 try:
-                    await old.close()
-                except Exception:
-                    pass
-            try:
-                self._standard_browser = await self._pw_standard.chromium.launch(
-                    headless=True,
-                    args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
-                )
-                self._standard_context = await self._standard_browser.new_context(user_agent=ua)
-                logger.info("[BROWSER_MGR] Standard browser + context respawned")
-            except Exception as e:
-                logger.error(f"[BROWSER_MGR] Standard respawn FAILED: {e}")
-                self._standard_browser = None
-                self._standard_context = None
+                    self._standard_browser = await self._pw_standard.chromium.launch(
+                        headless=True,
+                        args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
+                    )
+                    self._standard_context = await self._standard_browser.new_context(user_agent=ua)
+                    logger.info("[BROWSER_MGR] Standard browser + context respawned")
+                except Exception as e:
+                    logger.error(f"[BROWSER_MGR] Standard respawn FAILED: {e}")
+                    self._standard_browser = None
+                    self._standard_context = None
 
-        # Clear pages for affected browser type — workers will call heal_page()
-        affected = [name for name, btype in self._browser_types.items() if btype == browser_type]
-        for name in affected:
-            self._pages.pop(name, None)
-        if affected:
-            logger.info(f"[BROWSER_MGR] Cleared {len(affected)} pages after respawn: {affected}")
+            # Clear pages for affected browser type — workers will call create_page() or heal_page()
+            affected = [name for name, btype in self._browser_types.items() if btype == browser_type]
+            for name in affected:
+                self._pages.pop(name, None)
+            if affected:
+                logger.info(f"[BROWSER_MGR] Cleared {len(affected)} pages after respawn: {affected}")
 
     async def close(self):
         """Shutdown everything."""

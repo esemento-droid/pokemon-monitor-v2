@@ -508,10 +508,34 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
     scan_fn = module.scan_with_page
     # Module can override timeout (e.g. proshop needs 180s for aggressive CF)
     SCAN_TIMEOUT = getattr(module, 'SCAN_TIMEOUT', 120 if browser_type == "stealth" else 90)
+    # Grace period: after browser respawn, don't escalate cooldowns for first 2 errors
+    _respawn_grace = 0  # Counts down: if >0, errors don't escalate to long cooldowns
 
     while True:
         start = datetime.now()
         try:
+            # Check if page is still valid (might have been cleared by another worker's respawn)
+            if page is None or (hasattr(page, 'is_closed') and page.is_closed()):
+                logger.info(f"[{name}] Page stale/cleared — requesting new page from manager")
+                new_page = await mgr.create_page(name, browser_type=browser_type)
+                if new_page:
+                    page = new_page
+                    stats["heal_count"] = 0
+                    _respawn_grace = 2
+                else:
+                    # Browser might be dead — respawn
+                    await mgr._respawn_browser(browser_type)
+                    await asyncio.sleep(10)
+                    new_page = await mgr.create_page(name, browser_type=browser_type)
+                    if new_page:
+                        page = new_page
+                        stats["heal_count"] = 0
+                        stats["consecutive_err"] = 0
+                        _respawn_grace = 3
+                    else:
+                        await asyncio.sleep(60)
+                        continue
+
             # Run scan with timeout — no shop can hang forever
             products = await asyncio.wait_for(scan_fn(page), timeout=SCAN_TIMEOUT)
 
@@ -530,6 +554,7 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                 stats["err"] = 0
                 stats["consecutive_err"] = 0
                 stats["heal_count"] = 0  # Reset on success
+                _respawn_grace = 0
                 scan_time = (datetime.now() - start).total_seconds()
                 logger.info(f"[{name}] {len(products)} produktow w {scan_time:.1f}s")
             else:
@@ -562,6 +587,8 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                         if new_page:
                             page = new_page
                             stats["heal_count"] = 0
+                            stats["consecutive_err"] = 0
+                            _respawn_grace = 3
                             logger.info(f"[{name}] Browser respawned after timeout ✅")
                         else:
                             logger.error(f"[{name}] Respawn FAILED — cooldown 5min")
@@ -577,6 +604,8 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                     if new_page:
                         page = new_page
                         stats["heal_count"] = 0
+                        stats["consecutive_err"] = 0
+                        _respawn_grace = 3
                         logger.info(f"[{name}] Browser respawned after 3 timeout heals ✅")
                     else:
                         logger.error(f"[{name}] Respawn FAILED — cooldown 10min")
@@ -591,7 +620,7 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
             stats["consecutive_err"] += 1
 
             # Only heal on browser/page crash, with limit
-            if any(x in err_str.lower() for x in ["closed", "crash", "target"]):
+            if any(x in err_str.lower() for x in ["closed", "crash", "target", "protocol error"]):
                 stats["heal_count"] = stats.get("heal_count", 0)
                 if stats["heal_count"] < 3:
                     stats["heal_count"] += 1
@@ -608,6 +637,8 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                         if new_page:
                             page = new_page
                             stats["heal_count"] = 0
+                            stats["consecutive_err"] = 0
+                            _respawn_grace = 3
                             logger.info(f"[{name}] Browser respawned — page recreated ✅")
                         else:
                             logger.error(f"[{name}] Browser respawn FAILED — cooldown 5min")
@@ -623,6 +654,8 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
                     if new_page:
                         page = new_page
                         stats["heal_count"] = 0
+                        stats["consecutive_err"] = 0
+                        _respawn_grace = 3
                         logger.info(f"[{name}] Browser respawned after 3 heals — page recreated ✅")
                     else:
                         logger.error(f"[{name}] Full respawn FAILED — cooldown 10min")
@@ -632,7 +665,14 @@ async def _persistent_shop_worker(name, module, page, mgr, browser_type, logger)
 
         # Delay between scans (independent per shop — no blocking others)
         consec = stats["consecutive_err"]
-        if consec >= 20:
+        # Grace period after respawn: don't punish with long cooldowns
+        if _respawn_grace > 0:
+            _respawn_grace -= 1
+            if consec > 0:
+                await asyncio.sleep(random.randint(15, 30))  # Brief retry delay during grace
+            else:
+                await asyncio.sleep(random.randint(10, 20))
+        elif consec >= 20:
             await asyncio.sleep(1800)  # 30 min
         elif consec >= 10:
             await asyncio.sleep(600)   # 10 min

@@ -41,14 +41,12 @@ COOKIES_DIR.mkdir(parents=True, exist_ok=True)
 MAX_COOKIE_AGE = 3600 * 2  # 2 hours
 
 # Shop login configs
+# NOTE: japancollectibles EXCLUDED — jc-torpedo daemon handles its own session management.
+#       Session warmer was invalidating torpedo's pre-staged checkout → causing hourly restarts.
 SHOPS = {
     "tcgumisia": {
         "url": "https://tcgumisia.pl",
         "login_fn": "_login_sellingo",
-    },
-    "japancollectibles": {
-        "url": "https://japancollectibles.shop",
-        "login_fn": "_login_skyshop",
     },
     "kartexpol": {
         "url": "https://kartexpol.pl",
@@ -331,10 +329,5 @@ if __name__ == "__main__":
     )
     asyncio.run(warm_all())
 
-    # Also warm JC torpedo sessions (HTTP-based, no browser needed)
-    try:
-        from japancollectibles_torpedo import warmup_all as jc_torpedo_warmup
-        log.info("[WARMER] Warming JC torpedo sessions (HTTP)...")
-        asyncio.run(jc_torpedo_warmup())
-    except Exception as e:
-        log.warning(f"[WARMER] JC torpedo warmup failed: {e}")
+    # JC torpedo warmup REMOVED — torpedo daemon handles its own session management.
+    # Running warmup externally was invalidating pre-staged checkout sessions.
